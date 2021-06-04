@@ -279,6 +279,7 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
         model.eval()
     t3 = time.time()
     for i, (Ri, Fi, Ei, zi) in enumerate(dataloader):
+        nb = Ri.shape[0]
         t0 = time.time()
         Ri.requires_grad_(True)
         Ri_vec = Ri.reshape(-1,Ri.shape[-1])
@@ -301,7 +302,9 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
             F_pred = -grad(E_pred_tot, Ri, create_graph=True)[0].requires_grad_(True)
         else:
             F_pred = -grad(E_pred_tot, Ri, create_graph=False)[0]
-        loss = F.mse_loss(F_pred, Fi)
+        loss_F = F.mse_loss(F_pred, Fi) / nb
+        loss_E = F.mse_loss(E_pred, Ei) / nb
+        loss = loss_E + loss_F
         Fps += torch.mean(torch.sqrt(torch.sum(F_pred.detach() ** 2, dim=1)))
         Fts += torch.mean(torch.sqrt(torch.sum(Fi ** 2, dim=1)))
         MAEi = torch.mean(torch.abs(F_pred - Fi)).detach()
@@ -310,6 +313,8 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
             loss.backward()
             optimizer.step()
         aloss += loss.detach()
+        aloss_F += loss_F.detach()
+        aloss_E += loss_E.detach()
         t_dataload += t0 - t3
         t3 = time.time()
         t_prepare += t1 - t0
@@ -327,14 +332,15 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
     t_prepare /= (i+1)
     t_model /= (i+1)
     t_backprop /= (i+1)
-    return aloss,MAE,Fps,Fts, t_dataload, t_prepare, t_model, t_backprop
+    return aloss,aloss_F, aloss_E
 
 
 
 if __name__ == '__main__':
-    n_train = 1
+    n_train = 1000
     n_val = 1000
-    batch_size = 1
+    batch_size = 50
+    model_name = './../results/force_energy_model.pt'
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
@@ -342,8 +348,9 @@ if __name__ == '__main__':
     print_3d_structures = False
     use_mean_map = False
     # load training data
-    data = np.load('../../../data/MD/MD17/aspirin_dft.npz')
-    E = data['E']
+    # data = np.load('../../../data/MD/MD17/aspirin_dft.npz')
+    data = np.load('../../../data/MD/water_jones/water.npz')
+    E = data['PE']
     Force = data['F']
     R = data['R']
     epochs_for_lr_adjustment = 50
@@ -382,7 +389,7 @@ if __name__ == '__main__':
     # Setup the network and its parameters
 
     irreps_in = None    #o3.Irreps("0x0e")
-    irreps_hidden = o3.Irreps("100x0e+100x0o+50x1e+50x1o")
+    irreps_hidden = o3.Irreps("10x0e+10x0o+5x1e+5x1o")
     irreps_out = o3.Irreps("1x0e")
     irreps_node_attr = o3.Irreps("1x0e")
     irreps_edge_attr = o3.Irreps("1x0e+1x1o")
@@ -400,11 +407,11 @@ if __name__ == '__main__':
 
 
     #### Start Training ####
-    lr = 1e-3
+    lr = 1e-2
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     alossBest = 1e6
-    epochs = 100000
+    epochs = 100
 
     bestModel = model
     hist = torch.zeros(epochs)
@@ -412,17 +419,17 @@ if __name__ == '__main__':
     nprnt = 1
     nprnt2 = min(nprnt, n_train)
     t0 = time.time()
-    MAE_best = 1e6
+    aloss_best = 1e6
     epochs_since_best = 0
     for epoch in range(epochs):
         t1 = time.time()
-        aloss_t,MAE_t,Fps_t,Fts_t, t_dataload_t, t_prepare_t, t_model_t, t_backprop_t = use_model_eq(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=batch_size)
+        aloss_t,aloss_F_t,aloss_E_t = use_model_eq(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=batch_size)
         t2 = time.time()
-        aloss_v,MAE_v,Fps_v,Fts_v,t_dataload_v, t_prepare_v, t_model_v, t_backprop_v = use_model_eq(model, dataloader_val, train=False, max_samples=10, optimizer=optimizer, batch_size=batch_size)
+        aloss_v,aloss_F_v,aloss_E_v  = use_model_eq(model, dataloader_val, train=False, max_samples=10, optimizer=optimizer, batch_size=batch_size)
         t3 = time.time()
 
-        if MAE_v < MAE_best:
-            MAE_best = MAE_v
+        if aloss_v < aloss_best:
+            aloss_best = aloss_v
             epochs_since_best = 0
         else:
             epochs_since_best += 1
@@ -433,6 +440,7 @@ if __name__ == '__main__':
                 epochs_since_best = 0
 
         # print(f' t_dataloader(train): {t_dataload_t:.3f}s  t_dataloader(val): {t_dataload_v:.3f}s  t_prepare(train): {t_prepare_t:.3f}s  t_prepare(val): {t_prepare_v:.3f}s  t_model(train): {t_model_t:.3f}s  t_model(val): {t_model_v:.3f}s  t_backprop(train): {t_backprop_t:.3f}s  t_backprop(val): {t_backprop_v:.3f}s')
-        print(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2f}  MAE(train): {MAE_t:.2f}  MAE(val): {MAE_v:.2f}  |F_pred|(train): {Fps_t:.2f}  |F_pred|(val): {Fps_v:.2f}  |F_true|(train): {Fts_t:.2f}  |F_true|(val): {Fts_v:.2f}  MAE(best): {MAE_best:.2f}  Time(train): {t2-t1:.1f}s  Time(val): {t3-t2:.1f}s  Lr: {lr:2.2e} ')
+        print(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_F(train): {aloss_F_t:.2e}  Loss_F(val): {aloss_F_v:.2e}  Loss_E(train): {aloss_E_t:.2e}  LossE_(val): {aloss_E_v:.2e}  loss(best): {aloss_best:.2e}  Time(train): {t2-t1:.1f}s  Time(val): {t3-t2:.1f}s  Lr: {lr:2.2e} ')
 
-
+    # Specify a path
+    torch.save(model.state_dict(), f"{model_name}")
