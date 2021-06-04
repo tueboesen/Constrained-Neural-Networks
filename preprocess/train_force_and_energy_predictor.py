@@ -344,6 +344,7 @@ if __name__ == '__main__':
     model_name = './../results/force_energy_model.pt'
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
+
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
     print_distograms = False
@@ -413,7 +414,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     alossBest = 1e6
-    epochs = 100
+    epochs = 1000
 
     bestModel = model
     hist = torch.zeros(epochs)
