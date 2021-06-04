@@ -345,6 +345,7 @@ if __name__ == '__main__':
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
 
+
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
     print_distograms = False
