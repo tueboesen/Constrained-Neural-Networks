@@ -3,6 +3,7 @@ Exact equivariance to :math:`E(3)`
 version of february 2021
 """
 import math
+import os
 import time
 from typing import Dict, Union
 import numpy as np
@@ -341,6 +342,7 @@ if __name__ == '__main__':
     n_val = 1000
     batch_size = 50
     model_name = './../results/force_energy_model.pt'
+    os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
