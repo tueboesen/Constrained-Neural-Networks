@@ -166,7 +166,7 @@ class NequIP(torch.nn.Module):
             self.gates.append(gate)
         return
 
-    def forward(self, data: Union[Data, Dict[str, torch.Tensor]]) -> torch.Tensor:
+    def forward(self, pos,batch,z) -> torch.Tensor:
         """evaluate the network
         Parameters
         ----------
@@ -177,16 +177,12 @@ class NequIP(torch.nn.Module):
             - ``z`` the attributes of the nodes, for instance the atom type, optional
             - ``batch`` the graph to which the node belong, optional
         """
-        if 'batch' in data:
-            batch = data['batch']
-        else:
-            batch = data['pos'].new_zeros(data['pos'].shape[0], dtype=torch.long)
 
         h = 0.1
-        edge_index = radius_graph(data['pos'], self.max_radius, batch)
+        edge_index = radius_graph(pos, self.max_radius, batch)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
-        edge_vec = data['pos'][edge_src] - data['pos'][edge_dst]
+        edge_vec = pos[edge_src] - pos[edge_dst]
         edge_sh = o3.spherical_harmonics(self.irreps_edge_attr, edge_vec, True, normalization='component')
         edge_length = edge_vec.norm(dim=1)
         edge_length_embedded = soft_one_hot_linspace(
@@ -199,18 +195,7 @@ class NequIP(torch.nn.Module):
         ).mul(self.number_of_basis**0.5)
         edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
 
-        if self.input_has_node_in and 'x' in data:
-            assert self.irreps_in is not None
-            x = data['x']
-        else:
-            assert self.irreps_in is None
-            x = data['pos'].new_ones((data['pos'].shape[0], 1))
-
-        if self.input_has_node_attr and 'z' in data:
-            z = data['z']
-        else:
-            assert self.irreps_node_attr == o3.Irreps("0e")
-            z = data['pos'].new_ones((data['pos'].shape[0], 1))
+        x = pos.new_ones((pos.shape[0], 1))
 
         # scalar_z = self.ext_z(z)
         edge_features = edge_length_embedded
@@ -287,15 +272,9 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
         zi_vec = zi.reshape(-1,zi.shape[-1])
         batch = torch.arange(Ri.shape[0]).repeat_interleave(Ri.shape[1]).to(device=Ri.device)
 
-        data = {
-                'batch': batch,
-                'pos': Ri_vec,
-                'z': zi_vec
-                }
-
         optimizer.zero_grad()
         t1 = time.time()
-        E_pred = model(data)
+        E_pred = model(Ri_vec,batch,zi_vec)
         E_pred_tot = torch.sum(E_pred)
         t2 = time.time()
 
@@ -336,12 +315,28 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
     return aloss,aloss_F, aloss_E
 
 
+def generate_FE_network(natoms):
+    irreps_in = None    #o3.Irreps("0x0e")
+    irreps_hidden = o3.Irreps("10x0e+10x0o+5x1e+5x1o")
+    irreps_out = o3.Irreps("1x0e")
+    irreps_node_attr = o3.Irreps("1x0e")
+    irreps_edge_attr = o3.Irreps("1x0e+1x1o")
+    layers = 6
+    max_radius = 5
+    number_of_basis = 8
+    radial_neurons = [8,16]
+    num_neighbors = 15
+    num_nodes = natoms
+    model = NequIP(irreps_in=irreps_in, irreps_hidden=irreps_hidden, irreps_out=irreps_out, irreps_node_attr=irreps_node_attr, irreps_edge_attr=irreps_edge_attr, layers=layers, max_radius=max_radius,
+                    number_of_basis=number_of_basis, radial_neurons=radial_neurons, num_neighbors=num_neighbors, num_nodes=num_nodes)
+    return model
+
 
 if __name__ == '__main__':
-    n_train = 10000
-    n_val = 1000
-    batch_size = 200
-    model_name = './../results/force_energy_model.pt'
+    n_train = 10
+    n_val = 10
+    batch_size = 10
+    model_name = './../pretrained_networks/force_energy_model.pt'
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
 
@@ -391,20 +386,8 @@ if __name__ == '__main__':
     dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True, drop_last=False)
 
     # Setup the network and its parameters
+    model = generate_FE_network(natoms)
 
-    irreps_in = None    #o3.Irreps("0x0e")
-    irreps_hidden = o3.Irreps("10x0e+10x0o+5x1e+5x1o")
-    irreps_out = o3.Irreps("1x0e")
-    irreps_node_attr = o3.Irreps("1x0e")
-    irreps_edge_attr = o3.Irreps("1x0e+1x1o")
-    layers = 6
-    max_radius = 5
-    number_of_basis = 8
-    radial_neurons = [8,16]
-    num_neighbors = 15
-    num_nodes = natoms
-    model = NequIP(irreps_in=irreps_in, irreps_hidden=irreps_hidden, irreps_out=irreps_out, irreps_node_attr=irreps_node_attr, irreps_edge_attr=irreps_edge_attr, layers=layers, max_radius=max_radius,
-                    number_of_basis=number_of_basis, radial_neurons=radial_neurons, num_neighbors=num_neighbors, num_nodes=num_nodes)
     model.to(device)
     total_params = sum(p.numel() for p in model.parameters())
     print('Number of parameters ', total_params)

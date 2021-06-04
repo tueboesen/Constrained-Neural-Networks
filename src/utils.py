@@ -119,6 +119,13 @@ class DatasetFutureState(data.Dataset):
     def __repr__(self):
         return self.__class__.__name__ + ' (' + ')'
 
+def atomic_masses(z):
+    atomic_masses = torch.tensor([0,1.008, 4.0026, 6.94, 9.0122, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180, 22.990, 24.305, 26.982, 28.085])
+    masses = atomic_masses[z.to(dtype=torch.int64)]
+    return masses
+
+
+
 
 def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=5):
     aloss = 0.0
@@ -153,7 +160,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
 
 
         t1 = time.time()
-        output = model(x, z_vec, edge_src, edge_dst)
+        output = model(x, batch, z_vec, edge_src, edge_dst)
         t2 = time.time()
         Rpred = output[:, -3:]
         Vpred = output[:, :-3]

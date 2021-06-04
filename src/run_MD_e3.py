@@ -15,11 +15,12 @@ import torch.autograd.profiler as profiler
 from torch.utils.data import DataLoader
 from e3nn import o3
 
+from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
 from src.log import log_all_parameters
 from src.network_e3 import constrained_network
 from src.network_eq import network_eq_simple
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
@@ -35,6 +36,7 @@ if __name__ == '__main__':
     args.lr = 1e-2
     args.seed = 123545
     args.epochs = 100000
+    args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     args.data = './../../../data/MD/water_jones/water.npz'
     # args.data = './../../../data/MD/MD17/aspirin_dft.npz'
     args.network = {
@@ -83,6 +85,7 @@ if __name__ == '__main__':
     KEin, KEout = convert_snapshots_to_future_state_dataset(c['n_skips'], KE)
     PEin, PEout = convert_snapshots_to_future_state_dataset(c['n_skips'], PE)
     z = torch.from_numpy(data['z']).to(dtype=torch.float32, device=device)
+    masses = atomic_masses(z)
 
     ndata = Rout.shape[0]
     natoms = z.shape[0]
@@ -121,11 +124,16 @@ if __name__ == '__main__':
     dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
     dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
 
-    model  = constrained_network(irreps_in=cn['irreps_in'], irreps_hidden=cn['irreps_hidden'], irreps_out=cn['irreps_out'],
+    PE_predictor = generate_FE_network(natoms=natoms)
+    PE_predictor.load_state_dict(torch.load(c['PE_predictor'], map_location=torch.device('cpu')))
+    PE_predictor.eval()
+
+
+    model = constrained_network(irreps_in=cn['irreps_in'], irreps_hidden=cn['irreps_hidden'], irreps_out=cn['irreps_out'],
                    irreps_node_attr=cn['irreps_node_attr'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
                    max_radius=cn['max_radius'],
                    number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                   num_nodes=natoms,reduce_output=False)
+                   num_nodes=natoms,reduce_output=False, PES_predictor=PE_predictor, masses=masses)
     model.to(device)
     total_params = sum(p.numel() for p in model.parameters())
     LOG.info('Number of parameters {:}'.format(total_params))

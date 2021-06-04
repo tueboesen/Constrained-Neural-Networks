@@ -50,6 +50,7 @@ class constrained_network(torch.nn.Module):
         num_nodes,
         reduce_output=True,
         PES_predictor=None,
+        masses=None
     ) -> None:
         super().__init__()
         self.max_radius = max_radius
@@ -59,7 +60,7 @@ class constrained_network(torch.nn.Module):
         self.reduce_output = reduce_output
 
         if PES_predictor is not None:
-            self.EMC = EnergyMomentumConstraints(PES_predictor)
+            self.EMC = EnergyMomentumConstraints(PES_predictor,masses)
         else:
             self.EMC = None
 
@@ -188,12 +189,12 @@ class constrained_network(torch.nn.Module):
         # print("embedding is still needed!")
         return x
 
-    def apply_constraints(self, y, m, n=10):
+    def apply_constraints(self, y, batch, z, n=10):
         for j in range(n):
             x = self.project(y)
             r = x[:,-3:]
             v = x[:,:-3]
-            c,lam_x = self.EMC(m,r,v)
+            c,lam_x = self.EMC(r,v,batch,z)
             lam_y = self.uplift(lam_x)
             with torch.no_grad():
                 if j == 0:
@@ -204,7 +205,7 @@ class constrained_network(torch.nn.Module):
                     x = self.project(ytry)
                     r = x[:, -3:]
                     v = x[:, :-3]
-                    ctry = self.EMC.constraint(m,r,v,return_gradient=False)
+                    ctry = self.EMC.constraint(r,v,batch,z,return_gradient=False)
                     if torch.norm(ctry) < torch.norm(c):
                         break
                     alpha = alpha / 2
@@ -216,8 +217,13 @@ class constrained_network(torch.nn.Module):
             y = y - alpha * lam_y
         return y
 
+    def save_reference_energy(self,x,batch,z):
+        r = x[:, -3:]
+        v = x[:, :-3]
+        self.EMC.Energy(r, v, batch, z, save_E0=True)
+        return
 
-    def forward(self, x, node_attr, edge_src, edge_dst) -> torch.Tensor:
+    def forward(self, x, batch, node_attr, edge_src, edge_dst) -> torch.Tensor:
         """evaluate the network
         Parameters
         ----------
@@ -232,6 +238,8 @@ class constrained_network(torch.nn.Module):
         y = self.uplift(x)
         # x2 = self.project(y)
         y_old = y
+        if self.EMC is not None:
+            self.save_reference_energy(x,batch,node_attr)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
 
@@ -255,7 +263,7 @@ class constrained_network(torch.nn.Module):
             y = 2*y - y_old + h*y_new
             y_old = tmp
             if self.EMC is not None:
-                y = self.constrain(y)
+                y = self.apply_constraints(y,batch,node_attr,n=100)
             x = self.project(y)
 
         return x
@@ -266,12 +274,16 @@ class EnergyMomentumConstraints(nn.Module):
         super(EnergyMomentumConstraints, self).__init__()
         self.F = potential_energy_predictor
         self.E0 = None
+        self.m = m
         return
 
-    def Energy(self,m,r,v,save_E0=False,return_gradient=False):
+
+
+    def Energy(self,r,v, batch, z, save_E0=False,return_gradient=False):
+        m = self.m
         F = self.F
-        E_kin = 0.5*m*torch.sum(v**2,dim=-1)
-        E_pot = F(r)
+        E_kin = 0.5*scatter((m*torch.sum(v**2,dim=-1)), batch, dim=0)
+        E_pot = F(r,batch,z)
         E = E_pot + E_kin
         if save_E0:
             self.E0 = E
@@ -281,91 +293,23 @@ class EnergyMomentumConstraints(nn.Module):
         else:
             return E
 
-    def constraint(self,m,r,v,return_gradient):
-        E1, E_grad = self.Energy(m,r,v,return_gradient=return_gradient)
+    def constraint(self,r,v,batch,z,return_gradient):
+        m = self.m
+        E1, E_grad = self.Energy(r,v,batch, z,return_gradient=return_gradient)
         E = E1 - self.E0
-        p = m @ v
+        p = m[None,:] @ v
         # c = torch.cat([E,p],dim=-1)
         return E, p, E_grad
 
-    def dConstraintT(self,m,E,p,E_grad):
+    def dConstraintT(self,E,p,E_grad):
+        m = self.m
         J1 = E_grad * E
         J2 = p * E + m * p
         J = torch.cat([J1,J2],dim=-1)
         return J
 
-    def forward(self,m,r,v):
-        E,p, E_grad = self.constraint(m,r,v,return_gradient=True)
+    def forward(self,r,v,batch, z):
+        E,p, E_grad = self.constraint(r,v,batch, z,return_gradient=True)
         c = torch.cat([E, p], dim=-1)
-        J = self.dConstraintT(m,E,p,E_grad)
+        J = self.dConstraintT(E,p,E_grad)
         return c, J
-
-
-
-
-
-if __name__ == '__main__':
-    # na = 7 #Number of atoms
-    # nb = 1 #Number of batches
-    # nf = 1 #Number of features
-    # # irreps_out = "{:}x1e".format(na)
-    # R = torch.randn((nb, na, 3), dtype=torch.float32)
-    # F = torch.randn((1,4,3),dtype=torch.float32)
-    # node_attr = torch.randint(0,10,(nb,na,nf))
-
-    data = np.load('../../../../data/MD/MD17/aspirin_dft.npz')
-    E = torch.from_numpy(data['E']).to(dtype=torch.float32)
-    Force = torch.from_numpy(data['F']).to(dtype=torch.float32)
-    R = torch.from_numpy(data['R']).to(dtype=torch.float32)
-    z = torch.from_numpy(data['z']).to(dtype=torch.float32)
-
-    nd,na,_ = R.shape
-
-
-
-
-    irreps_in = o3.Irreps("1x0e")
-    irreps_hidden = o3.Irreps("64x0e+64x0o+64x1e+64x1o")
-    irreps_out = o3.Irreps("1x0e")
-    irreps_node_attr = o3.Irreps("1x0e")
-    irreps_edge_attr = o3.Irreps("1x0e+1x1o")
-    layers = 6
-    max_radius = 5
-    number_of_basis = 8
-    radial_layers = 1
-    radial_neurons = 8
-    num_neighbors = 15
-    num_nodes = na
-    model = NequIP(irreps_in=irreps_in, irreps_hidden=irreps_hidden, irreps_out=irreps_out, irreps_node_attr=irreps_node_attr, irreps_edge_attr=irreps_edge_attr, layers=layers, max_radius=max_radius,
-                    number_of_basis=number_of_basis, radial_layers=radial_layers, radial_neurons=radial_neurons, num_neighbors=num_neighbors, num_nodes=num_nodes)
-
-    total_params = sum(p.numel() for p in model.parameters())
-    print('Number of parameters ', total_params)
-
-    optim = torch.optim.Adam(model.parameters(), lr=1e-3)
-
-
-    Ri = R[0,:,:]
-    Ri.requires_grad_(True)
-    Fi = Force[0,:,:]
-
-
-    data = {'pos': Ri,
-            'x': z[:,None]
-            }
-
-    test_equivariance(model)
-
-
-    niter = 100000
-    for i in range(niter):
-        optim.zero_grad()
-        E_pred = model(data)
-        F_pred = -grad(E_pred, Ri, create_graph=True)[0].requires_grad_(True)
-        print(f'mean(abs(F_pred))={torch.abs(F_pred).mean():2.2f}')
-        loss = F.mse_loss(F_pred, Fi)
-        MAE = torch.mean(torch.abs(F_pred - Fi)).detach()
-        loss.backward()
-        optim.step()
-        print(f'{i:}, loss:{loss.detach():2.2e}, MAE:{MAE:2.2f}')
-    print('done')
