@@ -338,9 +338,9 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
 
 
 if __name__ == '__main__':
-    n_train = 1000
+    n_train = 10000
     n_val = 1000
-    batch_size = 50
+    batch_size = 200
     model_name = './../results/force_energy_model.pt'
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
@@ -415,7 +415,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     alossBest = 1e6
-    epochs = 1000
+    epochs = 10
 
     bestModel = model
     hist = torch.zeros(epochs)
@@ -429,7 +429,7 @@ if __name__ == '__main__':
         t1 = time.time()
         aloss_t,aloss_F_t,aloss_E_t = use_model_eq(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=batch_size)
         t2 = time.time()
-        aloss_v,aloss_F_v,aloss_E_v  = use_model_eq(model, dataloader_val, train=False, max_samples=10, optimizer=optimizer, batch_size=batch_size)
+        aloss_v,aloss_F_v,aloss_E_v  = use_model_eq(model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, batch_size=batch_size)
         t3 = time.time()
 
         if aloss_v < aloss_best:
