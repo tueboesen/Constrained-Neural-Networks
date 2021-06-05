@@ -51,6 +51,8 @@ if __name__ == '__main__':
         'number_of_basis': 8,
         'radial_neurons': [8, 16],
         'num_neighbors': 15,
+        'constraints': 'P'
+
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
@@ -86,6 +88,8 @@ if __name__ == '__main__':
     PEin, PEout = convert_snapshots_to_future_state_dataset(c['n_skips'], PE)
     z = torch.from_numpy(data['z']).to(dtype=torch.float32, device=device)
     masses = atomic_masses(z)
+
+    # p = torch.sum(V * masses[None,:,None],dim=1)
 
     ndata = Rout.shape[0]
     natoms = z.shape[0]
@@ -124,16 +128,19 @@ if __name__ == '__main__':
     dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
     dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
 
-    PE_predictor = generate_FE_network(natoms=natoms)
-    PE_predictor.load_state_dict(torch.load(c['PE_predictor'], map_location=torch.device('cpu')))
-    PE_predictor.eval()
+    if cn['constraints'] == 'EP':
+        PE_predictor = generate_FE_network(natoms=natoms)
+        PE_predictor.load_state_dict(torch.load(c['PE_predictor'], map_location=torch.device('cpu')))
+        PE_predictor.eval()
+    else:
+        PE_predictor = None
 
 
     model = constrained_network(irreps_in=cn['irreps_in'], irreps_hidden=cn['irreps_hidden'], irreps_out=cn['irreps_out'],
                    irreps_node_attr=cn['irreps_node_attr'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
                    max_radius=cn['max_radius'],
                    number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                   num_nodes=natoms,reduce_output=False, PES_predictor=PE_predictor, masses=masses)
+                   num_nodes=natoms,reduce_output=False, PES_predictor=PE_predictor, masses=masses, constraints=cn['constraints'])
     model.to(device)
     total_params = sum(p.numel() for p in model.parameters())
     LOG.info('Number of parameters {:}'.format(total_params))

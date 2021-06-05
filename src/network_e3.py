@@ -49,6 +49,7 @@ class constrained_network(torch.nn.Module):
         num_neighbors,
         num_nodes,
         reduce_output=True,
+        constraints=None,
         PES_predictor=None,
         masses=None
     ) -> None:
@@ -59,10 +60,15 @@ class constrained_network(torch.nn.Module):
         self.num_nodes = num_nodes
         self.reduce_output = reduce_output
 
-        if PES_predictor is not None:
-            self.EMC = EnergyMomentumConstraints(PES_predictor,masses)
+        if constraints == 'EP':
+            if PES_predictor is not None:
+                self.constraints = EnergyMomentumConstraints(PES_predictor,masses)
+            else:
+                self.constraints = None
+        elif constraints == 'P':
+            self.constraints = MomentumConstraints(masses)
         else:
-            self.EMC = None
+            self.constraints = None
 
 
 
@@ -189,12 +195,13 @@ class constrained_network(torch.nn.Module):
         # print("embedding is still needed!")
         return x
 
-    def apply_constraints(self, y, batch, z, n=10):
+    def apply_constraints(self, y, batch, z, n=10, debug=False, converged=1e-3):
         for j in range(n):
             x = self.project(y)
-            r = x[:,-3:]
             v = x[:,:-3]
-            c,lam_x = self.EMC(r,v,batch,z)
+            r = x[:,-3:]
+            c,lam_x = self.constraints(r,v,batch,z)
+            cnorm = torch.norm(c)
             lam_y = self.uplift(lam_x)
             with torch.no_grad():
                 if j == 0:
@@ -205,22 +212,31 @@ class constrained_network(torch.nn.Module):
                     x = self.project(ytry)
                     r = x[:, -3:]
                     v = x[:, :-3]
-                    ctry = self.EMC.constraint(r,v,batch,z,return_gradient=False)
-                    if torch.norm(ctry) < torch.norm(c):
+                    ctry = self.constraints.constraint(r,v,batch,z,save_E_grad=False)
+                    ctry_norm = torch.norm(ctry)
+                    if ctry_norm < cnorm:
                         break
                     alpha = alpha / 2
                     lsiter = lsiter + 1
                     if lsiter > 10:
                         break
-                if lsiter == 0:
+                if lsiter == 0 and ctry_norm > converged:
                     alpha = alpha * 1.5
             y = y - alpha * lam_y
+            if debug:
+                cE = c[0,:]
+                cp = c[1:,:]
+                cEtry = ctry[0,:]
+                cptry = ctry[1:,:]
+                print(f"{j} c: {c.detach().cpu().norm():2.4f} -> {ctry.detach().cpu().norm():2.4f}   ")
+            if ctry_norm < converged:
+                break
         return y
 
     def save_reference_energy(self,x,batch,z):
         r = x[:, -3:]
         v = x[:, :-3]
-        self.EMC.Energy(r, v, batch, z, save_E0=True)
+        self.constraints.Energy(r, v, batch, z, save_E0=True)
         return
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst) -> torch.Tensor:
@@ -238,7 +254,7 @@ class constrained_network(torch.nn.Module):
         y = self.uplift(x)
         # x2 = self.project(y)
         y_old = y
-        if self.EMC is not None:
+        if self.constraints is not None:
             self.save_reference_energy(x,batch,node_attr)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
@@ -262,8 +278,8 @@ class constrained_network(torch.nn.Module):
             tmp = y.clone()
             y = 2*y - y_old + h*y_new
             y_old = tmp
-            if self.EMC is not None:
-                y = self.apply_constraints(y,batch,node_attr,n=100)
+            if self.constraints is not None:
+                y = self.apply_constraints(y,batch,node_attr,n=1000)
             x = self.project(y)
 
         return x
@@ -274,42 +290,135 @@ class EnergyMomentumConstraints(nn.Module):
         super(EnergyMomentumConstraints, self).__init__()
         self.F = potential_energy_predictor
         self.E0 = None
-        self.m = m
+        self.m = m[:,None]
         return
 
 
 
-    def Energy(self,r,v, batch, z, save_E0=False,return_gradient=False):
+    def Energy(self,r,v, batch, z, save_E0=False,save_E_grad=False):
         m = self.m
         F = self.F
-        E_kin = 0.5*scatter((m*torch.sum(v**2,dim=-1)), batch, dim=0)
+        e = torch.ones((3,1),dtype=v.dtype,device=v.device)
+        E_kin = 0.5*scatter(m * (v**2@e), batch, dim=0)
         E_pot = F(r,batch,z)
         E = E_pot + E_kin
         if save_E0:
             self.E0 = E
-        if return_gradient:
-            E_grad = grad(E, r, create_graph=False)[0]
-            return E, E_grad
-        else:
-            return E
+        if save_E_grad:
+            E_grad = grad(torch.sum(E_pot), r, create_graph=True)[0].requires_grad_(True) # This goes well since the kinetic energy does not depend on r and since r is not connected across different batches
+            self.E_grad = E_grad
+        return E
 
-    def constraint(self,r,v,batch,z,return_gradient):
+    def constraint(self,r,v,batch,z,save_E_grad):
         m = self.m
-        E1, E_grad = self.Energy(r,v,batch, z,return_gradient=return_gradient)
+        E1 = self.Energy(r,v,batch, z,save_E_grad=save_E_grad)
         E = E1 - self.E0
-        p = m[None,:] @ v
-        # c = torch.cat([E,p],dim=-1)
-        return E, p, E_grad
+        P = v.T @ m
+        c = torch.cat([E,P],dim=0)
+        return c
 
-    def dConstraintT(self,E,p,E_grad):
+    def dConstraintT(self,r,v,c):
         m = self.m
-        J1 = E_grad * E
-        J2 = p * E + m * p
-        J = torch.cat([J1,J2],dim=-1)
-        return J
+        E = c[0]
+        P = c[1:]
+        p = v * m
+        # p_flat = p.T.view(-1)
+        e3 = torch.ones((3,1),dtype=v.dtype,device=v.device)
+        en = torch.ones((v.shape[0],1),dtype=v.dtype,device=v.device)
+
+        jr = self.E_grad * E
+        jv = p * E + m @ e3.T * (en @ P.T)
+        j = torch.cat([jv,jr],dim=-1)
+        return j
 
     def forward(self,r,v,batch, z):
-        E,p, E_grad = self.constraint(r,v,batch, z,return_gradient=True)
-        c = torch.cat([E, p], dim=-1)
-        J = self.dConstraintT(E,p,E_grad)
-        return c, J
+        c = self.constraint(r,v,batch, z,save_E_grad=True)
+        j = self.dConstraintT(r,v,c)
+        return c, j
+
+
+class MomentumConstraints(nn.Module):
+    def __init__(self,m):
+        super(MomentumConstraints, self).__init__()
+        self.m = m[:,None]
+        return
+
+    def Energy(self,*args,**kwargs):
+        pass
+        return
+
+    def constraint(self,r,v,batch,z,save_E_grad):
+        m = self.m
+        P = v.T @ m
+        return P
+
+    def dConstraintT(self,r,v,c):
+        m = self.m
+        e3 = torch.ones((3,1),dtype=v.dtype,device=v.device)
+        en = torch.ones((v.shape[0],1),dtype=v.dtype,device=v.device)
+        jv = m @ e3.T * (en @ c.T)
+        jr = torch.zeros_like(jv)
+        j = torch.cat([jv,jr],dim=-1)
+        return j
+
+    def forward(self,r,v,batch, z):
+        c = self.constraint(r,v,batch, z,save_E_grad=None)
+        j = self.dConstraintT(r,v,c)
+        return c, j
+
+#
+# class EnergyMomentumConstraints(nn.Module):
+#     def __init__(self,potential_energy_predictor,m):
+#         super(EnergyMomentumConstraints, self).__init__()
+#         self.F = potential_energy_predictor
+#         self.E0 = None
+#         self.m = m[:,None]
+#         return
+#
+#
+#
+#     def Energy(self,r,v, batch, z, save_E0=False,return_gradient=False):
+#         m = self.m
+#         F = self.F
+#         e = torch.ones((3,1),dtype=v.dtype,device=v.device)
+#         E_kin = 0.5*scatter((m*(e.T@v**2).T), batch, dim=0)
+#         E_pot = F(r.T,batch,z)
+#         E = E_pot + E_kin
+#         if save_E0:
+#             self.E0 = E
+#         if return_gradient:
+#             E_grad = grad(E, r, create_graph=True)[0].requires_grad_(True)
+#         else:
+#             E_grad = None
+#         return E, E_grad
+#
+#     def constraint(self,r,v,batch,z,return_gradient):
+#         m = self.m
+#         E1, E_grad = self.Energy(r,v,batch, z,return_gradient=return_gradient)
+#         E = E1 - self.E0
+#         P = v @ m
+#         c = torch.cat([E,p],dim=-1)
+#         return E, P, E_grad
+#
+#     def dConstraintT(self,v,E,P,E_grad):
+#         m = self.m
+#         e = torch.ones((3,1),dtype=m.dtype,device=m.device)
+#         E_grad_flat = E_grad.T.view(-1)
+#         p = v * m.T
+#         p_flat = p.T.view(-1)
+#         # J1 = E_grad_flat * E
+#         # J2 = p_flat * E + (m.repeat(3,3) @ P).T
+#         # J = torch.cat([J1.T,J2.T],dim=0)
+#
+#         jr = E_grad * E
+#         jv = p * E + m.T * P
+#
+#         j = torch.cat([jv.T,jr.T],dim=-1)
+#
+#         return j
+#
+#     def forward(self,r,v,batch, z):
+#         E,p, E_grad = self.constraint(r,v,batch, z,return_gradient=True)
+#         c = torch.cat([E, p], dim=0)
+#         j = self.dConstraintT(v,E,p,E_grad)
+#         return c, j
