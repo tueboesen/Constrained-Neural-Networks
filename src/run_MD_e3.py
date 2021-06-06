@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.mode ='standard'
-    args.n_train = 1
+    args.n_train = 1000
     args.n_val = 1000
     args.batch_size = 1
     args.n_input_samples = 1
