@@ -125,9 +125,14 @@ def atomic_masses(z):
     return masses
 
 
+def Distogram(r):
+    """
+    r should be of shape (n,3)
+    """
+    D = torch.relu(torch.sum(r.t() ** 2, dim=0, keepdim=True) + torch.sum(r.t() ** 2, dim=0, keepdim=True).t() - 2 * r @ r.t())
+    return D
 
-
-def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=5):
+def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=True, max_radius=15):
     aloss = 0.0
     aloss_ref = 0.0
     MAE = 0.0
@@ -149,8 +154,9 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         Rin_vec = Rin.reshape(-1,Rin.shape[-1])
         Rout_vec = Rout.reshape(-1,Rout.shape[-1])
         Vin_vec = Vin.reshape(-1,Vin.shape[-1])
+
         Vout_vec = Vout.reshape(-1,Vout.shape[-1])
-        x = torch.cat([Vin_vec,Rin_vec],dim=-1)
+        x = torch.cat([Rin_vec,Vin_vec],dim=-1)
         z_vec = z.reshape(-1,z.shape[-1])
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
@@ -158,24 +164,22 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
 
-
         t1 = time.time()
         output = model(x, batch, z_vec, edge_src, edge_dst)
         t2 = time.time()
-        Rpred = output[:, -3:]
-        Vpred = output[:, :-3]
+        Rpred = output[:, 0:3]
+        Vpred = output[:, 3:]
 
         loss = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
         loss_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
         MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
 
         if check_equivariance:
-            rot = o3.rand_matrix(1)
-            Rin_vec_rotated = (Rin_vec.transpose(1, 2) @ rot).transpose(1, 2)
-            Rpred_rotated = model(Rin_vec_rotated, z_vec, batch)
-            Rpred_rotated_after = (Rpred.transpose(1, 2) @ rot).transpose(1, 2)
-            assert torch.allclose(Rpred_rotated, Rpred_rotated_after, rtol=1e-4, atol=1e-4)
-
+            rot = o3.rand_matrix()
+            Drot = model.irreps_in.D_from_matrix(rot)
+            output_rot_after = output @ Drot
+            output_rot = model(x @ Drot, batch, z_vec, edge_src, edge_dst)
+            assert torch.allclose(output_rot,output_rot_after, rtol=1e-4, atol=1e-4)
         if train:
             loss.backward()
             optimizer.step()

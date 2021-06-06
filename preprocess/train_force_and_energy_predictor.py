@@ -21,7 +21,7 @@ from e3nn.util.jit import compile_mode
 from torch.autograd import grad
 import torch.nn.functional as F
 
-from src.EQ_operations import SelfInteraction, Convolution, TvNorm
+from src.EQ_operations import SelfInteraction, Convolution
 
 
 def smooth_cutoff(x):
@@ -353,7 +353,7 @@ if __name__ == '__main__':
     Force = data['F']
     R = data['R']
     epochs_for_lr_adjustment = 50
-    z = torch.from_numpy(data['z']).to(dtype=torch.float32, device=device)
+    z = torch.from_numpy(data['z']).to(device=device)
     ndata = E.shape[0]
     natoms = z.shape[0]
     R_mean = None
@@ -365,17 +365,17 @@ if __name__ == '__main__':
     np.random.shuffle(ndata_rand)
 
 
-    E_train = torch.from_numpy(E[ndata_rand[:n_train]]).to(dtype=torch.float32, device=device)
-    F_train = torch.from_numpy(Force[ndata_rand[:n_train]]).to(dtype=torch.float32, device=device)
-    R_train = torch.from_numpy(R[ndata_rand[:n_train]]).to(dtype=torch.float32, device=device)
+    E_train = torch.from_numpy(E[ndata_rand[:n_train]]).to( device=device)
+    F_train = torch.from_numpy(Force[ndata_rand[:n_train]]).to( device=device)
+    R_train = torch.from_numpy(R[ndata_rand[:n_train]]).to( device=device)
 
-    E_val = torch.from_numpy(E[ndata_rand[n_train:n_train+n_val]]).to(dtype=torch.float32, device=device)
-    F_val = torch.from_numpy(Force[ndata_rand[n_train:n_train+n_val]]).to(dtype=torch.float32, device=device)
-    R_val = torch.from_numpy(R[ndata_rand[n_train:n_train+n_val]]).to(dtype=torch.float32, device=device)
+    E_val = torch.from_numpy(E[ndata_rand[n_train:n_train+n_val]]).to( device=device)
+    F_val = torch.from_numpy(Force[ndata_rand[n_train:n_train+n_val]]).to( device=device)
+    R_val = torch.from_numpy(R[ndata_rand[n_train:n_train+n_val]]).to(device=device)
 
-    E_test = torch.from_numpy(E[ndata_rand[n_train+n_val:]]).to(dtype=torch.float32, device=device)
-    F_test = torch.from_numpy(Force[ndata_rand[n_train+n_val:]]).to(dtype=torch.float32, device=device)
-    R_test = torch.from_numpy(R[ndata_rand[n_train+n_val:]]).to(dtype=torch.float32, device=device)
+    E_test = torch.from_numpy(E[ndata_rand[n_train+n_val:]]).to( device=device)
+    F_test = torch.from_numpy(Force[ndata_rand[n_train+n_val:]]).to( device=device)
+    R_test = torch.from_numpy(R[ndata_rand[n_train+n_val:]]).to( device=device)
 
 
     dataset_train = Dataset_ForceEnergy(R_train, F_train, E_train, z)

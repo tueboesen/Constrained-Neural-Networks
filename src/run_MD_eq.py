@@ -67,10 +67,10 @@ if __name__ == '__main__':
     # device='cpu'
     # load training data
     data = np.load('./../../../data/MD/MD17/aspirin_dft.npz')
-    R = torch.from_numpy(data['R']).to(dtype=torch.float32, device=device)
+    R = torch.from_numpy(data['R']).to( device=device)
     Rin, Rout = convert_snapshots_to_future_state_dataset(c['n_input_samples'], c['n_skips'], R)
 
-    z = torch.from_numpy(data['z']).to(dtype=torch.float32, device=device)
+    z = torch.from_numpy(data['z']).to( device=device)
 
     ndata = Rout.shape[0]
     natoms = z.shape[0]
