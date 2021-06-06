@@ -27,9 +27,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.mode ='standard'
-    args.n_train = 2
+    args.n_train = 1000
     args.n_val = 1000
-    args.batch_size = 2
+    args.batch_size = 50
     args.n_input_samples = 1
     args.n_skips = 0
     args.epochs_for_lr_adjustment = 50
@@ -158,7 +158,7 @@ if __name__ == '__main__':
         aloss_t, aloss_ref_t, MAE_t, t_dataload_t, t_prepare_t, t_model_t, t_backprop_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, aloss_ref_v, MAE_v, t_dataload_v, t_prepare_v, t_model_v, t_backprop_v = run_network_e3(model, dataloader_val, train=False, max_samples=50, optimizer=optimizer, batch_size=c['batch_size'],max_radius=cn['max_radius'])
+            aloss_v, aloss_ref_v, MAE_v, t_dataload_v, t_prepare_v, t_model_v, t_backprop_v = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'],max_radius=cn['max_radius'])
         else:
             aloss_v, aloss_ref_v, MAE_v, t_dataload_v, t_prepare_v, t_model_v, t_backprop_v = 0,0,0,0,0,0,0
         t3 = time.time()

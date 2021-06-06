@@ -141,7 +141,7 @@ class constrained_network(torch.nn.Module):
 class MomentumConstraints(nn.Module):
     def __init__(self,m,project,uplift):
         super(MomentumConstraints, self).__init__()
-        self.m = m[:,None]
+        self.register_buffer("m", m[:,None])
         self.project = project
         self.uplift = uplift
         return

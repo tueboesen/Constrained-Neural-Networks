@@ -269,7 +269,7 @@ class ProjectUplift(torch.nn.Module):
 
     def make_matrix_semi_unitary(self, debug=False):
         M = self.M.clone()
-        I = torch.eye(M.shape[-2])
+        I = torch.eye(M.shape[-2],device=M.device)
         for i in range(100):
             M = M - 0.5 * (M @ M.t() - I) @ M
 

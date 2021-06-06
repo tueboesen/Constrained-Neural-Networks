@@ -132,7 +132,7 @@ def Distogram(r):
     D = torch.relu(torch.sum(r.t() ** 2, dim=0, keepdim=True) + torch.sum(r.t() ** 2, dim=0, keepdim=True).t() - 2 * r @ r.t())
     return D
 
-def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=True, max_radius=15):
+def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15):
     aloss = 0.0
     aloss_ref = 0.0
     MAE = 0.0
@@ -175,11 +175,12 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
 
         if check_equivariance:
-            rot = o3.rand_matrix()
+            rot = o3.rand_matrix().to(device=x.device)
             Drot = model.irreps_in.D_from_matrix(rot)
             output_rot_after = output @ Drot
             output_rot = model(x @ Drot, batch, z_vec, edge_src, edge_dst)
             assert torch.allclose(output_rot,output_rot_after, rtol=1e-4, atol=1e-4)
+            print("network is equivariant")
         if train:
             loss.backward()
             optimizer.step()
