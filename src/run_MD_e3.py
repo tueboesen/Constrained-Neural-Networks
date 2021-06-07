@@ -29,31 +29,31 @@ if __name__ == '__main__':
     args.mode ='standard'
     args.n_train = 1000
     args.n_val = 1000
-    args.batch_size = 50
+    args.batch_size = 20
     args.n_input_samples = 1
     args.n_skips = 0
     args.epochs_for_lr_adjustment = 50
-    args.use_validation = False
+    args.use_validation = True
     args.lr = 1e-2
     args.seed = 123545
-    args.epochs = 100000
+    args.epochs = 1000
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     args.data = './../../../data/MD/water_jones/water.npz'
     # args.data = './../../../data/MD/MD17/aspirin_dft.npz'
     args.network = {
         'irreps_inout': o3.Irreps("2x1o"),
-        'irreps_hidden': o3.Irreps("20x0o+20x0e+10x1o+5x1e"),
+        'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
         # 'irreps_node_attr': o3.Irreps("1x0e"),
         # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
         'irreps_edge_attr': o3.Irreps("1x1o"),
-        'layers': 6,
+        'layers': 4,
         'max_radius': 15,
         'number_of_basis': 8,
         'embed_dim': 8,
         'max_atom_types': 20,
         'radial_neurons': [8, 16],
         'num_neighbors': 15,
-        'constraints': 'P'
+        'constraints': ''
 
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
@@ -155,12 +155,12 @@ if __name__ == '__main__':
     epochs_since_best = 0
     for epoch in range(c['epochs']):
         t1 = time.time()
-        aloss_t, aloss_ref_t, MAE_t, t_dataload_t, t_prepare_t, t_model_t, t_backprop_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+        aloss_t, alossr_t, alossv_t, aloss_ref_t, MAE_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, aloss_ref_v, MAE_v, t_dataload_v, t_prepare_v, t_model_v, t_backprop_v = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'],max_radius=cn['max_radius'])
+            aloss_v, alossr_v, alossv_v, aloss_ref_v, MAE_v= run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'],max_radius=cn['max_radius'])
         else:
-            aloss_v, aloss_ref_v, MAE_v, t_dataload_v, t_prepare_v, t_model_v, t_backprop_v = 0,0,0,0,0,0,0
+            aloss_v, alossr_v, alossv_v, aloss_ref_v, MAE_v = 0,0,0,0,0
         t3 = time.time()
 
         if aloss_v < alossBest:
@@ -175,6 +175,6 @@ if __name__ == '__main__':
                 epochs_since_best = 0
 
         # print(f' t_dataloader(train): {t_dataload_t:.3f}s  t_dataloader(val): {t_dataload_v:.3f}s  t_prepare(train): {t_prepare_t:.3f}s  t_prepare(val): {t_prepare_v:.3f}s  t_model(train): {t_model_t:.3f}s  t_model(val): {t_model_v:.3f}s  t_backprop(train): {t_backprop_t:.3f}s  t_backprop(val): {t_backprop_v:.3f}s')
-        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss_ref(train): {aloss_ref_t:.2e} MAE(train) {MAE_t:.2e}  Loss(val): {aloss_v:.2e}   Loss_ref(val): {aloss_ref_v:.2e} MAE(val) {MAE_v:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
+        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_ref(train): {aloss_ref_t:.2e} Loss_ref(val): {aloss_ref_v:.2e} Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss_r(val): {alossr_v:.2e}  Loss_v(val): {alossv_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
 
 

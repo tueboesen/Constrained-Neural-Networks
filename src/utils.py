@@ -134,20 +134,17 @@ def Distogram(r):
 
 def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15):
     aloss = 0.0
+    alossr = 0.0
+    alossv = 0.0
     aloss_ref = 0.0
     MAE = 0.0
-    t_dataload = 0.0
-    t_prepare = 0.0
-    t_model = 0.0
-    t_backprop = 0.0
+    torch.set_grad_enabled(train)
     if train:
         model.train()
     else:
         model.eval()
-    t3 = time.time()
     for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout) in enumerate(dataloader):
         nb, natoms, ndim = Rin.shape
-        t0 = time.time()
         optimizer.zero_grad()
         # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
 
@@ -164,13 +161,13 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
 
-        t1 = time.time()
         output = model(x, batch, z_vec, edge_src, edge_dst)
-        t2 = time.time()
         Rpred = output[:, 0:3]
         Vpred = output[:, 3:]
 
-        loss = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
+        loss_r = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
+        loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
+        loss = loss_r + loss_v
         loss_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
         MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
 
@@ -185,24 +182,19 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
             loss.backward()
             optimizer.step()
         aloss += loss.detach()
+        alossr += loss_r.detach()
+        alossv += loss_v.detach()
         aloss_ref += loss_last_step
         MAE += MAEi
-        t_dataload += t0 - t3
-        t3 = time.time()
-        t_prepare += t1 - t0
-        t_model += t2 - t1
-        t_backprop += t3 - t2
         if (i + 1) * batch_size >= max_samples:
             break
     aloss /= (i + 1)
+    alossr /= (i + 1)
+    alossv /= (i + 1)
     aloss_ref /= (i + 1)
     MAE /= (i + 1)
-    t_dataload /= (i + 1)
-    t_prepare /= (i + 1)
-    t_model /= (i + 1)
-    t_backprop /= (i + 1)
 
-    return aloss, aloss_ref, MAE, t_dataload, t_prepare, t_model, t_backprop
+    return aloss, alossr, alossv, aloss_ref, MAE
 
 
 def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False):
