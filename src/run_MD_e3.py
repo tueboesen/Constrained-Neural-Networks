@@ -68,7 +68,7 @@ if __name__ == '__main__':
         runner_name=c['basefolder'],
         date=datetime.now(),
     )
-
+    model_name = "{}/{}.pt".format(c['result_dir'], 'model')
     os.makedirs(c['result_dir'])
     logfile_loc = "{}/{}.log".format(c['result_dir'], 'output')
     LOG = log.setup_custom_logger('runner',logfile_loc,c['mode'])
@@ -177,5 +177,5 @@ if __name__ == '__main__':
 
         # print(f' t_dataloader(train): {t_dataload_t:.3f}s  t_dataloader(val): {t_dataload_v:.3f}s  t_prepare(train): {t_prepare_t:.3f}s  t_prepare(val): {t_prepare_v:.3f}s  t_model(train): {t_model_t:.3f}s  t_model(val): {t_model_v:.3f}s  t_backprop(train): {t_backprop_t:.3f}s  t_backprop(val): {t_backprop_v:.3f}s')
         LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_ref(train): {aloss_ref_t:.2e} Loss_ref(val): {aloss_ref_v:.2e} Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss_r(val): {alossr_v:.2e}  Loss_v(val): {alossv_v:.2e}   P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
-
+    torch.save(model.state_dict(), f"{model_name}")
 

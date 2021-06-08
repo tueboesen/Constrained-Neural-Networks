@@ -62,6 +62,7 @@ if __name__ == '__main__':
     logfile_loc = "{}/{}.log".format(c['result_dir'], 'output')
     LOG = log.setup_custom_logger('runner',logfile_loc,c['mode'])
     log_all_parameters(LOG, c)
+    model_name = "{}/{}.pt".format(c['result_dir'], 'model')
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
@@ -152,6 +153,7 @@ if __name__ == '__main__':
                     lr = g['lr']
                 epochs_since_best = 0
         LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_ref(train): {aloss_ref_t:.2e} Loss_ref(val): {aloss_ref_v:.2e} Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}  P(train): {ap_t:.2e}  P_ref(train): {ap_ref_t:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
+    torch.save(model.state_dict(), f"{model_name}")
 
 
 
