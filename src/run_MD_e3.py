@@ -27,8 +27,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.mode ='standard'
-    args.n_train = 1
-    args.n_val = 1000
+    args.n_train = 1000
+    args.n_val = 4000
     args.batch_size = 1
     args.n_input_samples = 1
     args.n_skips = 0
@@ -94,7 +94,7 @@ if __name__ == '__main__':
 
     # p = torch.sum(V * masses[None,:,None],dim=1)
 
-    ndata = Rout.shape[0]
+    ndata = np.min([Rout.shape[0],Vout.shape[0],Fout.shape[0],KEout.shape[0]])
     natoms = z.shape[0]
 
     print('Number of data: {:}, Number of atoms {:}'.format(ndata, natoms))
