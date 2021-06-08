@@ -29,11 +29,11 @@ if __name__ == '__main__':
     args.mode ='standard'
     args.n_train = 1000
     args.n_val = 4000
-    args.batch_size = 1
+    args.batch_size = 100
     args.n_input_samples = 1
     args.n_skips = 0
-    args.epochs_for_lr_adjustment = 50
-    args.use_validation = False
+    args.epochs_for_lr_adjustment = 20
+    args.use_validation = True
     args.lr = 1e-2
     args.seed = 123545
     args.epochs = 1000
