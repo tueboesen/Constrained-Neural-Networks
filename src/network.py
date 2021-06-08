@@ -11,6 +11,7 @@ import torch.optim as optim
 from torch_cluster import radius_graph
 from torch_scatter import scatter
 
+from src.constraints import MomentumConstraints
 from src.utils import smooth_cutoff
 
 
@@ -148,7 +149,7 @@ class network_simple(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, nmax_atom_types=10,atom_type_embed_dim=8,max_radius=5):
+    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, nmax_atom_types=10,atom_type_embed_dim=8,max_radius=5,constraints=None, masses=None):
         super().__init__()
 
         self.nlayers = nlayers
@@ -158,6 +159,11 @@ class network_simple(nn.Module):
         self.projection_matrix = nn.Parameter(w)
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
+        self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
+        if constraints == 'P':
+            self.constraints = MomentumConstraints(masses, project=self.project, uplift=self.uplift)
+        else:
+            self.constraints = None
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -192,40 +198,15 @@ class network_simple(nn.Module):
         y = x @ M
         return y
 
-    def apply_constraints(self, x, n=1, d=3.8):
-        for j in range(n):
-            x3 = self.project(x)
-            c = constraint(x3.t(), d)
-            lam = dConstraintT(c, x3.t())
-            lam = self.uplift(lam.t())
 
-            with torch.no_grad():
-                if j == 0:
-                    alpha = 1.0 / lam.norm()
-                lsiter = 0
-                while True:
-                    xtry = x - alpha * lam
-                    x3 = self.project(xtry)
-                    ctry = constraint(x3.t(), d)
-                    if torch.norm(ctry) < torch.norm(c):
-                        break
-                    alpha = alpha / 2
-                    lsiter = lsiter + 1
-                    if lsiter > 10:
-                        break
-                if lsiter == 0:
-                    alpha = alpha * 1.5
-            x = x - alpha * lam
-        return x
-
-    def forward(self, x, node_attr, edge_src, edge_dst):
+    def forward(self, x, batch, node_attr, edge_src, edge_dst):
 
         node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
         y = self.uplift(x)
 
         y_old = y
         for i in range(self.nlayers):
-            edge_vec = x[:,-3:][edge_src] - x[:,-3:][edge_dst]
+            edge_vec = x[:,0:3][edge_src] - x[:,0:3][edge_dst]
             edge_len = edge_vec.norm(dim=1)
             w = smooth_cutoff(edge_len / self.max_radius) / edge_len
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)
@@ -233,8 +214,11 @@ class network_simple(nn.Module):
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
             tmp = y.clone()
 
-            y = 2*y - y_old - 0.1 * y_new
+            y = 2*y - y_old - self.h[i]**2 * y_new
             y_old = tmp
+
+            if self.constraints is not None:
+                y = self.constraints(y, batch, n=20)
 
             # y = self.apply_constraints(y, n=100)
             x = self.project(y)

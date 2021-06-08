@@ -21,66 +21,6 @@ import torch.nn.functional as F
 
 from src.utils import smooth_cutoff
 
-
-class MomentumConstraints(torch.nn.Module):
-    def __init__(self,m,project,uplift):
-        super(MomentumConstraints, self).__init__()
-        self.m = m[:,None]
-        self.project = project
-        self.uplift = uplift
-        return
-
-    def constraint(self,v,batch):
-        m = self.m
-        P = v.T @ m
-        return P
-
-    def dConstraintT(self,v,c):
-        m = self.m
-        e3 = torch.ones((3,1),dtype=v.dtype,device=v.device)
-        en = torch.ones((v.shape[0],1),dtype=v.dtype,device=v.device)
-        jv = m @ e3.T * (en @ c.T)
-        jr = torch.zeros_like(jv)
-        j = torch.cat([jv,jr],dim=-1)
-        return j
-
-    def forward(self, y, batch, n=10, debug=False, converged=1e-3):
-        for j in range(n):
-            x = self.project(y)
-            v = x[:, :-3]
-            r = x[:, -3:]
-            c = self.constraint(v, batch)
-            lam_x = self.dConstraintT(v,c)
-            cnorm = torch.norm(c)
-            lam_y = self.uplift(lam_x)
-            with torch.no_grad():
-                if j == 0:
-                    alpha = 1.0 / lam_y.norm()
-                lsiter = 0
-                while True:
-                    ytry = y - alpha * lam_y
-                    x = self.project(ytry)
-                    r = x[:, -3:]
-                    v = x[:, :-3]
-                    ctry = self.constraint(v, batch)
-                    ctry_norm = torch.norm(ctry)
-                    if ctry_norm < cnorm:
-                        break
-                    alpha = alpha / 2
-                    lsiter = lsiter + 1
-                    if lsiter > 10:
-                        break
-                if lsiter == 0 and ctry_norm > converged:
-                    alpha = alpha * 1.5
-            y = y - alpha * lam_y
-            if debug:
-                print(f"{j} c: {c.detach().cpu().norm():2.4f} -> {ctry.detach().cpu().norm():2.4f}   ")
-            if ctry_norm < converged:
-                break
-        return y
-
-
-
 def tp_path_exists(irreps_in1, irreps_in2, ir_out):
     irreps_in1 = o3.Irreps(irreps_in1).simplify()
     irreps_in2 = o3.Irreps(irreps_in2).simplify()

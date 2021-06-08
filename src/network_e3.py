@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 
 from src.EQ_operations import SelfInteraction, Convolution, ProjectUplift
+from src.constraints import MomentumConstraints
 from src.utils import smooth_cutoff
 
 
@@ -78,6 +79,8 @@ class constrained_network(torch.nn.Module):
             self.self_interaction.append(SelfInteraction(self.irreps_hidden,self.irreps_hidden))
         self.convolutions = torch.nn.ModuleList()
         self.gates = torch.nn.ModuleList()
+        self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
+        self.mix = torch.nn.Parameter(torch.ones(layers)*0.5)
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
             irreps_gated = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l > 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -104,11 +107,10 @@ class constrained_network(torch.nn.Module):
         return
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst,tmp=None,tmp2=None) -> torch.Tensor:
-        h = 0.1
         node_attr_embedded = self.node_embedder(node_attr.to(dtype=torch.int64)).squeeze()
         self.PU.make_matrix_semi_unitary()
         y = self.PU.uplift(x)
-
+        y_old = y
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
             edge_vec = x[:, 0:3][edge_src] - x[:, 0:3][edge_dst]
@@ -126,72 +128,11 @@ class constrained_network(torch.nn.Module):
 
             y_new = conv(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features)
             y_new = gate(y_new)
-            # y_new = self.self_interaction[i](y.clone())
-
-            y = y + h*y_new
-
-            # tmp = y.clone()
-            # y = 2*y - y_old + h*y_new
-            # y_old = tmp
+            y_new2 = self.self_interaction[i](y.clone())
+            tmp = y.clone()
+            y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
+            y_old = tmp
             if self.constraints is not None:
                 y = self.constraints(y,batch,n=20)
             x = self.PU.project(y)
         return x
-
-class MomentumConstraints(nn.Module):
-    def __init__(self,m,project,uplift):
-        super(MomentumConstraints, self).__init__()
-        self.register_buffer("m", m[:,None])
-        self.project = project
-        self.uplift = uplift
-        return
-
-    def constraint(self,v):
-        m = self.m
-        P = v.transpose(1,2) @ m
-        return P
-
-    def dConstraintT(self,v,c):
-        m = self.m
-        e3 = torch.ones((3,1),dtype=v.dtype,device=v.device)
-        en = torch.ones((m.shape[0],1),dtype=v.dtype,device=v.device)
-        jv = m @ e3.T * (en @ c.transpose(1,2))
-        jr = torch.zeros_like(jv)
-        j = torch.cat([jr,jv],dim=-1)
-        return j
-
-    def forward(self, y, batch, n=10, debug=False, converged=1e-3):
-        for j in range(n):
-            x = self.project(y)
-            nb = batch.max()+1
-            r = x[:, 0:3].view(nb,-1,3)
-            v = x[:, 3:].view(nb,-1,3)
-            c = self.constraint(v)
-            lam_x = self.dConstraintT(v,c)
-            cnorm = torch.norm(c)
-            lam_y = self.uplift(lam_x.view(-1,6))
-            with torch.no_grad():
-                if j == 0:
-                    alpha = 1.0 / lam_y.norm()
-                lsiter = 0
-                while True:
-                    ytry = y - alpha * lam_y
-                    x = self.project(ytry)
-                    r = x[:, 0:3].view(nb, -1, 3)
-                    v = x[:, 3:].view(nb, -1, 3)
-                    ctry = self.constraint(v)
-                    ctry_norm = torch.norm(ctry)
-                    if ctry_norm < cnorm:
-                        break
-                    alpha = alpha / 2
-                    lsiter = lsiter + 1
-                    if lsiter > 10:
-                        break
-                if lsiter == 0 and ctry_norm > converged:
-                    alpha = alpha * 1.5
-            y = y - alpha * lam_y
-            if debug:
-                print(f"{j} c: {c.detach().cpu().norm():2.4f} -> {ctry.detach().cpu().norm():2.4f}   ")
-            if ctry_norm < converged:
-                break
-        return y

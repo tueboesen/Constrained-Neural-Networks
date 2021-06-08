@@ -61,7 +61,7 @@ def fix_seed(seed, include_cuda=True):
 
 
 class DatasetFutureState(data.Dataset):
-    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None):
+    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None):
         self.Rin = Rin
         self.Rout = Rout
         self.z = z
@@ -73,6 +73,7 @@ class DatasetFutureState(data.Dataset):
         self.KEout = KEout
         self.PEin = PEin
         self.PEout = PEout
+        self.m = m
         if Fin is None or Fout is None:
             self.useF = False
         else:
@@ -93,6 +94,7 @@ class DatasetFutureState(data.Dataset):
         z = self.z[:,None]
         Vin = self.Vin[index]
         Vout = self.Vout[index]
+        m = self.m[:,None]
         if self.useF:
             Fin = self.Fin[index]
             Fout = self.Fout[index]
@@ -111,7 +113,7 @@ class DatasetFutureState(data.Dataset):
         else:
             PEin = 0
             PEout = 0
-        return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout
+        return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout,m
 
     def __len__(self):
         return len(self.Rin)
@@ -137,13 +139,14 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     alossr = 0.0
     alossv = 0.0
     aloss_ref = 0.0
+    amomentum = 0.0
     MAE = 0.0
     torch.set_grad_enabled(train)
     if train:
         model.train()
     else:
         model.eval()
-    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout) in enumerate(dataloader):
+    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
         nb, natoms, ndim = Rin.shape
         optimizer.zero_grad()
         # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
@@ -157,7 +160,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         z_vec = z.reshape(-1,z.shape[-1])
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
-        edge_index = radius_graph(Rin_vec, max_radius, batch)
+        edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=100)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
 
@@ -170,6 +173,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         loss = loss_r + loss_v
         loss_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
         MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+
+        Ppred = torch.sum((Vpred.view(Vout.shape).transpose(1, 2) @ m).norm(dim=1)) / nb
 
         if check_equivariance:
             rot = o3.rand_matrix().to(device=x.device)
@@ -184,6 +189,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         aloss += loss.detach()
         alossr += loss_r.detach()
         alossv += loss_v.detach()
+        amomentum += Ppred.detach()
         aloss_ref += loss_last_step
         MAE += MAEi
         if (i + 1) * batch_size >= max_samples:
@@ -192,9 +198,10 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     alossr /= (i + 1)
     alossv /= (i + 1)
     aloss_ref /= (i + 1)
+    amomentum /= (i + 1)
     MAE /= (i + 1)
 
-    return aloss, alossr, alossv, aloss_ref, MAE
+    return aloss, alossr, alossv, aloss_ref, amomentum, MAE
 
 
 def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False):
@@ -261,47 +268,57 @@ def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,che
 
     return aloss, aloss_ref, MAE, t_dataload, t_prepare, t_model, t_backprop
 
-def run_network(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False, max_radius=5):
+def run_network(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False, max_radius=15):
     aloss = 0.0
+    alossr = 0.0
+    alossv = 0.0
+    ap = 0.0
+    ap_ref = 0.0
     aloss_ref = 0.0
     MAE = 0.0
-    t_dataload = 0.0
-    t_prepare = 0.0
-    t_model = 0.0
-    t_backprop = 0.0
+    torch.set_grad_enabled(train)
     if train:
         model.train()
     else:
         model.eval()
-    t3 = time.time()
-    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, Ein, Eout) in enumerate(dataloader):
-        nb, natoms, nhist, ndim = Rin.shape
-        t0 = time.time()
+    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
+        nb, natoms, ndim = Rin.shape
+        optimizer.zero_grad()
+
         # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
         Rin_vec = Rin.reshape(nb*natoms,-1)
+        Vin_vec = Vin.reshape(nb*natoms,-1)
         Rout_vec = Rout.reshape(nb*natoms,-1)
+        Vout_vec = Vout.reshape(nb*natoms,-1)
         z_vec = z.reshape(-1,z.shape[-1])
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
-        pos = Rin_vec[:, -3:]
-        edge_index = radius_graph(pos, max_radius, batch)
+        edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=100)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
 
         optimizer.zero_grad()
-        t1 = time.time()
-        output = model(Rin_vec,z_vec,edge_src,edge_dst)
-        Rpred = output[:,-3:]
-        Vpred = output[:,:3]
+        x = torch.cat([Rin_vec,Vin_vec],dim=-1)
+        output = model(x, batch, z_vec,edge_src,edge_dst)
+        Rpred = output[:,0:3]
+        Vpred = output[:,3:]
         t2 = time.time()
 
-        dPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
-        dTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
-        RLast = Rin[:,:,-1,:].reshape(Rout_vec.shape)
-        dLast = torch.norm(RLast[edge_src] - RLast[edge_dst],p=2,dim=1)
+        dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
+        dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
+        RLast = Rin.view(Rout_vec.shape)
+        dRLast = torch.norm(RLast[edge_src] - RLast[edge_dst],p=2,dim=1)
+        dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
+        dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
 
-        loss = F.mse_loss(dPred,dTrue)/nb
-        loss_last_step = F.mse_loss(dLast, dTrue)/nb
+        loss_r = F.mse_loss(dRPred,dRTrue)/nb
+        loss_v = F.mse_loss(dVPred,dVTrue)/nb
+        loss = loss_r + loss_v
+        loss_last_step = F.mse_loss(dRLast, dRTrue)/nb
         MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+
+        Ppred = torch.sum((Vpred.view(Vout.shape).transpose(1,2) @ m).norm(dim=1)) / nb
+        Ptrue = torch.sum((Vout.transpose(1,2) @ m).norm(dim=1)) / nb
+
 
         if check_equivariance:
             rot = o3.rand_matrix(1)
@@ -314,24 +331,24 @@ def run_network(model,dataloader,train,max_samples,optimizer,batch_size=1,check_
             loss.backward()
             optimizer.step()
         aloss += loss.detach()
+        alossr += loss_v.detach()
+        alossv += loss_v.detach()
+        ap += Ppred.detach()
+        ap_ref += Ptrue.detach()
         aloss_ref += loss_last_step
         MAE += MAEi
-        t_dataload += t0 - t3
-        t3 = time.time()
-        t_prepare += t1 - t0
-        t_model += t2 - t1
-        t_backprop += t3 - t2
+
         if (i+1)*batch_size >= max_samples:
             break
     aloss /= (i+1)
+    alossr /= (i+1)
+    alossv /= (i+1)
     aloss_ref /= (i+1)
+    ap /= (i+1)
+    ap_ref /= (i+1)
     MAE /= (i+1)
-    t_dataload /= (i+1)
-    t_prepare /= (i+1)
-    t_model /= (i+1)
-    t_backprop /= (i+1)
 
-    return aloss, aloss_ref, MAE, t_dataload, t_prepare, t_model, t_backprop
+    return aloss, alossr, alossv, aloss_ref, ap, ap_ref, MAE
 
 #
 # def compute_inverse_square_distogram(r):
