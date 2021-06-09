@@ -185,7 +185,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
         lossD_r = F.mse_loss(dRPred,dRTrue)/nb
         lossD_v = F.mse_loss(dVPred,dVTrue)/nb
-        lossD = loss_r + loss_v
+        lossD = lossD_r + lossD_v
 
 
         if check_equivariance:
