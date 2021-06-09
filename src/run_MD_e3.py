@@ -156,12 +156,12 @@ if __name__ == '__main__':
     epochs_since_best = 0
     for epoch in range(c['epochs']):
         t1 = time.time()
-        aloss_t, alossr_t, alossv_t, aloss_ref_t, ap_t, MAE_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, aloss_ref_t, ap_t, MAE_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, alossr_v, alossv_v, aloss_ref_v, ap_v, MAE_v= run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'],max_radius=cn['max_radius'])
+            aloss_v, alossr_v, alossv_v,  alossD_v, alossDr_v, alossDv_v, aloss_ref_v, ap_v, MAE_v= run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'],max_radius=cn['max_radius'])
         else:
-            aloss_v, alossr_v, alossv_v, aloss_ref_v, ap_v, MAE_v = 0,0,0,0,0,0
+            aloss_v, alossr_v, alossv_v,  alossD_v, alossDr_v, alossDv_v, aloss_ref_v, ap_v, MAE_v = 0,0,0,0,0,0,0,0,0
         t3 = time.time()
 
         if aloss_v < alossBest:
@@ -176,6 +176,6 @@ if __name__ == '__main__':
                 epochs_since_best = 0
 
         # print(f' t_dataloader(train): {t_dataload_t:.3f}s  t_dataloader(val): {t_dataload_v:.3f}s  t_prepare(train): {t_prepare_t:.3f}s  t_prepare(val): {t_prepare_v:.3f}s  t_model(train): {t_model_t:.3f}s  t_model(val): {t_model_v:.3f}s  t_backprop(train): {t_backprop_t:.3f}s  t_backprop(val): {t_backprop_v:.3f}s')
-        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_ref(train): {aloss_ref_t:.2e} Loss_ref(val): {aloss_ref_v:.2e} Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss_r(val): {alossr_v:.2e}  Loss_v(val): {alossv_v:.2e}   P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
+        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_ref(train): {aloss_ref_t:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss_r(val): {alossr_v:.2e}  Loss_v(val): {alossv_v:.2e}   P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
     torch.save(model.state_dict(), f"{model_name}")
 

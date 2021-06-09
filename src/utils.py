@@ -138,6 +138,9 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     aloss = 0.0
     alossr = 0.0
     alossv = 0.0
+    alossD = 0.0
+    alossDr = 0.0
+    alossDv = 0.0
     aloss_ref = 0.0
     amomentum = 0.0
     MAE = 0.0
@@ -176,6 +179,15 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
 
         Ppred = torch.sum((Vpred.view(Vout.shape).transpose(1, 2) @ m).norm(dim=1)) / nb
 
+        dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
+        dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
+        dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
+        dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
+        lossD_r = F.mse_loss(dRPred,dRTrue)/nb
+        lossD_v = F.mse_loss(dVPred,dVTrue)/nb
+        lossD = loss_r + loss_v
+
+
         if check_equivariance:
             rot = o3.rand_matrix().to(device=x.device)
             Drot = model.irreps_in.D_from_matrix(rot)
@@ -189,6 +201,9 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         aloss += loss.detach()
         alossr += loss_r.detach()
         alossv += loss_v.detach()
+        alossD += lossD.detach()
+        alossDr += lossD_r.detach()
+        alossDv += lossD_v.detach()
         amomentum += Ppred.detach()
         aloss_ref += loss_last_step
         MAE += MAEi
@@ -197,11 +212,14 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     aloss /= (i + 1)
     alossr /= (i + 1)
     alossv /= (i + 1)
+    alossD /= (i + 1)
+    alossDr /= (i + 1)
+    alossDv /= (i + 1)
     aloss_ref /= (i + 1)
     amomentum /= (i + 1)
     MAE /= (i + 1)
 
-    return aloss, alossr, alossv, aloss_ref, amomentum, MAE
+    return aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, amomentum, MAE
 
 
 def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False):
