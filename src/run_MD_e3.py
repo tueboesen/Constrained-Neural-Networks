@@ -32,7 +32,7 @@ if __name__ == '__main__':
     args.batch_size = 100
     args.n_input_samples = 1
     args.n_skips = 0
-    args.epochs_for_lr_adjustment = 20
+    args.epochs_for_lr_adjustment = 100
     args.use_validation = True
     args.lr = 1e-2
     args.seed = 123545
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         'max_atom_types': 20,
         'radial_neurons': [8, 16],
         'num_neighbors': 15,
-        'constraints': 'P'
+        'constraints': ''
 
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]

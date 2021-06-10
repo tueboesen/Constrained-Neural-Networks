@@ -174,7 +174,7 @@ class network_simple(nn.Module):
 
 
     def make_matrix_semi_unitary(self, M,debug=False):
-        I = torch.eye(M.shape[-2])
+        I = torch.eye(M.shape[-2],device=M.device)
         if debug:
             M_org = M.clone()
         for i in range(10):

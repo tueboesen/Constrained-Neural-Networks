@@ -328,10 +328,11 @@ def run_network(model,dataloader,train,max_samples,optimizer,batch_size=1,check_
         dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
         dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
 
+        loss_last_step = F.mse_loss(dRLast, dRTrue)/nb
         loss_r = F.mse_loss(dRPred,dRTrue)/nb
         loss_v = F.mse_loss(dVPred,dVTrue)/nb
         loss = loss_r + loss_v
-        loss_last_step = F.mse_loss(dRLast, dRTrue)/nb
+        loss = loss / loss_last_step
         MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
 
         Ppred = torch.sum((Vpred.view(Vout.shape).transpose(1,2) @ m).norm(dim=1)) / nb
@@ -349,7 +350,7 @@ def run_network(model,dataloader,train,max_samples,optimizer,batch_size=1,check_
             loss.backward()
             optimizer.step()
         aloss += loss.detach()
-        alossr += loss_v.detach()
+        alossr += loss_r.detach()
         alossv += loss_v.detach()
         ap += Ppred.detach()
         ap_ref += Ptrue.detach()
