@@ -52,9 +52,9 @@ def read_xyz_force(filename,n):
 
 
 if __name__ == '__main__':
-    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/ethanol/'
-    # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/water_paper/'
-    # folder = '/home/tue/data/MD/ethanol/backup/'
+    # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/ethanol/'
+    # folder = '//media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/ethanol/new_units/'
+    folder = '/home/tue/data/MD/ethanol/backup2/'
     name_ener = 'ethanol-1.ener'
     name_vel = 'ethanol-vel-1.xyz'
     name_pos = 'ethanol-pos-1.xyz'
@@ -80,16 +80,22 @@ if __name__ == '__main__':
 
     pos,atomic_numbers = read_xyz(filename_pos)
     vel,_ = read_xyz(filename_vel)
+    # force,_ = read_xyz(filename_force)
 
     force = read_xyz_force(filename_force, pos.shape[1])
 
-    data = {'R': pos,
-            'F': force,
-            'V': vel,
+    #Now ensure that we are saving the same number of steps for each variable (they might have different number of data stored since we ran it while the simulation was still running)
+
+    ndata = np.min([pos.shape[0], force.shape[0], vel.shape[0], temp.shape[0], KE.shape[0], PE.shape[0]])
+
+
+    data = {'R': pos[:ndata],
+            'F': force[:ndata],
+            'V': vel[:ndata],
             'z': atomic_numbers,
-            'temp': temp,
-            'KE': KE,
-            'PE': PE
+            'temp': temp[:ndata],
+            'KE': KE[:ndata],
+            'PE': PE[:ndata]
             }
 
     np.savez(filename_out,**data)

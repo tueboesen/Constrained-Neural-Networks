@@ -29,17 +29,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.mode ='standard'
     args.n_train = 1000
-    args.n_val = 4000
+    args.n_val = 1000
     args.batch_size = 100
     args.n_input_samples = 1
-    args.n_skips = 0
-    args.epochs_for_lr_adjustment = 100
+    args.nskip = 0
+    args.epochs_for_lr_adjustment = 50
     args.use_validation = True
+    args.use_test = True
     args.lr = 1e-2
     args.seed = 123545
     args.epochs = 1000
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
-    args.data = './../../../data/MD/ethanol/ethanol.npz'
+    args.data = './../../../data/MD/ethanol/ethanol_70k.npz'
     # args.data = './../../../data/MD/water_jones/water.npz'
     # args.data = './../../../data/MD/MD17/ethanol_dft.npz'
     args.network = {
@@ -60,4 +61,20 @@ if __name__ == '__main__':
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
-    main(c)
+
+    result_dir_base = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
+        root='results',
+        runner_name=c['basefolder'],
+        date=datetime.now(),
+    )
+
+    constraints_hist = ['','P']
+    nskips = [0,9,99,999,9999]
+    job = 0
+    for nskip in nskips:
+        c['nskip'] = nskip
+        for constraint in constraints_hist:
+            c['network']['constraints'] = constraint
+            job += 1
+            c['result_dir'] = "{:}/{:}".format(result_dir_base,job)
+            results = main(c)

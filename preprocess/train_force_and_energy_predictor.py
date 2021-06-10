@@ -93,6 +93,7 @@ class NequIP(torch.nn.Module):
         reduce_output=True,
     ) -> None:
         super().__init__()
+        self.z = None
         self.max_radius = max_radius
         self.number_of_basis = number_of_basis
         self.num_neighbors = num_neighbors
@@ -140,7 +141,6 @@ class NequIP(torch.nn.Module):
 
         self.convolutions = torch.nn.ModuleList()
         self.gates = torch.nn.ModuleList()
-        self.norms = torch.nn.ModuleList()
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
             irreps_gated = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l > 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -160,13 +160,12 @@ class NequIP(torch.nn.Module):
                 radial_neurons,
                 num_neighbors
             )
-            self.norms.append(TvNorm(gate.irreps_in))
             irreps = gate.irreps_out
             self.convolutions.append(conv)
             self.gates.append(gate)
         return
 
-    def forward(self, pos,batch,z) -> torch.Tensor:
+    def forward(self, x,z,batch=None) -> torch.Tensor:
         """evaluate the network
         Parameters
         ----------
@@ -179,10 +178,12 @@ class NequIP(torch.nn.Module):
         """
 
         h = 0.1
-        edge_index = radius_graph(pos, self.max_radius, batch)
+        if batch is None:
+            batch = torch.zeros(z.shape[0],dtype=torch.int64,device=x.device)
+        edge_index = radius_graph(x, self.max_radius, batch)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
-        edge_vec = pos[edge_src] - pos[edge_dst]
+        edge_vec = x[edge_src] - x[edge_dst]
         edge_sh = o3.spherical_harmonics(self.irreps_edge_attr, edge_vec, True, normalization='component')
         edge_length = edge_vec.norm(dim=1)
         edge_length_embedded = soft_one_hot_linspace(
@@ -195,29 +196,21 @@ class NequIP(torch.nn.Module):
         ).mul(self.number_of_basis**0.5)
         edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
 
-        x = pos.new_ones((pos.shape[0], 1))
+        x = x.new_ones((x.shape[0], 1))
 
         # scalar_z = self.ext_z(z)
         edge_features = edge_length_embedded
 
-        # print(f'mean={x.pow(2).mean():2.2f}')
         z = self.node_embedder(z.to(dtype=torch.int64)).squeeze()
-        # print(f'mean={x.pow(2).mean():2.2f}')
-        # x = self.self_interaction[0](x)
-        # print(f'mean={x.pow(2).mean():2.2f}')
 
-        for i,(conv,norm,gate) in enumerate(zip(self.convolutions,self.norms,self.gates)):
+        for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
             y = conv(x, z, edge_src, edge_dst, edge_attr, edge_features)
-            # y = norm(y)
-            # print(f'mean={x.pow(2).mean():2.2f}')
             y = gate(y)
-            # print(f'mean={x.pow(2).mean():2.2f}')
             if y.shape == x.shape:
                 y = self.self_interaction[i](y)
                 x = x + h*y
             else:
                 x = y
-            # print(f'mean(abs(x))={torch.abs(x).mean():2.2f},norm={x.norm():2.2f}')
         x = self.self_interaction[-2](x,normalize_variance=False)
         x = self.activation(x)
         x = self.self_interaction[-1](x,normalize_variance=False)
@@ -274,7 +267,7 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
 
         optimizer.zero_grad()
         t1 = time.time()
-        E_pred = model(Ri_vec,batch,zi_vec)
+        E_pred = model(Ri_vec,zi_vec,batch)
         E_pred_tot = torch.sum(E_pred)
         t2 = time.time()
 
@@ -333,6 +326,8 @@ def generate_FE_network(natoms):
 
 
 if __name__ == '__main__':
+    torch.set_default_dtype(torch.float64)
+
     n_train = 10
     n_val = 10
     batch_size = 10
@@ -348,7 +343,7 @@ if __name__ == '__main__':
     use_mean_map = False
     # load training data
     # data = np.load('../../../data/MD/MD17/aspirin_dft.npz')
-    data = np.load('../../../data/MD/water_jones/water.npz')
+    data = np.load('./../../../data/MD/ethanol/ethanol.npz')
     E = data['PE']
     Force = data['F']
     R = data['R']

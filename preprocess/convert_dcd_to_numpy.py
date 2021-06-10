@@ -9,8 +9,15 @@ file_top = 'spike_WE_renumbered.psf'
 filename_dcd=f"{folder}{file_dcd}"
 filename_top=f"{folder}{file_top}"
 u = Universe(filename_top, filename_dcd)
-p = u.select_atoms("protein")
-p = u.select_atoms("backbone")
+
+protein = u.select_atoms("protein")
+protein_CA = protein.select_atoms("name CA")
+# protein_backbone = protein.select_atoms("backbone")
+
+CA = u.select_atoms("name CA")
+
+protein_res = protein
+
 print("done")
 
 

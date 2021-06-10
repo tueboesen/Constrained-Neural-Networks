@@ -129,9 +129,15 @@ def atomic_masses(z):
 
 def Distogram(r):
     """
-    r should be of shape (n,3)
+    r should be of shape (n,3) or shape (nb,n,3)
     """
-    D = torch.relu(torch.sum(r.t() ** 2, dim=0, keepdim=True) + torch.sum(r.t() ** 2, dim=0, keepdim=True).t() - 2 * r @ r.t())
+    if r.ndim == 2:
+        D = torch.relu(torch.sum(r.t() ** 2, dim=0, keepdim=True) + torch.sum(r.t() ** 2, dim=0, keepdim=True).t() - 2 * r @ r.t())
+    elif r.ndim == 3:
+        D = torch.relu(torch.sum(r.transpose(1,2) ** 2, dim=1, keepdim=True) + torch.sum(r.transpose(1,2) ** 2, dim=1, keepdim=True).transpose(1,2) - 2 * r @ r.transpose(1,2))
+    else:
+        raise Exception("shape not supported")
+
     return D
 
 def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15):
@@ -143,7 +149,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     alossDv = 0.0
     aloss_ref = 0.0
     amomentum = 0.0
-    MAE = 0.0
+    aMAEr = 0.0
+    aMAEv = 0.0
     torch.set_grad_enabled(train)
     if train:
         model.train()
@@ -175,7 +182,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
         loss = loss_r + loss_v
         loss_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
-        MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+        MAEr = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+        MAEv = torch.mean(torch.abs(Vpred - Vout_vec)).detach()
 
         Ppred = torch.sum((Vpred.view(Vout.shape).transpose(1, 2) @ m).norm(dim=1)) / nb
 
@@ -206,7 +214,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         alossDv += lossD_v.detach()
         amomentum += Ppred.detach()
         aloss_ref += loss_last_step
-        MAE += MAEi
+        aMAEr += MAEr
+        aMAEv += MAEv
         if (i + 1) * batch_size >= max_samples:
             break
     aloss /= (i + 1)
@@ -217,9 +226,10 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     alossDv /= (i + 1)
     aloss_ref /= (i + 1)
     amomentum /= (i + 1)
-    MAE /= (i + 1)
+    aMAEr /= (i + 1)
+    aMAEv /= (i + 1)
 
-    return aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, amomentum, MAE
+    return aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, amomentum, aMAEr, aMAEv
 
 
 def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False):
