@@ -36,7 +36,7 @@ if __name__ == '__main__':
     args.epochs_for_lr_adjustment = 50
     args.use_validation = True
     args.use_test = True
-    args.lr = 1e-2
+    args.lr = 1e-3
     args.seed = 123545
     args.epochs = 1000
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'

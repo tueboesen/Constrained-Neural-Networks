@@ -44,28 +44,28 @@ def main_covid(c):
     # device='cpu'
     # load training data
     data = np.load(c['data'])
-    Ra = torch.from_numpy(data['RCA']).to(device=device)
-    Rb = torch.from_numpy(data['RCB']).to(device=device)
-    Rn = torch.from_numpy(data['RN']).to(device=device)
-    z = torch.from_numpy(data['aa_num']).to(device=device)
-    fragids = torch.from_numpy(data['fragid']).to(device=device)
+    Ra = torch.from_numpy(data['RCA'])
+    Rb = torch.from_numpy(data['RCB'])
+    Rn = torch.from_numpy(data['RN'])
+    z = torch.from_numpy(data['aa_num'])
+    fragids = torch.from_numpy(data['fragid'])
     R_org = torch.cat([Ra,Rb,Rn],dim=2)
     R = R_org[1:]
     V = R_org[1:] - R_org[:-1]
 
-    fragid_unique = torch.unique(fragids)
-    for fragid_i in fragid_unique:
-        idx = fragid_i == fragids
-        Ri = R[:, idx, :]
-        dRi = Ri[:, 1:, :] - Ri[:, :-1, :]
-        dRa = dRi[:,:,:3]
-        dRab = Ri[:,:,:3] - Ri[:,:,3:6]
-        dRan = Ri[:,:,:3] - Ri[:,:,6:9]
-
-        distRa = torch.norm(dRa,dim=2)
-        distRab = torch.norm(dRab,dim=2)
-        distRan = torch.norm(dRan,dim=2)
-        print(f"max={distRa.max():3.2f}, min={distRa.min():3.2f}, mean={distRa.mean():3.2f}. AlphaBeta_Dist(mean) = {distRab.mean():3.2f}, AlphaBeta_Dist(min) = {distRab.min():3.2f}, AlphaBeta_Dist(max) = {distRab.max():3.2f}, AlphaN_Dist(mean) = {distRan.mean():3.2f},AlphaN_Dist(min) = {distRan.min():3.2f} AlphaN_Dist(max) = {distRan.max():3.2f}")
+    # fragid_unique = torch.unique(fragids)
+    # for fragid_i in fragid_unique:
+    #     idx = fragid_i == fragids
+    #     Ri = R[:, idx, :]
+    #     dRi = Ri[:, 1:, :] - Ri[:, :-1, :]
+    #     dRa = dRi[:,:,:3]
+    #     dRab = Ri[:,:,:3] - Ri[:,:,3:6]
+    #     dRan = Ri[:,:,:3] - Ri[:,:,6:9]
+    #
+    #     distRa = torch.norm(dRa,dim=2)
+    #     distRab = torch.norm(dRab,dim=2)
+    #     distRan = torch.norm(dRan,dim=2)
+    #     print(f"max={distRa.max():3.2f}, min={distRa.min():3.2f}, mean={distRa.mean():3.2f}. AlphaBeta_Dist(mean) = {distRab.mean():3.2f}, AlphaBeta_Dist(min) = {distRab.min():3.2f}, AlphaBeta_Dist(max) = {distRab.max():3.2f}, AlphaN_Dist(mean) = {distRan.mean():3.2f},AlphaN_Dist(min) = {distRan.min():3.2f} AlphaN_Dist(max) = {distRan.max():3.2f}")
 
 
     # dR = R[:,1:,:] - R[:,:-1,:]
@@ -94,25 +94,25 @@ def main_covid(c):
     Rout_train = Rout[ndata_rand[:c['n_train']]]
     Vin_train = Vin[ndata_rand[:c['n_train']]]
     Vout_train = Vout[ndata_rand[:c['n_train']]]
-
-    Rin_val = Rin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Rout_val = Rout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Vin_val = Vin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Vout_val = Vout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-
-
-    Rin_test = Rin[ndata_rand[c['n_train'] + c['n_val']:]]
-    Rout_test = Rout[ndata_rand[c['n_train'] + c['n_val']:]]
-    Vin_test = Vin[ndata_rand[c['n_train'] + c['n_val']:]]
-    Vout_test = Vout[ndata_rand[c['n_train'] + c['n_val']:]]
-
-    dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train)
-    dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val)
-    dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test)
-
+    dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train,device=device)
     dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
-    dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
-    dataloader_test = DataLoader(dataset_test, batch_size=c['batch_size'], shuffle=False, drop_last=False)
+
+    if c['use_validation']:
+        Rin_val = Rin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
+        Rout_val = Rout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
+        Vin_val = Vin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
+        Vout_val = Vout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
+        dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val,device=device)
+        dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
+
+    if c['use_test']:
+        Rin_test = Rin[ndata_rand[c['n_train'] + c['n_val']:]]
+        Rout_test = Rout[ndata_rand[c['n_train'] + c['n_val']:]]
+        Vin_test = Vin[ndata_rand[c['n_train'] + c['n_val']:]]
+        Vout_test = Vout[ndata_rand[c['n_train'] + c['n_val']:]]
+        dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test,device=device)
+        dataloader_test = DataLoader(dataset_test, batch_size=c['batch_size'], shuffle=False, drop_last=False)
+
 
     if cn['constraints'] == 'binding':
         constraints = BindingConstraints(3.8, fragmentid=fragids)

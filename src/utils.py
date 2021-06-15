@@ -61,7 +61,7 @@ def fix_seed(seed, include_cuda=True):
 
 
 class DatasetFutureState(data.Dataset):
-    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None):
+    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu'):
         self.Rin = Rin
         self.Rout = Rout
         self.z = z
@@ -74,6 +74,7 @@ class DatasetFutureState(data.Dataset):
         self.PEin = PEin
         self.PEout = PEout
         self.m = m
+        self.device = device
         if Fin is None or Fout is None:
             self.useF = False
         else:
@@ -89,30 +90,31 @@ class DatasetFutureState(data.Dataset):
         return
 
     def __getitem__(self, index):
-        Rin = self.Rin[index]
-        Rout = self.Rout[index]
-        z = self.z[:,None]
-        Vin = self.Vin[index]
-        Vout = self.Vout[index]
+        device = self.device
+        Rin = self.Rin[index].to(device=device)
+        Rout = self.Rout[index].to(device=device)
+        z = self.z[:,None].to(device=device)
+        Vin = self.Vin[index].to(device=device)
+        Vout = self.Vout[index].to(device=device)
         if self.m is not None:
             m = self.m[:,None]
         else:
             m = 0
         if self.useF:
-            Fin = self.Fin[index]
-            Fout = self.Fout[index]
+            Fin = self.Fin[index].to(device=device)
+            Fout = self.Fout[index].to(device=device)
         else:
             Fin = 0
             Fout = 0
         if self.useKE:
-            KEin = self.KEin[index]
-            KEout = self.KEout[index]
+            KEin = self.KEin[index].to(device=device)
+            KEout = self.KEout[index].to(device=device)
         else:
             KEin = 0
             KEout = 0
         if self.usePE:
-            PEin = self.PEin[index]
-            PEout = self.PEout[index]
+            PEin = self.PEin[index].to(device=device)
+            PEout = self.PEout[index].to(device=device)
         else:
             PEin = 0
             PEout = 0
