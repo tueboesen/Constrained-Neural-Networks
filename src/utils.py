@@ -94,7 +94,10 @@ class DatasetFutureState(data.Dataset):
         z = self.z[:,None]
         Vin = self.Vin[index]
         Vout = self.Vout[index]
-        m = self.m[:,None]
+        if self.m is not None:
+            m = self.m[:,None]
+        else:
+            m = 0
         if self.useF:
             Fin = self.Fin[index]
             Fout = self.Fout[index]
@@ -230,6 +233,99 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     aMAEv /= (i + 1)
 
     return aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, amomentum, aMAEr, aMAEv
+
+
+def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15):
+    aloss = 0.0
+    alossr = 0.0
+    alossv = 0.0
+    alossD = 0.0
+    alossDr = 0.0
+    alossDv = 0.0
+    aloss_ref = 0.0
+    amomentum = 0.0
+    aMAEr = 0.0
+    aMAEv = 0.0
+    torch.set_grad_enabled(train)
+    if train:
+        model.train()
+    else:
+        model.eval()
+    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
+        nb, natoms, ndim = Rin.shape
+        optimizer.zero_grad()
+        # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
+
+        Rin_vec = Rin.reshape(-1,Rin.shape[-1])
+        Rout_vec = Rout.reshape(-1,Rout.shape[-1])
+        Vin_vec = Vin.reshape(-1,Vin.shape[-1])
+
+        Vout_vec = Vout.reshape(-1,Vout.shape[-1])
+        x = torch.cat([Rin_vec,Vin_vec],dim=-1)
+        z_vec = z.reshape(-1,z.shape[-1])
+        batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
+
+        edge_index = radius_graph(Rin_vec[:,0:3], max_radius, batch, max_num_neighbors=100)
+        edge_src = edge_index[0]
+        edge_dst = edge_index[1]
+
+        output = model(x, batch, z_vec, edge_src, edge_dst)
+        Rpred = output[:, 0:9]
+        Vpred = output[:, 9:]
+
+        loss_r = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
+        loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
+        loss = loss_r + loss_v
+        loss_r_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
+        loss_v_last_step = torch.sum(torch.norm(Vin.reshape(Vout_vec.shape) - Vout_vec, p=2, dim=1)) / nb
+        loss_last_step = loss_r_last_step + loss_v_last_step
+        MAEr = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+        MAEv = torch.mean(torch.abs(Vpred - Vout_vec)).detach()
+
+        # dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
+        # dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
+        # dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
+        # dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
+        # lossD_r = F.mse_loss(dRPred,dRTrue)/nb
+        # lossD_v = F.mse_loss(dVPred,dVTrue)/nb
+        # lossD = lossD_r + lossD_v
+
+
+        if check_equivariance:
+            rot = o3.rand_matrix().to(device=x.device)
+            Drot = model.irreps_in.D_from_matrix(rot)
+            output_rot_after = output @ Drot
+            output_rot = model(x @ Drot, batch, z_vec, edge_src, edge_dst)
+            assert torch.allclose(output_rot,output_rot_after, rtol=1e-4, atol=1e-4)
+            print("network is equivariant")
+        if train:
+            loss.backward()
+            optimizer.step()
+        aloss += loss.detach()
+        alossr += loss_r.detach()
+        alossv += loss_v.detach()
+        # alossD += lossD.detach()
+        # alossDr += lossD_r.detach()
+        # alossDv += lossD_v.detach()
+        # amomentum += Ppred.detach()
+        aloss_ref += loss_last_step
+        aMAEr += MAEr
+        aMAEv += MAEv
+        if (i + 1) * batch_size >= max_samples:
+            break
+    aloss /= (i + 1)
+    alossr /= (i + 1)
+    alossv /= (i + 1)
+    alossD /= (i + 1)
+    alossDr /= (i + 1)
+    alossDv /= (i + 1)
+    aloss_ref /= (i + 1)
+    amomentum /= (i + 1)
+    aMAEr /= (i + 1)
+    aMAEv /= (i + 1)
+
+    return aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, amomentum, aMAEr, aMAEv
+
 
 
 def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False):

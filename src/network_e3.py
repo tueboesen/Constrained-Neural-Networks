@@ -52,14 +52,11 @@ class constrained_network(torch.nn.Module):
         self.irreps_hidden = o3.Irreps(irreps_hidden)
         self.irreps_out = o3.Irreps(irreps_inout)
         self.irreps_edge_attr = o3.Irreps(irreps_edge_attr)
-
+        self.constraints = constraints
         self.PU = ProjectUplift(self.irreps_in,self.irreps_hidden)
+        if self.constraints is not None:
+            self.constraints.set_projectuplift(self.PU.project,self.PU.uplift)
 
-
-        if constraints == 'P':
-            self.constraints = MomentumConstraints(masses, project=self.PU.project, uplift=self.PU.uplift)
-        else:
-            self.constraints = None
 
         act = {
             1: torch.nn.functional.silu,
