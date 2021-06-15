@@ -44,11 +44,11 @@ def main_covid(c):
     # device='cpu'
     # load training data
     data = np.load(c['data'])
-    Ra = torch.from_numpy(data['RCA'])
-    Rb = torch.from_numpy(data['RCB'])
-    Rn = torch.from_numpy(data['RN'])
+    Ra = torch.from_numpy(data['RCA']).to(dtype=torch.get_default_dtype())
+    Rb = torch.from_numpy(data['RCB']).to(dtype=torch.get_default_dtype())
+    Rn = torch.from_numpy(data['RN']).to(dtype=torch.get_default_dtype())
     z = torch.from_numpy(data['aa_num'])
-    fragids = torch.from_numpy(data['fragid'])
+    fragids = torch.from_numpy(data['fragid']).to(dtype=torch.get_default_dtype())
     R_org = torch.cat([Ra,Rb,Rn],dim=2)
     R = R_org[1:]
     V = R_org[1:] - R_org[:-1]

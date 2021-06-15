@@ -25,7 +25,7 @@ from src.network_eq import network_eq_simple
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.mode ='standard'
