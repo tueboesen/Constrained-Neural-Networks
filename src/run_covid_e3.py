@@ -57,7 +57,7 @@ if __name__ == '__main__':
         'max_atom_types': 25,
         'radial_neurons': [8, 16],
         'num_neighbors': 15,
-        'constraints': 'binding'
+        'constraints': 'bindingall'
 
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]

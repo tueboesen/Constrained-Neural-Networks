@@ -3,6 +3,7 @@ Exact equivariance to :math:`E(3)`
 version of february 2021
 """
 import torch
+import torch.nn
 import torch.nn as nn
 from e3nn import o3
 from e3nn.math import soft_one_hot_linspace
@@ -41,6 +42,7 @@ class constrained_network(torch.nn.Module):
         embed_dim,
         max_atom_types,
         constraints=None,
+        constraints2=None,
         masses=None
     ) -> None:
         super().__init__()
@@ -53,9 +55,12 @@ class constrained_network(torch.nn.Module):
         self.irreps_out = o3.Irreps(irreps_inout)
         self.irreps_edge_attr = o3.Irreps(irreps_edge_attr)
         self.constraints = constraints
+        self.constraints2 = constraints2
         self.PU = ProjectUplift(self.irreps_in,self.irreps_hidden)
         if self.constraints is not None:
-            self.constraints.set_projectuplift(self.PU.project,self.PU.uplift)
+                self.constraints.set_projectuplift(self.PU.project,self.PU.uplift)
+        if self.constraints2 is not None:
+                self.constraints2.set_projectuplift(self.PU.project,self.PU.uplift)
 
 
         act = {
@@ -131,5 +136,7 @@ class constrained_network(torch.nn.Module):
             y_old = tmp
             if self.constraints is not None:
                 y = self.constraints(y,batch,n=20)
+            if self.constraints2 is not None:
+                y = self.constraints2(y,batch,n=20)
             x = self.PU.project(y)
         return x

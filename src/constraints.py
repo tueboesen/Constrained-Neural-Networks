@@ -77,9 +77,9 @@ class BindingConstraintsAlphaBetaN(nn.Module):
         return y
 
 
-class BindingConstraints(nn.Module):
+class BindingConstraintsNN(nn.Module):
     def __init__(self,distance,fragmentid):
-        super(BindingConstraints, self).__init__()
+        super(BindingConstraintsNN, self).__init__()
         self.d = distance
         self.fragid = fragmentid
         self.fragid_unique = torch.unique(fragmentid)
@@ -161,10 +161,103 @@ class BindingConstraints(nn.Module):
                     alpha = alpha * 1.5
             y = y - alpha * lam_y
             if debug:
-                print(f"{j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
+                print(f"NN constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
             if ctry_norm < converged:
                 break
         return y
+
+class BindingConstraintsAB(nn.Module):
+    def __init__(self,d_ab,d_an,fragmentid):
+        super(BindingConstraintsAB, self).__init__()
+        self.d_ab = d_ab
+        self.d_an = d_an
+        self.fragid = fragmentid
+        self.fragid_unique = torch.unique(fragmentid)
+        self.project = None
+        self.uplift = None
+        return
+
+    def set_projectuplift(self,project,uplift):
+        self.project = project
+        self.uplift = uplift
+
+    def diff(self,x,x0):
+        return x - x0
+
+    def diffT(self,dx,x0):
+        return dx+x0
+
+    def constraint(self,x,x0,d):
+        e = torch.ones((3,1),device=x.device)
+        dx = self.diff(x,x0)
+        c = torch.sqrt(d**2/(dx**2@e)) - 1
+        return c
+
+    def dConstraintT(self,c,x,x0):
+        dx = self.diff(x,x0)
+        lam = - dx * c
+        return lam
+
+    def forward(self, y, batch, n=10, debug=False, converged=1e-4):
+        for j in range(n):
+            x = self.project(y)
+            ndim = x.shape[-1]//2
+            nvec = ndim // 3
+            lam_x = torch.zeros_like(x)
+            nb = batch.max() + 1
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+            v = x[:, ndim:].view(nb, -1, ndim)
+            cnorm = 0
+            for fragi in self.fragid_unique:
+                idx = self.fragid == fragi
+                ri = r[:,idx,:]
+                ri0 = ri[:, :,:3]
+                rib = ri[:, :,3:6]
+                rin = ri[:, :,6:9]
+                cib = self.constraint(rib,ri0,self.d_ab[idx][None,:,None])
+                cin = self.constraint(rin,ri0,self.d_an[idx][None,:,None])
+                lam_xib = self.dConstraintT(cib, rib,ri0)
+                lam_xin = self.dConstraintT(cin, rin,ri0)
+                lam_x[idx,3:6] = lam_xib
+                lam_x[idx,6:9] = lam_xin
+                cnormib = torch.sum(cib**2)
+                cnormin = torch.sum(cin**2)
+                cnorm = cnorm + cnormib + cnormin
+            lam_y = self.uplift(lam_x.view(-1, 2*ndim))
+            with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 #/ lam_y.norm()
+                lsiter = 0
+                while True:
+                    ytry = y - alpha * lam_y
+                    x = self.project(ytry)
+                    r = x[:, 0:ndim].view(nb, -1, ndim)
+                    v = x[:, ndim:].view(nb, -1, ndim)
+                    ctry_norm = 0
+                    for fragi in self.fragid_unique:
+                        idx = self.fragid == fragi
+                        ri = r[:,idx,:]
+                        ri0 = ri[:, :, :3]
+                        rib = ri[:, :, 3:6]
+                        rin = ri[:, :, 6:9]
+                        ctryb = self.constraint(rib, ri0,self.d_ab[idx][None,:,None])
+                        ctryn = self.constraint(rin, ri0,self.d_an[idx][None,:,None])
+                        ctry_norm = ctry_norm + torch.sum(ctryb**2) + torch.sum(ctryn**2)
+                    if ctry_norm < cnorm:
+                        break
+                    alpha = alpha / 2
+                    lsiter = lsiter + 1
+                    if lsiter > 10:
+                        break
+                if lsiter == 0 and ctry_norm > converged:
+                    alpha = alpha * 1.5
+            y = y - alpha * lam_y
+            if debug:
+                print(f"ABN constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
+            if ctry_norm < converged:
+                break
+        return y
+
 
 class MomentumConstraints(nn.Module):
     def __init__(self,m,project,uplift):
