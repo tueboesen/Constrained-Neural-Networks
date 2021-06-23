@@ -260,12 +260,17 @@ class BindingConstraintsAB(nn.Module):
 
 
 class MomentumConstraints(nn.Module):
-    def __init__(self,m,project,uplift):
+    def __init__(self,m,project=None,uplift=None):
         super(MomentumConstraints, self).__init__()
         self.register_buffer("m", m[:,None])
         self.project = project
         self.uplift = uplift
         return
+
+    def set_projectuplift(self,project,uplift):
+        self.project = project
+        self.uplift = uplift
+
 
     def constraint(self,v):
         m = self.m

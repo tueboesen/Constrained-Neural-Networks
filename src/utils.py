@@ -152,6 +152,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     alossD = 0.0
     alossDr = 0.0
     alossDv = 0.0
+    alossD_ref = 0.0
     aloss_ref = 0.0
     amomentum = 0.0
     aMAEr = 0.0
@@ -186,7 +187,9 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         loss_r = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
         loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
         loss = loss_r + loss_v
-        loss_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
+        loss_r_rel = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
+        loss_v_rel = torch.sum(torch.norm(Vin.reshape(Vout_vec.shape) - Vout_vec, p=2, dim=1)) / nb
+        loss_rel = loss_r_rel + loss_v_rel
         MAEr = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
         MAEv = torch.mean(torch.abs(Vpred - Vout_vec)).detach()
 
@@ -196,6 +199,11 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
         dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
         dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
+        dRLast = torch.norm(Rin.reshape(Rout_vec.shape)[edge_src] - Rin.reshape(Rout_vec.shape)[edge_dst], p=2,dim=1)
+        dVLast = torch.norm(Vin.reshape(Vout_vec.shape)[edge_src] - Vin.reshape(Vout_vec.shape)[edge_dst], p=2,dim=1)
+        lossD_r_rel = F.mse_loss(dRLast,dRTrue)/nb
+        lossD_v_rel = F.mse_loss(dVLast,dVTrue)/nb
+        lossD_rel = lossD_r_rel + lossD_v_rel
         lossD_r = F.mse_loss(dRPred,dRTrue)/nb
         lossD_v = F.mse_loss(dVPred,dVTrue)/nb
         lossD = lossD_r + lossD_v
@@ -217,8 +225,9 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
         alossD += lossD.detach()
         alossDr += lossD_r.detach()
         alossDv += lossD_v.detach()
+        alossD_ref += lossD_rel
         amomentum += Ppred.detach()
-        aloss_ref += loss_last_step
+        aloss_ref += loss_rel
         aMAEr += MAEr
         aMAEv += MAEv
         if (i + 1) * batch_size >= max_samples:
@@ -234,7 +243,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=
     aMAEr /= (i + 1)
     aMAEv /= (i + 1)
 
-    return aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, amomentum, aMAEr, aMAEv
+    return aloss, alossr, alossv, alossD, alossDr, alossDv, alossD_ref, aloss_ref, amomentum, aMAEr, aMAEv
 
 
 def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15):

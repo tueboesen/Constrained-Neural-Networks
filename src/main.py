@@ -19,6 +19,7 @@ from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
 from src.log import log_all_parameters, close_logger
 from src.network_e3 import constrained_network
+from src.constraints import BindingConstraintsNN, BindingConstraintsAB,MomentumConstraints
 from src.network_eq import network_eq_simple
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
 
@@ -33,6 +34,7 @@ def main(c):
             date=datetime.now(),
         )
     model_name = "{}/{}.pt".format(c['result_dir'], 'model')
+    model_name_best = "{}/{}.pt".format(c['result_dir'], 'model_best')
     os.makedirs(c['result_dir'])
     logfile_loc = "{}/{}.log".format(c['result_dir'], 'output')
     LOG = log.setup_custom_logger('runner', logfile_loc, c['mode'])
@@ -100,9 +102,9 @@ def main(c):
     PEin_test = PEin[ndata_rand[c['n_train'] + c['n_val']:]]
     PEout_test = PEout[ndata_rand[c['n_train'] + c['n_val']:]]
 
-    dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses)
-    dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses)
-    dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses)
+    dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses,device=device)
+    dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device)
+    dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device)
 
     dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
     dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
@@ -112,13 +114,16 @@ def main(c):
         PE_predictor = generate_FE_network(natoms=natoms)
         PE_predictor.load_state_dict(torch.load(c['PE_predictor'], map_location=torch.device('cpu')))
         PE_predictor.eval()
+    elif cn['constraints'] == 'P':
+        constraint = MomentumConstraints(masses)
     else:
         PE_predictor = None
+        constraint = None
 
     model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
                                 max_radius=cn['max_radius'],
                                 number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], masses=masses, constraints=cn['constraints'])
+                                num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], masses=masses, constraints=constraint)
     model.to(device)
     total_params = sum(p.numel() for p in model.parameters())
     LOG.info('Number of parameters {:}'.format(total_params))
@@ -132,17 +137,18 @@ def main(c):
     epochs_since_best = 0
     for epoch in range(c['epochs']):
         t1 = time.time()
-        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, aloss_ref_t, ap_t, _, _ = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, alossD_ref_t, aloss_ref_t, ap_t, MAEr_t, MAEv_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, aloss_ref_v, ap_v, _,_ = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, alossD_ref_v, aloss_ref_v, ap_v, MAEr_v,MAEv_v = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
         else:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, aloss_ref_v, ap_v, _,_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, alossD_ref_v, aloss_ref_v, ap_v, MAEr_v,MAEv_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
 
         if aloss_v < alossBest:
             alossBest = aloss_v
             epochs_since_best = 0
+            torch.save(model.state_dict(), f"{model_name_best}")
         else:
             epochs_since_best += 1
             if epochs_since_best >= c['epochs_for_lr_adjustment']:
@@ -151,17 +157,19 @@ def main(c):
                     lr = g['lr']
                 epochs_since_best = 0
 
-        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_ref(train): {aloss_ref_t:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss_r(val): {alossr_v:.2e}  Loss_v(val): {alossv_v:.2e}   P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
+        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t/aloss_ref_t:.2e}  Loss(val): {aloss_v/aloss_ref_v:.2e}  LossD(train): {alossD_t/alossD_ref_t:.2e}  LossD(val): {alossD_v/alossD_ref_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e} P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest/aloss_ref_v:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
     torch.save(model.state_dict(), f"{model_name}")
     if c['use_test']:
-        aloss, alossr, alossv, alossD, alossDr, alossDv, aloss_ref, ap, MAEr, MAEv = run_network_e3(model, dataloader_test, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
-        LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss/aloss_ref:.2e}  Loss_ref: {aloss_ref:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {ap:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e}')
+        model.load_state_dict(torch.load(model_name_best))
+        aloss, alossr, alossv, alossD, alossDr, alossDv, alossD_ref, aloss_ref, ap, MAEr, MAEv = run_network_e3(model, dataloader_test, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+        LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss/aloss_ref:.2e}  LossD: {alossD/alossD_ref:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {ap:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e}')
         results = {'loss': aloss,
             'loss_rel': aloss/aloss_ref,
             'loss_ref': aloss_ref,
             'loss_D': alossD,
             'loss_Dr': alossDr,
             'loss_Dv': alossDv,
+            'loss_Dref': alossD_ref,
             'loss_r': alossr,
             'loss_v': alossv,
             'momentum': ap,

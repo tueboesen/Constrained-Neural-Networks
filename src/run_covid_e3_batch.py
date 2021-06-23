@@ -62,4 +62,22 @@ if __name__ == '__main__':
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
-    main_covid(c)
+
+    result_dir_base = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
+        root='results',
+        runner_name=c['basefolder'],
+        date=datetime.now(),
+    )
+
+
+    constraints_hist = ['','binding','bindingall']
+    nskips = [0,9,99,999]
+    job = 0
+    for nskip in nskips:
+        c['nskip'] = nskip
+        for constraint in constraints_hist:
+            c['network']['constraints'] = constraint
+            job += 1
+            c['result_dir'] = "{:}/{:}".format(result_dir_base,job)
+            results = main_covid(c)
+

@@ -47,7 +47,7 @@ def main_covid(c):
     Ra = torch.from_numpy(data['RCA']).to(dtype=torch.get_default_dtype())
     Rb = torch.from_numpy(data['RCB']).to(dtype=torch.get_default_dtype())
     Rn = torch.from_numpy(data['RN']).to(dtype=torch.get_default_dtype())
-    z = torch.from_numpy(data['aa_num'])
+    z = torch.from_numpy(data['aa_num']).to(dtype=torch.int64)
     fragids = torch.from_numpy(data['fragid']).to(dtype=torch.get_default_dtype())
     R_org = torch.cat([Ra,Rb,Rn],dim=2)
     R = R_org[1:]
@@ -142,7 +142,7 @@ def main_covid(c):
         constraints2 = None
     elif cn['constraints'] == 'bindingall':
         constraints = BindingConstraintsNN(3.8, fragmentid=fragids)
-        constraints2 = BindingConstraintsAB(d_ab=dist_abz,d_an=dist_anz,fragmentid=fragids)
+        constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device),d_an=dist_anz.to(device),fragmentid=fragids)
     else:
         constraints = None
         constraints2 = None
@@ -204,6 +204,8 @@ def main_covid(c):
                'results': results,
                }
         np.save("{:}/test_results".format(c['result_dir']),output)
+    else:
+        results = None
 
     close_logger(LOG)
     return results

@@ -40,7 +40,7 @@ if __name__ == '__main__':
     args.seed = 123545
     args.epochs = 1000
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
-    args.data = './../../../data/MD/ethanol/ethanol_70k.npz'
+    args.data = './../../../data/MD/ethanol/ethanol.npz'
     # args.data = './../../../data/MD/water_jones/water.npz'
     # args.data = './../../../data/MD/MD17/ethanol_dft.npz'
     args.network = {
