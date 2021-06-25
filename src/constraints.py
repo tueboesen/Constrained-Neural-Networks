@@ -1,80 +1,80 @@
 import torch
 import torch.nn as nn
 
-
-class BindingConstraintsAlphaBetaN(nn.Module):
-    def __init__(self,d_ab, d_an):
-        super(BindingConstraintsAlphaBetaN, self).__init__()
-        self.d_ab = d_ab
-        self.d_an = d_an
-        self.project = None
-        self.uplift = None
-        return
-
-    def set_projectuplift(self,project,uplift):
-        self.project = project
-        self.uplift = uplift
-
-    def constraint(self,xa,xb,xn):
-        e = torch.ones(1,3,device=xa.device)
-        dxa = self.diff(xa)
-        c = e @ (dxa**2) - self.d**2
-        return c
-
-    def dConstraintT(self,c,x):
-        dx = self.diff(x)
-        e = torch.ones(3, 1, device=x.device)
-        C = (e @ c) * dx
-        C = self.diffT(C)
-        return 2 * C
-
-    def forward(self, y, batch, n=10, debug=False, converged=1e-4):
-        for j in range(n):
-            x = self.project(y)
-            nvec = x.shape[-1]//2
-            lam_x = torch.empty_like(x)
-            nb = batch.max() + 1
-            r = x[:, 0:nvec].view(nb, -1, nvec)
-            v = x[:, nvec:].view(nb, -1, nvec)
-            cnorm = 0
-            for fragi in self.fragid_unique:
-                idx = self.fragid == fragi
-                ri = r[:,idx,:]
-                ci = self.constraint(ri)
-                lam_xi = self.dConstraintT(ri, ci)
-                lam_x[idx] = lam_xi
-                cnormi = torch.norm(ci)
-                cnorm = cnorm + cnormi
-            lam_y = self.uplift(lam_x.view(-1, 6))
-            with torch.no_grad():
-                if j == 0:
-                    alpha = 1.0 / lam_y.norm()
-                lsiter = 0
-                while True:
-                    ytry = y - alpha * lam_y
-                    x = self.project(ytry)
-                    r = x[:, 0:3].view(nb, -1, 3)
-                    v = x[:, 3:].view(nb, -1, 3)
-                    ctry = 0
-                    for fragi in self.fragid_unique:
-                        idx = self.fragid == fragi
-                        ri = r[:,idx,:]
-                        ctry = ctry + self.constraint(ri)
-                    ctry_norm = torch.norm(ctry)
-                    if ctry_norm < cnorm:
-                        break
-                    alpha = alpha / 2
-                    lsiter = lsiter + 1
-                    if lsiter > 10:
-                        break
-                if lsiter == 0 and ctry_norm > converged:
-                    alpha = alpha * 1.5
-            y = y - alpha * lam_y
-            if debug:
-                print(f"{j} c: {cnorm.detach().cpu():2.4f} -> {ctry.detach().cpu():2.4f}   ")
-            if ctry_norm < converged:
-                break
-        return y
+#
+# class BindingConstraintsAlphaBetaN(nn.Module):
+#     def __init__(self,d_ab, d_an):
+#         super(BindingConstraintsAlphaBetaN, self).__init__()
+#         self.d_ab = d_ab
+#         self.d_an = d_an
+#         self.project = None
+#         self.uplift = None
+#         return
+#
+#     def set_projectuplift(self,project,uplift):
+#         self.project = project
+#         self.uplift = uplift
+#
+#     def constraint(self,xa,xb,xn):
+#         e = torch.ones(1,3,device=xa.device)
+#         dxa = self.diff(xa)
+#         c = e @ (dxa**2) - self.d**2
+#         return c
+#
+#     def dConstraintT(self,c,x):
+#         dx = self.diff(x)
+#         e = torch.ones(3, 1, device=x.device)
+#         C = (e @ c) * dx
+#         C = self.diffT(C)
+#         return 2 * C
+#
+#     def forward(self, y, batch, n=10, debug=False, converged=1e-4):
+#         for j in range(n):
+#             x = self.project(y)
+#             nvec = x.shape[-1]//2
+#             lam_x = torch.empty_like(x)
+#             nb = batch.max() + 1
+#             r = x[:, 0:nvec].view(nb, -1, nvec)
+#             v = x[:, nvec:].view(nb, -1, nvec)
+#             cnorm = 0
+#             for fragi in self.fragid_unique:
+#                 idx = self.fragid == fragi
+#                 ri = r[:,idx,:]
+#                 ci = self.constraint(ri)
+#                 lam_xi = self.dConstraintT(ri, ci)
+#                 lam_x[idx] = lam_xi
+#                 cnormi = torch.norm(ci)
+#                 cnorm = cnorm + cnormi
+#             lam_y = self.uplift(lam_x.view(-1, 6))
+#             with torch.no_grad():
+#                 if j == 0:
+#                     alpha = 1.0 #/ lam_y.norm()
+#                 lsiter = 0
+#                 while True:
+#                     ytry = y - alpha * lam_y
+#                     x = self.project(ytry)
+#                     r = x[:, 0:3].view(nb, -1, 3)
+#                     v = x[:, 3:].view(nb, -1, 3)
+#                     ctry = 0
+#                     for fragi in self.fragid_unique:
+#                         idx = self.fragid == fragi
+#                         ri = r[:,idx,:]
+#                         ctry = ctry + self.constraint(ri)
+#                     ctry_norm = torch.norm(ctry)
+#                     if ctry_norm < cnorm:
+#                         break
+#                     alpha = alpha / 2
+#                     lsiter = lsiter + 1
+#                     if lsiter > 10:
+#                         break
+#                 if lsiter == 0 and ctry_norm > converged:
+#                     alpha = alpha * 1.5
+#             y = y - alpha * lam_y
+#             if debug:
+#                 print(f"{j} c: {cnorm.detach().cpu():2.4f} -> {ctry.detach().cpu():2.4f}   ")
+#             if ctry_norm < converged:
+#                 break
+#         return y
 
 
 class BindingConstraintsNN(nn.Module):
@@ -114,7 +114,7 @@ class BindingConstraintsNN(nn.Module):
         C = self.diffT(C)
         return 2 * C
 
-    def forward(self, y, batch, n=10, debug=False, converged=1e-4):
+    def forward(self, y, batch, n=10, debug=True, converged=1e-4):
         for j in range(n):
             x = self.project(y)
             ndim = x.shape[-1]//2
@@ -166,6 +166,99 @@ class BindingConstraintsNN(nn.Module):
                 break
         return y
 
+
+class BindingConstraintsNN2(nn.Module):
+    def __init__(self,distance,fragmentid):
+        super(BindingConstraintsNN2, self).__init__()
+        self.d = distance
+        self.fragid = fragmentid
+        self.fragid_unique = torch.unique(fragmentid)
+        self.project = None
+        self.uplift = None
+        return
+
+    def set_projectuplift(self,project,uplift):
+        self.project = project
+        self.uplift = uplift
+
+    def diff(self,x):
+        return x[:,1:] - x[:,:-1]
+
+    def diffT(self,dx):
+        x = dx[:,:-1] - dx[:,1:]
+        x0 = -dx[:,:1]
+        x1 = dx[:,-1:]
+        X = torch.cat([x0,x,x1],dim=1)
+        return X
+
+    def constraint(self,x):
+        e = torch.ones((3,1),device=x.device)
+        dx = self.diff(x)
+        c = self.d/torch.sqrt((dx**2)@e) - 1
+        return c
+
+    def dConstraintT(self,c,x):
+        dx = self.diff(x)
+        drn2 = torch.sum(dx**2,dim=2,keepdim=True)
+        lam0 = self.d*drn2[:,:1]**(-3/2)*c[:,0]*dx[:,:1]
+        lam1 = -self.d*drn2[:,-1:]**(-3/2)*c[:,-1]*dx[:,-1:]
+        lam01 = -self.d*drn2[:,:-1]**(-3/2)*c[:,:-1]*dx[:,:-1] + self.d*drn2[:,1:]**(-3/2)*c[:,1:]*dx[:,1:]
+        lam = torch.cat([lam0,lam01,lam1],dim=1)
+        return lam
+
+    def forward(self, y, batch, n=10, debug=True, converged=1e-4):
+        for j in range(n):
+            x = self.project(y)
+            ndim = x.shape[-1]//2
+            nvec = ndim // 3
+            lam_x = torch.zeros_like(x)
+            nb = batch.max() + 1
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+            v = x[:, ndim:].view(nb, -1, ndim)
+            cnorm = 0
+            for fragi in self.fragid_unique:
+                idx = self.fragid == fragi
+                ri = r[:,idx,:]
+                ria = ri[:, :,:3]
+                ci = self.constraint(ria)
+                lam_xia = self.dConstraintT(ci, ria)
+                lam_xi = lam_xia.repeat(1,1,nvec)
+                lam_x[idx,:ndim] = lam_xi
+                cnormi = torch.sum(ci**2)
+                cnorm = cnorm + cnormi
+            lam_y = self.uplift(lam_x.view(-1, 2*ndim))
+            with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 #/ lam_y.norm()
+                lsiter = 0
+                while True:
+                    ytry = y - alpha * lam_y
+                    x = self.project(ytry)
+                    r = x[:, 0:ndim].view(nb, -1, ndim)
+                    v = x[:, ndim:].view(nb, -1, ndim)
+                    ctry_norm = 0
+                    for fragi in self.fragid_unique:
+                        idx = self.fragid == fragi
+                        ri = r[:,idx,:]
+                        ria = ri[:, :, :3]
+                        ctry = self.constraint(ria)
+                        ctry_norm = ctry_norm + torch.sum(ctry**2)
+                    if ctry_norm < cnorm:
+                        break
+                    alpha = alpha / 2
+                    lsiter = lsiter + 1
+                    if lsiter > 10:
+                        break
+                if lsiter == 0 and ctry_norm > converged:
+                    alpha = alpha * 1.5
+            y = y - alpha * lam_y
+            if debug:
+                print(f"NN constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
+            if ctry_norm < converged:
+                break
+        return y
+
+
 class BindingConstraintsAB(nn.Module):
     def __init__(self,d_ab,d_an,fragmentid):
         super(BindingConstraintsAB, self).__init__()
@@ -190,7 +283,7 @@ class BindingConstraintsAB(nn.Module):
     def constraint(self,x,x0,d):
         e = torch.ones((3,1),device=x.device)
         dx = self.diff(x,x0)
-        c = torch.sqrt(d**2/(dx**2@e)) - 1
+        c = d/torch.sqrt(dx**2@e) - 1
         return c
 
     def dConstraintT(self,c,x,x0):

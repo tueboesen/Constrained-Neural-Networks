@@ -18,6 +18,7 @@ from e3nn import o3
 from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
 from src.log import log_all_parameters, close_logger
+from src.network import network_simple
 from src.network_e3 import constrained_network
 from src.constraints import BindingConstraintsNN, BindingConstraintsAB,MomentumConstraints
 from src.network_eq import network_eq_simple
@@ -129,10 +130,15 @@ def main(c):
         PE_predictor = None
         constraint = None
 
-    model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
+    if c['network_type'] == 'EQ':
+        model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
                                 max_radius=cn['max_radius'],
                                 number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                 num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], masses=masses, constraints=constraint)
+    elif c['network_type'] == 'mim':
+        model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], constraints=cn['constraints'], masses=masses)
+    else:
+        raise NotImplementedError("Network type is not implemented")
     model.to(device)
     total_params = sum(p.numel() for p in model.parameters())
     LOG.info('Number of parameters {:}'.format(total_params))
@@ -146,12 +152,12 @@ def main(c):
     epochs_since_best = 0
     for epoch in range(c['epochs']):
         t1 = time.time()
-        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, alossD_ref_t, aloss_ref_t, ap_t, MAEr_t, MAEv_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, ap_t, MAEr_t, MAEv_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'])
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, alossD_ref_v, aloss_ref_v, ap_v, MAEr_v,MAEv_v = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, ap_v, MAEr_v,MAEv_v = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'])
         else:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, alossD_ref_v, aloss_ref_v, ap_v, MAEr_v,MAEv_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, ap_v, MAEr_v,MAEv_v = 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
 
         if aloss_v < alossBest:
@@ -166,19 +172,17 @@ def main(c):
                     lr = g['lr']
                 epochs_since_best = 0
 
-        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t/aloss_ref_t:.2e}  Loss(val): {aloss_v/aloss_ref_v:.2e}  LossD(train): {alossD_t/alossD_ref_t:.2e}  LossD(val): {alossD_v/alossD_ref_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e} P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest/aloss_ref_v:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
+        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e} P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
     torch.save(model.state_dict(), f"{model_name}")
     if c['use_test']:
         model.load_state_dict(torch.load(model_name_best))
-        aloss, alossr, alossv, alossD, alossDr, alossDv, alossD_ref, aloss_ref, ap, MAEr, MAEv = run_network_e3(model, dataloader_test, train=False, max_samples=100, optimizer=optimizer, batch_size=c['batch_size'], max_radius=cn['max_radius'])
-        LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss/aloss_ref:.2e}  LossD: {alossD/alossD_ref:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {ap:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e}')
+        aloss, alossr, alossv, alossD, alossDr, alossDv, ap, MAEr, MAEv = run_network_e3(model, dataloader_test, train=False, max_samples=100, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'])
+        LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {ap:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e}')
         results = {'loss': aloss,
-            'loss_rel': aloss/aloss_ref,
-            'loss_ref': aloss_ref,
+            'loss_rel': aloss,
             'loss_D': alossD,
             'loss_Dr': alossDr,
             'loss_Dv': alossDv,
-            'loss_Dref': alossD_ref,
             'loss_r': alossr,
             'loss_v': alossv,
             'momentum': ap,

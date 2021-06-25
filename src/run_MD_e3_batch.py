@@ -41,7 +41,7 @@ if __name__ == '__main__':
     args.epochs = 1000
     args.train_idx = None
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
-    args.data = './../../../data/MD/ethanol/ethanol.npz'
+    args.data = './../../../data/MD/ethanol/ethanol_heating.npz'
     # args.data = './../../../data/MD/water_jones/water.npz'
     # args.data = './../../../data/MD/MD17/ethanol_dft.npz'
     args.network = {
@@ -58,7 +58,6 @@ if __name__ == '__main__':
         'radial_neurons': [8, 16],
         'num_neighbors': 15,
         'constraints': ''
-
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)

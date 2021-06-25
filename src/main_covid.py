@@ -17,11 +17,11 @@ from e3nn import o3
 
 from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
-from src.constraints import BindingConstraintsNN, BindingConstraintsAB
+from src.constraints import BindingConstraintsNN, BindingConstraintsAB, BindingConstraintsNN2
 from src.log import log_all_parameters, close_logger
 from src.network_e3 import constrained_network
 from src.network_eq import network_eq_simple
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses, run_network_covid_e3
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses, run_network_covid_e3, split_data
 
 
 def main_covid(c):
@@ -101,7 +101,9 @@ def main_covid(c):
 
 
     Rin, Rout = convert_snapshots_to_future_state_dataset(c['nskip'], R)
+    R = None
     Vin, Vout = convert_snapshots_to_future_state_dataset(c['nskip'], V)
+    V = None
 
     # p = torch.sum(V * masses[None,:,None],dim=1)
 
@@ -113,35 +115,56 @@ def main_covid(c):
     ndata_rand = 0 + np.arange(ndata)
     np.random.shuffle(ndata_rand)
 
-    Rin_train = Rin[ndata_rand[:c['n_train']]]
-    Rout_train = Rout[ndata_rand[:c['n_train']]]
-    Vin_train = Vin[ndata_rand[:c['n_train']]]
-    Vout_train = Vout[ndata_rand[:c['n_train']]]
+    train_idx = ndata_rand[:c['n_train']]
+    if c['use_validation']:
+        val_idx = ndata_rand[c['n_train']:c['n_train'] + c['n_val']]
+    else:
+        val_idx = []
+    if c['use_test']:
+        test_idx = ndata_rand[c['n_train'] + c['n_val']:]
+    else:
+        test_idx = []
+
+    Rout_train,Rout_val,Rout_test = split_data(Rout,train_idx,val_idx,test_idx)
+    Rout = None
+    Rin_train,Rin_val,Rin_test = split_data(Rin,train_idx,val_idx,test_idx)
+    Rin = None
+
+    Vout_train,Vout_val,Vout_test = split_data(Vout,train_idx,val_idx,test_idx)
+    Vout = None
+    Vin_train,Vin_val,Vin_test = split_data(Vin,train_idx,val_idx,test_idx)
+    Vin = None
+
+
     dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train,device=device)
-    dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
+    Rin_train = None
+    Vin_train = None
+    Rout_train = None
+    Vout_train = None
+    dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=False)
 
     if c['use_validation']:
-        Rin_val = Rin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-        Rout_val = Rout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-        Vin_val = Vin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-        Vout_val = Vout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
         dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val,device=device)
+        Rin_val = None
+        Vin_val = None
+        Rout_val = None
+        Vout_val = None
         dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
 
     if c['use_test']:
-        Rin_test = Rin[ndata_rand[c['n_train'] + c['n_val']:]]
-        Rout_test = Rout[ndata_rand[c['n_train'] + c['n_val']:]]
-        Vin_test = Vin[ndata_rand[c['n_train'] + c['n_val']:]]
-        Vout_test = Vout[ndata_rand[c['n_train'] + c['n_val']:]]
         dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test,device=device)
+        Rin_test = None
+        Vin_test = None
+        Rout_test = None
+        Vout_test = None
         dataloader_test = DataLoader(dataset_test, batch_size=c['batch_size'], shuffle=False, drop_last=False)
 
 
     if cn['constraints'] == 'binding':
-        constraints = BindingConstraintsNN(3.8, fragmentid=fragids)
+        constraints = BindingConstraintsNN2(3.8, fragmentid=fragids)
         constraints2 = None
     elif cn['constraints'] == 'bindingall':
-        constraints = BindingConstraintsNN(3.8, fragmentid=fragids)
+        constraints = BindingConstraintsNN2(3.8, fragmentid=fragids)
         constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device),d_an=dist_anz.to(device),fragmentid=fragids)
     else:
         constraints = None
