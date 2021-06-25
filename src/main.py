@@ -67,40 +67,49 @@ def main(c):
 
     ndata_rand = 0 + np.arange(ndata)
     np.random.shuffle(ndata_rand)
-
-    Rin_train = Rin[ndata_rand[:c['n_train']]]
-    Rout_train = Rout[ndata_rand[:c['n_train']]]
-    Vin_train = Vin[ndata_rand[:c['n_train']]]
-    Vout_train = Vout[ndata_rand[:c['n_train']]]
-    Fin_train = Fin[ndata_rand[:c['n_train']]]
-    Fout_train = Fout[ndata_rand[:c['n_train']]]
-    KEin_train = KEin[ndata_rand[:c['n_train']]]
-    KEout_train = KEout[ndata_rand[:c['n_train']]]
-    PEin_train = PEin[ndata_rand[:c['n_train']]]
-    PEout_train = PEout[ndata_rand[:c['n_train']]]
-
-    Rin_val = Rin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Rout_val = Rout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Vin_val = Vin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Vout_val = Vout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Fin_val = Fin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    Fout_val = Fout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    KEin_val = KEin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    KEout_val = KEout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    PEin_val = PEin[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
-    PEout_val = PEout[ndata_rand[c['n_train']:c['n_train'] + c['n_val']]]
+    if c['train_idx'] is None:
+        train_idx = ndata_rand[:c['n_train']]
+        val_idx = ndata_rand[c['n_train']:c['n_train'] + c['n_val']]
+        test_idx = ndata_rand[c['n_train'] + c['n_val']:]
+    else:
+        train_idx = c['train_idx']
+        val_idx = c['val_idx']
+        test_idx = c['test_idx']
 
 
-    Rin_test = Rin[ndata_rand[c['n_train'] + c['n_val']:]]
-    Rout_test = Rout[ndata_rand[c['n_train'] + c['n_val']:]]
-    Vin_test = Vin[ndata_rand[c['n_train'] + c['n_val']:]]
-    Vout_test = Vout[ndata_rand[c['n_train'] + c['n_val']:]]
-    Fin_test = Fin[ndata_rand[c['n_train'] + c['n_val']:]]
-    Fout_test = Fout[ndata_rand[c['n_train'] + c['n_val']:]]
-    KEin_test = KEin[ndata_rand[c['n_train'] + c['n_val']:]]
-    KEout_test = KEout[ndata_rand[c['n_train'] + c['n_val']:]]
-    PEin_test = PEin[ndata_rand[c['n_train'] + c['n_val']:]]
-    PEout_test = PEout[ndata_rand[c['n_train'] + c['n_val']:]]
+    Rin_train = Rin[train_idx]
+    Rout_train = Rout[train_idx]
+    Vin_train = Vin[train_idx]
+    Vout_train = Vout[train_idx]
+    Fin_train = Fin[train_idx]
+    Fout_train = Fout[train_idx]
+    KEin_train = KEin[train_idx]
+    KEout_train = KEout[train_idx]
+    PEin_train = PEin[train_idx]
+    PEout_train = PEout[train_idx]
+
+    Rin_val = Rin[val_idx]
+    Rout_val = Rout[val_idx]
+    Vin_val = Vin[val_idx]
+    Vout_val = Vout[val_idx]
+    Fin_val = Fin[val_idx]
+    Fout_val = Fout[val_idx]
+    KEin_val = KEin[val_idx]
+    KEout_val = KEout[val_idx]
+    PEin_val = PEin[val_idx]
+    PEout_val = PEout[val_idx]
+
+
+    Rin_test = Rin[test_idx]
+    Rout_test = Rout[test_idx]
+    Vin_test = Vin[test_idx]
+    Vout_test = Vout[test_idx]
+    Fin_test = Fin[test_idx]
+    Fout_test = Fout[test_idx]
+    KEin_test = KEin[test_idx]
+    KEout_test = KEout[test_idx]
+    PEin_test = PEin[test_idx]
+    PEout_test = PEout[test_idx]
 
     dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses,device=device)
     dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device)
