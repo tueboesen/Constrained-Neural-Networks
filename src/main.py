@@ -155,22 +155,27 @@ def main(c):
         aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, ap_t, MAEr_t, MAEv_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'])
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, ap_v, MAEr_v,MAEv_v = run_network_e3(model, dataloader_val, train=False, max_samples=100, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'])
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, ap_v, MAEr_v,MAEv_v = run_network_e3(model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'])
         else:
             aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, ap_v, MAEr_v,MAEv_v = 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
 
         if aloss_v < alossBest:
             alossBest = aloss_v
-            epochs_since_best = 0
+            # epochs_since_best = 0
             torch.save(model.state_dict(), f"{model_name_best}")
-        else:
-            epochs_since_best += 1
-            if epochs_since_best >= c['epochs_for_lr_adjustment']:
-                for g in optimizer.param_groups:
-                    g['lr'] *= 0.8
-                    lr = g['lr']
-                epochs_since_best = 0
+        if (epoch+1) % c['epochs_for_lr_adjustment'] == 0:
+            for g in optimizer.param_groups:
+                g['lr'] *= 0.8
+                lr = g['lr']
+        #
+        # else:
+        #     epochs_since_best += 1
+        #     if epochs_since_best >= c['epochs_for_lr_adjustment']:
+        #         for g in optimizer.param_groups:
+        #             g['lr'] *= 0.8
+        #             lr = g['lr']
+        #         epochs_since_best = 0
 
         LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss(val): {aloss_v:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e} P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
     torch.save(model.state_dict(), f"{model_name}")

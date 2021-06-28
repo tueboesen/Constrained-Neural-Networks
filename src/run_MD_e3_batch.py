@@ -33,12 +33,14 @@ if __name__ == '__main__':
     args.batch_size = 100
     args.n_input_samples = 1
     args.nskip = 0
-    args.epochs_for_lr_adjustment = 50
+    args.epochs_for_lr_adjustment = 100
     args.use_validation = True
     args.use_test = True
-    args.lr = 1e-3
+    args.lr = 5e-3
     args.seed = 123545
     args.epochs = 1000
+    args.network_type = 'EQ'
+    args.loss = 'mim'
     args.train_idx = None
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     args.data = './../../../data/MD/ethanol/ethanol_heating.npz'
