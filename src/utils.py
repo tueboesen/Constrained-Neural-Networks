@@ -135,7 +135,7 @@ def split_data(data,train_idx,val_idx,test_idx):
 
 
 def atomic_masses(z):
-    atomic_masses = torch.tensor([0,1.008, 4.0026, 6.94, 9.0122, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180, 22.990, 24.305, 26.982, 28.085])
+    atomic_masses = torch.tensor([0,1.008, 4.0026, 6.94, 9.0122, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180, 22.990, 24.305, 26.982, 28.085,30.974,32.06,35.45,39.948])
     masses = atomic_masses[z.to(dtype=torch.int64)]
     return masses.to(device=z.device)
 

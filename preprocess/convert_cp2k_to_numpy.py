@@ -12,7 +12,8 @@ AtomicTable = {'H': 1,
      'B': 5,
      'C': 6,
      'S': 7,
-     'O': 8
+     'O': 8,
+     'Ar': 18
      }
 
 def read_xyz(filename,skiplist=None):
@@ -57,14 +58,14 @@ def read_xyz_force(filename,n):
 
 if __name__ == '__main__':
     # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/ethanol/'
-    # folder = '//media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/ethanol/new_units/'
-    folder = '/home/tue/data/MD/ethanol_heating/'
-    name_ener = 'ethanol-1.ener'
-    name_vel = 'ethanol-vel-1.xyz'
-    name_pos = 'ethanol-pos-1.xyz'
+    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/argon/'
+    # folder = '/home/tue/data/MD/ethanol_heating/'
+    name_ener = 'ar108-1.ener'
+    name_vel = 'ar108-vel-1.xyz'
+    name_pos = 'ar108-pos-1.xyz'
     name_force = 'forces.xyz'
 
-    name_out = 'ethanol.npz'
+    name_out = 'argon.npz'
     folder_out = folder
     # name_pos = 'test2.xyz'
     filename_ener = folder + name_ener
@@ -93,12 +94,12 @@ if __name__ == '__main__':
 
     m = atomic_masses(torch.from_numpy(atomic_numbers)).numpy()
 
-    CoM = np.sum(pos * m[None,:,None],axis=1,keepdims=True)/np.sum(m)
-    print("MAE CoM={:}".format(np.abs(CoM).mean()))
-
-    pos_fixed = pos - CoM
-    CoM2 = np.sum(pos_fixed * m[None,:,None],axis=1,keepdims=True)/np.sum(m)
-    print("After fixing MAE CoM2={:}".format(np.abs(CoM2).mean()))
+    # CoM = np.sum(pos * m[None,:,None],axis=1,keepdims=True)/np.sum(m)
+    # print("MAE CoM={:}".format(np.abs(CoM).mean()))
+    #
+    # pos_fixed = pos - CoM
+    # CoM2 = np.sum(pos_fixed * m[None,:,None],axis=1,keepdims=True)/np.sum(m)
+    # print("After fixing MAE CoM2={:}".format(np.abs(CoM2).mean()))
 
     #Now that Center of Mass is fixed to origo, let's rotate the coordinate system such that the first carbon atom always have y and z component 0 and such that the second carbon atom always have .
 
@@ -112,7 +113,7 @@ if __name__ == '__main__':
     ndata = np.min([pos.shape[0], force.shape[0], vel.shape[0], temp.shape[0], KE.shape[0], PE.shape[0]])
 
 
-    data = {'R': pos_fixed[:ndata],
+    data = {'R': pos[:ndata],
             'F': force[:ndata],
             'V': vel[:ndata],
             'z': atomic_numbers,

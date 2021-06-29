@@ -118,18 +118,19 @@ if __name__ == '__main__':
     au_T = hbar / Eh #[s^-1]
 
     #velocties are given in bohr / au_t , we want it in Angstrom/fs
-    vel_converter = bohr / au_T * 1e-5
+    # vel_converter = bohr / au_T * 1e-5
+
     # Next we have forces which are given in Hartree energy / bohr, we want it in [au*Angstrom/fs^2]
-    force_converter = Eh / bohr / (am * 1e20)
+    # force_converter = Eh / bohr / (am * 1e20)
 
 
     model_file = './../pretrained_networks/force_energy_model.pt'
-    mddata_file = './../../../data/MD/ethanol/ethanol.npz'
+    mddata_file = './../../../data/MD/argon/argon.npz'
 
-    dt = 0.5 # fs
-    nsteps = 10000
+    dt = 0.1 # fs
+    nsteps = 100000
 
-    Rt,Vt,Ft,z,m = MDdataloader(mddata_file,velocity_converter=vel_converter,force_converter=force_converter)
+    Rt,Vt,Ft,z,m = MDdataloader(mddata_file)
     r = Rt[0]
     v = Vt[0]
     a = None
@@ -137,11 +138,13 @@ if __name__ == '__main__':
     force_predictor = generate_FE_network(natoms=r.shape[0])
     force_predictor.load_state_dict(torch.load(model_file, map_location=torch.device('cpu')))
     force_predictor.eval()
-
+    # force_predictor = None
     VVI = VelocityVerletIntegrator(dt,force_predictor,z)
 
     for i in range(nsteps):
-        r,v,a = VVI(r,v,m[:,None],a=a,F0=Ft[i],F1=Ft[i+1])
+
+        r,v,a = VVI(r,v,m[:,None],a=a)
+        # r,v,a = VVI(r,v,m[:,None],a=a,F0=Ft[i],F1=Ft[i+1])
 
         dr = torch.mean(torch.norm(Rt[i+1] - r,p=2,dim=1))
         dv = torch.mean(torch.norm(Vt[i+1] - v,p=2,dim=1))

@@ -132,9 +132,9 @@ class NequIP(torch.nn.Module):
         # n_0e = o3.Irreps(self.irreps_hidden).count('0e')
         second_to_last_irrep = o3.Irreps("16x0e")
         last_irrep = o3.Irreps("1x0e")
-        self.self_interaction.append(SelfInteraction(self.irreps_hidden,second_to_last_irrep))
-        self.self_interaction.append(SelfInteraction(second_to_last_irrep,last_irrep))
-        self.activation = Activation("16x0e", [torch.nn.functional.silu])
+        self.self_interaction.append(SelfInteraction(self.irreps_hidden,last_irrep))
+        # self.self_interaction.append(SelfInteraction(second_to_last_irrep,last_irrep))
+        # self.activation = Activation("16x0e", [torch.nn.functional.silu])
         # n_1e = o3.Irreps(self.irreps_hidden).count('0e')
         # n_1o = o3.Irreps(self.irreps_hidden).count('1o')
 
@@ -195,6 +195,7 @@ class NequIP(torch.nn.Module):
             cutoff=False
         ).mul(self.number_of_basis**0.5)
         edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
+        print("#n = {:2.2f}".format(edge_dst.shape[0]/ x.shape[0] ))
 
         x = x.new_ones((x.shape[0], 1))
 
@@ -211,8 +212,8 @@ class NequIP(torch.nn.Module):
                 x = x + h*y
             else:
                 x = y
-        x = self.self_interaction[-2](x,normalize_variance=False)
-        x = self.activation(x)
+        # x = self.self_interaction[-2](x,normalize_variance=False)
+        # x = self.activation(x)
         x = self.self_interaction[-1](x,normalize_variance=False)
 
         if self.reduce_output:
@@ -315,10 +316,10 @@ def generate_FE_network(natoms):
     irreps_node_attr = o3.Irreps("1x0e")
     irreps_edge_attr = o3.Irreps("1x0e+1x1o")
     layers = 6
-    max_radius = 5
+    max_radius = 45
     number_of_basis = 8
     radial_neurons = [8,16]
-    num_neighbors = 15
+    num_neighbors=40
     num_nodes = natoms
     model = NequIP(irreps_in=irreps_in, irreps_hidden=irreps_hidden, irreps_out=irreps_out, irreps_node_attr=irreps_node_attr, irreps_edge_attr=irreps_edge_attr, layers=layers, max_radius=max_radius,
                     number_of_basis=number_of_basis, radial_neurons=radial_neurons, num_neighbors=num_neighbors, num_nodes=num_nodes)
@@ -328,9 +329,9 @@ def generate_FE_network(natoms):
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float64)
 
-    n_train = 10
-    n_val = 10
-    batch_size = 10
+    n_train = 1000
+    n_val = 50
+    batch_size = 50
     model_name = './../pretrained_networks/force_energy_model.pt'
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
@@ -343,7 +344,7 @@ if __name__ == '__main__':
     use_mean_map = False
     # load training data
     # data = np.load('../../../data/MD/MD17/aspirin_dft.npz')
-    data = np.load('./../../../data/MD/ethanol/ethanol.npz')
+    data = np.load('./../../../data/MD/argon/argon.npz')
     E = data['PE']
     Force = data['F']
     R = data['R']
@@ -389,7 +390,7 @@ if __name__ == '__main__':
 
 
     #### Start Training ####
-    lr = 1e-2
+    lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     alossBest = 1e6
