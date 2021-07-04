@@ -234,6 +234,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
                 loss = lossD_rel
 
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0e-2, norm_type=2.0)
             optimizer.step()
         aloss += loss_rel.detach()
         alossr += loss_r_rel.detach()

@@ -24,19 +24,20 @@ from src.network_eq import network_eq_simple
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
+    torch.autograd.set_detect_anomaly(True)
     torch.set_default_dtype(torch.float64)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.mode ='standard'
-    args.n_train = 1000
+    args.n_train = 10
     args.n_val = 4000
-    args.batch_size = 100
+    args.batch_size = 3
     args.n_input_samples = 1
     args.nskip = 0
     args.train_idx = None
     args.epochs_for_lr_adjustment = 100
-    args.use_validation = True
-    args.use_test = True
+    args.use_validation = False
+    args.use_test = False
     args.lr = 1e-3
     args.seed = 123545
     args.loss = 'EQ'
