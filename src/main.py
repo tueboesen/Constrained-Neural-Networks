@@ -45,11 +45,21 @@ def main(c):
     # device='cpu'
     # load training data
     data = np.load(c['data'])
-    R = torch.from_numpy(data['R']).to(device=device)
-    V = torch.from_numpy(data['V']).to(device=device)
-    F = torch.from_numpy(data['F']).to(device=device)
-    KE = torch.from_numpy(data['KE']).to(device=device)
-    PE = torch.from_numpy(data['PE']).to(device=device)
+    if 'V' in data.files:
+        R = torch.from_numpy(data['R']).to(device=device)
+        F = torch.from_numpy(data['F']).to(device=device)
+        V = torch.from_numpy(data['V']).to(device=device)
+        KE = torch.from_numpy(data['KE']).to(device=device)
+        PE = torch.from_numpy(data['PE']).to(device=device)
+    else:
+        R = torch.from_numpy(data['R']).to(device=device)
+        F = torch.from_numpy(data['F']).to(device=device)
+        V = R[1:] - R[:-1]
+        R = R[1:]
+        F = F[1:]
+        KE = 0*R
+        PE = KE
+
 
     Rin, Rout = convert_snapshots_to_future_state_dataset(c['nskip'], R)
     Vin, Vout = convert_snapshots_to_future_state_dataset(c['nskip'], V)
@@ -61,7 +71,7 @@ def main(c):
 
     # p = torch.sum(V * masses[None,:,None],dim=1)
 
-    ndata = np.min([Rout.shape[0], Vout.shape[0], Fout.shape[0], KEout.shape[0]])
+    ndata = np.min([Rout.shape[0], Vout.shape[0], Fout.shape[0]])
     natoms = z.shape[0]
 
     print('Number of data: {:}, Number of atoms {:}'.format(ndata, natoms))

@@ -43,9 +43,9 @@ if __name__ == '__main__':
     args.network_type = 'EQ' #EQ or mim
     args.epochs = 1000
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
-    args.data = './../../../data/MD/ethanol/ethanol_heating.npz'
+    # args.data = './../../../data/MD/ethanol/ethanol_heating.npz'
     # args.data = './../../../data/MD/water_jones/water.npz'
-    # args.data = './../../../data/MD/MD17/ethanol_dft.npz'
+    args.data = './../../../data/MD/MD17/ethanol_dft.npz'
     args.network = {
         'irreps_inout': o3.Irreps("2x1o"),
         'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
