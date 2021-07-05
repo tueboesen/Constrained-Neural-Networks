@@ -154,7 +154,7 @@ def Distogram(r):
     return D
 
 
-def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15):
+def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None):
     aloss = 0.0
     alossr = 0.0
     alossv = 0.0
@@ -183,7 +183,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         z_vec = z.reshape(-1,z.shape[-1])
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
-        edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=100)
+        edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
 
@@ -230,12 +230,18 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         if train:
             if loss_fnc == 'EQ':
                 loss = loss_rel
+                # loss = loss_v_rel
             else:
                 loss = lossD_rel
 
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0e-2, norm_type=2.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, norm_type=2.0)
+            torch.nn.utils.clip_grad_value_(model.parameters(), 1.0)
             optimizer.step()
+
+        if debug:
+            log.debug(f"Loss={loss:2.2e}")
+
         aloss += loss_rel.detach()
         alossr += loss_r_rel.detach()
         alossv += loss_v_rel.detach()
@@ -259,7 +265,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
     return aloss, alossr, alossv, alossD, alossDr, alossDv, amomentum, aMAEr, aMAEv
 
 
-def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15):
+def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15, debug=True):
     aloss = 0.0
     alossr = 0.0
     alossv = 0.0
@@ -325,6 +331,9 @@ def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch
         if train:
             loss.backward()
             optimizer.step()
+        if debug:
+            print("{:} Loss={:2.2e}".format(i,loss))
+
         aloss += loss.detach()
         alossr += loss_r.detach()
         alossv += loss_v.detach()

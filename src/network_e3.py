@@ -61,8 +61,10 @@ class constrained_network(torch.nn.Module):
                 self.constraints.set_projectuplift(self.PU.project,self.PU.uplift)
         if self.constraints2 is not None:
                 self.constraints2.set_projectuplift(self.PU.project,self.PU.uplift)
-
-
+        if self.num_neighbors < 0:
+            self.automatic_neighbors = True
+        else:
+            self.automatic_neighbors = False
         act = {
             1: torch.nn.functional.silu,
             -1: torch.tanh,
@@ -82,6 +84,7 @@ class constrained_network(torch.nn.Module):
         self.convolutions = torch.nn.ModuleList()
         self.gates = torch.nn.ModuleList()
         self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
+        # self.h = torch.ones(layers)*1e-2
         self.mix = torch.nn.Parameter(torch.ones(layers)*0.5)
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -99,8 +102,7 @@ class constrained_network(torch.nn.Module):
                 self.irreps_node_attr,
                 self.irreps_edge_attr,
                 gate.irreps_in,
-                radial_neurons,
-                num_neighbors
+                radial_neurons
             )
             # self.norms.append(TvNorm(gate.irreps_in))
             irreps = gate.irreps_out
@@ -109,26 +111,48 @@ class constrained_network(torch.nn.Module):
         return
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst,tmp=None,tmp2=None) -> torch.Tensor:
+        if self.automatic_neighbors:
+            self.num_neighbors = edge_dst.shape[0]/x.shape[0]
+
         node_attr_embedded = self.node_embedder(node_attr.to(dtype=torch.int64)).squeeze()
         self.PU.make_matrix_semi_unitary()
         y = self.PU.uplift(x)
         y_old = y
 
+
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
-            edge_vec = x[:, 0:3][edge_src] - x[:, 0:3][edge_dst]
-            edge_sh = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec, True, normalization='component')
-            edge_length = edge_vec.norm(dim=1)
-            edge_features = soft_one_hot_linspace(
-                x=edge_length,
+            edge_vec_r = x[:, 0:3][edge_src] - x[:, 0:3][edge_dst]
+            edge_sh_r = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec_r, True, normalization='component')
+            edge_length_r = edge_vec_r.norm(dim=1)
+            edge_features_r = soft_one_hot_linspace(
+                x=edge_length_r,
                 start=0.0,
                 end=self.max_radius,
                 number=self.number_of_basis,
                 basis='bessel',
                 cutoff=False
             ).mul(self.number_of_basis ** 0.5)
-            edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
+            edge_attr_r = smooth_cutoff(edge_length_r / self.max_radius)[:, None] * edge_sh_r
 
-            y_new = conv(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features)
+            edge_vec_v = x[:, 3:][edge_src] - x[:, 3:][edge_dst]
+            edge_sh_v = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec_v, True, normalization='component')
+            edge_length_v = edge_vec_v.norm(dim=1)
+            edge_features_v = soft_one_hot_linspace(
+                x=edge_length_v,
+                start=0.0,
+                end=self.max_radius,
+                number=self.number_of_basis,
+                basis='bessel',
+                cutoff=False
+            ).mul(self.number_of_basis ** 0.5)
+            edge_attr_v = smooth_cutoff(edge_length_v / self.max_radius)[:, None] * edge_sh_v
+
+            edge_attr = torch.cat([edge_attr_r, edge_attr_v], dim=-1)
+            edge_features = torch.cat([edge_features_r, edge_features_v], dim=-1)
+            # edge_attr = edge_attr_r
+            # edge_features = edge_features_r
+
+            y_new = conv(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features,self.num_neighbors)
             y_new = gate(y_new)
             y_new2 = self.self_interaction[i](y.clone())
             tmp = y.clone()

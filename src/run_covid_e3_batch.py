@@ -29,15 +29,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.mode ='standard'
-    args.n_train = 1
-    args.n_val = 4000
+    args.n_train = 1000
+    args.n_val = 1000
     args.batch_size = 1
     args.n_input_samples = 1
     args.nskip = 0
     args.epochs_for_lr_adjustment = 1000
-    args.use_validation = False
-    args.use_test = False
-    args.lr = 1e-2
+    args.use_validation = True
+    args.use_test = True
+    args.lr = 1e-4
     args.seed = 123545
     args.epochs = 10000
     args.PE_predictor = ''
