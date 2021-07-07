@@ -17,7 +17,8 @@ from e3nn import o3
 
 from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
-from src.constraints import BindingConstraintsNN, BindingConstraintsAB, BindingConstraintsNN2
+from src.EQ_operations import ProjectUplift
+from src.constraints import PointChain, PointToSphereSphereIntersection, PointToPoint
 from src.log import log_all_parameters, close_logger
 from src.network_e3 import constrained_network
 from src.network_eq import network_eq_simple
@@ -61,6 +62,8 @@ def main_covid(c):
     count_ab = torch.zeros(nz,dtype=torch.int64)
     d_an = torch.zeros(nz)
     count_an = torch.zeros(nz,dtype=torch.int64)
+    d_bn = torch.zeros(nz)
+    count_bn = torch.zeros(nz,dtype=torch.int64)
 
     for fragid_i in fragid_unique:
         idx = fragid_i == fragids
@@ -72,24 +75,30 @@ def main_covid(c):
             count_nn[z[i],z[i+1]] += dRa.shape[0]
         dRab = Ri[:,:,:3] - Ri[:,:,3:6]
         dRan = Ri[:,:,:3] - Ri[:,:,6:9]
+        dRbn = Ri[:,:,3:6] - Ri[:,:,6:9]
         for i in range(Ri.shape[1]):
             d_ab[z[i]] += torch.sum(torch.sqrt(torch.sum(dRab[:,i,:]**2,dim=-1)))
             count_ab[z[i]] += dRab.shape[0]
             d_an[z[i]] += torch.sum(torch.sqrt(torch.sum(dRan[:,i,:]**2,dim=-1)))
             count_an[z[i]] += dRan.shape[0]
+            d_bn[z[i]] += torch.sum(torch.sqrt(torch.sum(dRbn[:,i,:]**2,dim=-1)))
+            count_bn[z[i]] += dRbn.shape[0]
 
         distRa = torch.norm(dRa,dim=2)
         distRab = torch.norm(dRab,dim=2)
         distRan = torch.norm(dRan,dim=2)
-        print(f"max={distRa.max():3.2f}, min={distRa.min():3.2f}, mean={distRa.mean():3.2f}. AlphaBeta_Dist(mean) = {distRab.mean():3.2f}, AlphaBeta_Dist(min) = {distRab.min():3.2f}, AlphaBeta_Dist(max) = {distRab.max():3.2f}, AlphaN_Dist(mean) = {distRan.mean():3.2f},AlphaN_Dist(min) = {distRan.min():3.2f} AlphaN_Dist(max) = {distRan.max():3.2f}")
+        distRbn = torch.norm(dRan,dim=2)
+        print(f"max={distRa.max():3.2f}, min={distRa.min():3.2f}, mean={distRa.mean():3.2f}. AlphaBeta_Dist(mean) = {distRab.mean():3.2f}, AlphaBeta_Dist(min) = {distRab.min():3.2f}, AlphaBeta_Dist(max) = {distRab.max():3.2f}, AlphaN_Dist(mean) = {distRan.mean():3.2f},AlphaN_Dist(min) = {distRan.min():3.2f} AlphaN_Dist(max) = {distRan.max():3.2f},  BN_Dist(mean) = {distRbn.mean():3.2f},BN_Dist(min) = {distRbn.min():3.2f} BN_Dist(max) = {distRbn.max():3.2f}")
 
     dist_nn = d_nn / count_nn
     dist_ab = d_ab / count_ab
     dist_an = d_an / count_an
+    dist_bn = d_bn / count_bn
 
     # dist_nnz = dist_nn[z[:-1],z[1:]]
     dist_abz = dist_ab[z]
     dist_anz = dist_an[z]
+    dist_bnz = dist_bn[z]
 
     # dR = R[:,1:,:] - R[:,:-1,:]
     # dRa = dR[:,:,:3]
@@ -159,21 +168,23 @@ def main_covid(c):
         Vout_test = None
         dataloader_test = DataLoader(dataset_test, batch_size=c['batch_size'], shuffle=False, drop_last=False)
 
+    PU = ProjectUplift(cn['irreps_inout'], cn['irreps_hidden'])
 
-    if cn['constraints'] == 'binding':
-        constraints = BindingConstraintsNN2(3.8, fragmentid=fragids)
-        constraints2 = None
-    elif cn['constraints'] == 'bindingall':
-        constraints = BindingConstraintsNN2(3.8, fragmentid=fragids)
-        constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device),d_an=dist_anz.to(device),fragmentid=fragids)
+    # constraints = torch.nn.Sequential()
+    if cn['constraints'] == 'chain':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids))
+    elif cn['constraints'] == 'triangle':
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+    elif cn['constraints'] == 'chaintriangle':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+        # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
     else:
         constraints = None
-        constraints2 = None
 
-    model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
+    model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                 max_radius=cn['max_radius'],
                                 number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, constraints2=constraints2)
+                                num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, PU=PU)
     model.to(device)
     total_params = sum(p.numel() for p in model.parameters())
     LOG.info('Number of parameters {:}'.format(total_params))

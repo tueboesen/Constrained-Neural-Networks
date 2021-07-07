@@ -20,7 +20,7 @@ from src import log
 from src.log import log_all_parameters, close_logger
 from src.network import network_simple
 from src.network_e3 import constrained_network
-from src.constraints import BindingConstraintsNN, BindingConstraintsAB,MomentumConstraints
+from src.constraints import MomentumConstraints
 from src.network_eq import network_eq_simple
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, \
     run_network_eq, run_network_e3, atomic_masses, Distogram

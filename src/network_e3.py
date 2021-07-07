@@ -32,7 +32,6 @@ class constrained_network(torch.nn.Module):
         self,
         irreps_inout,
         irreps_hidden,
-        irreps_edge_attr,
         layers,
         max_radius,
         number_of_basis,
@@ -42,8 +41,7 @@ class constrained_network(torch.nn.Module):
         embed_dim,
         max_atom_types,
         constraints=None,
-        constraints2=None,
-        masses=None
+        PU=None,
     ) -> None:
         super().__init__()
         self.max_radius = max_radius
@@ -53,14 +51,9 @@ class constrained_network(torch.nn.Module):
         self.irreps_in = o3.Irreps(irreps_inout)
         self.irreps_hidden = o3.Irreps(irreps_hidden)
         self.irreps_out = o3.Irreps(irreps_inout)
-        self.irreps_edge_attr = o3.Irreps(irreps_edge_attr)
+        self.irreps_edge_attr = o3.Irreps(irreps_inout)
         self.constraints = constraints
-        self.constraints2 = constraints2
-        self.PU = ProjectUplift(self.irreps_in,self.irreps_hidden)
-        if self.constraints is not None:
-                self.constraints.set_projectuplift(self.PU.project,self.PU.uplift)
-        if self.constraints2 is not None:
-                self.constraints2.set_projectuplift(self.PU.project,self.PU.uplift)
+        self.PU = PU
         if self.num_neighbors < 0:
             self.automatic_neighbors = True
         else:
@@ -86,6 +79,7 @@ class constrained_network(torch.nn.Module):
         self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
         # self.h = torch.ones(layers)*1e-2
         self.mix = torch.nn.Parameter(torch.ones(layers)*0.5)
+        radial_neurons_prepend = [self.irreps_edge_attr.num_irreps*embed_dim] + radial_neurons
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
             irreps_gated = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l > 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -102,13 +96,36 @@ class constrained_network(torch.nn.Module):
                 self.irreps_node_attr,
                 self.irreps_edge_attr,
                 gate.irreps_in,
-                radial_neurons
+                radial_neurons_prepend
             )
             # self.norms.append(TvNorm(gate.irreps_in))
             irreps = gate.irreps_out
             self.convolutions.append(conv)
             self.gates.append(gate)
         return
+
+    def get_edge_info(self,x,edge_src,edge_dst):
+        nvec = x.shape[-1] // 3
+        edge_features =[]
+        edge_attrs = []
+        for i in range(nvec):
+            edge_vec = x[:,i*3:i*3+3][edge_src] - x[:,i*3:i*3+3][edge_dst]
+            edge_sh = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec, True, normalization='component')
+            edge_length = edge_vec.norm(dim=1)
+            edge_feature = soft_one_hot_linspace(
+                x=edge_length,
+                start=0.0,
+                end=self.max_radius,
+                number=self.number_of_basis,
+                basis='bessel',
+                cutoff=False
+            ).mul(self.number_of_basis ** 0.5)
+            edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
+            edge_features.append(edge_feature)
+            edge_attrs.append(edge_attr)
+        edge_attrs = torch.cat(edge_attrs, dim=-1)
+        edge_features = torch.cat(edge_features, dim=-1)
+        return edge_features, edge_attrs
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst,tmp=None,tmp2=None) -> torch.Tensor:
         if self.automatic_neighbors:
@@ -119,38 +136,8 @@ class constrained_network(torch.nn.Module):
         y = self.PU.uplift(x)
         y_old = y
 
-
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
-            edge_vec_r = x[:, 0:3][edge_src] - x[:, 0:3][edge_dst]
-            edge_sh_r = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec_r, True, normalization='component')
-            edge_length_r = edge_vec_r.norm(dim=1)
-            edge_features_r = soft_one_hot_linspace(
-                x=edge_length_r,
-                start=0.0,
-                end=self.max_radius,
-                number=self.number_of_basis,
-                basis='bessel',
-                cutoff=False
-            ).mul(self.number_of_basis ** 0.5)
-            edge_attr_r = smooth_cutoff(edge_length_r / self.max_radius)[:, None] * edge_sh_r
-
-            edge_vec_v = x[:, 3:][edge_src] - x[:, 3:][edge_dst]
-            edge_sh_v = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec_v, True, normalization='component')
-            edge_length_v = edge_vec_v.norm(dim=1)
-            edge_features_v = soft_one_hot_linspace(
-                x=edge_length_v,
-                start=0.0,
-                end=self.max_radius,
-                number=self.number_of_basis,
-                basis='bessel',
-                cutoff=False
-            ).mul(self.number_of_basis ** 0.5)
-            edge_attr_v = smooth_cutoff(edge_length_v / self.max_radius)[:, None] * edge_sh_v
-
-            edge_attr = torch.cat([edge_attr_r, edge_attr_v], dim=-1)
-            edge_features = torch.cat([edge_features_r, edge_features_v], dim=-1)
-            # edge_attr = edge_attr_r
-            # edge_features = edge_features_r
+            edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
             y_new = conv(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features,self.num_neighbors)
             y_new = gate(y_new)
@@ -159,8 +146,7 @@ class constrained_network(torch.nn.Module):
             y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
             y_old = tmp
             if self.constraints is not None:
-                y = self.constraints(y,batch,n=20)
-            if self.constraints2 is not None:
-                y = self.constraints2(y,batch,n=20)
+                data = self.constraints({'y':y,'batch':batch})
+                y = data['y']
             x = self.PU.project(y)
         return x

@@ -47,17 +47,14 @@ if __name__ == '__main__':
     args.network = {
         'irreps_inout': o3.Irreps("6x1o"),
         'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
-        # 'irreps_node_attr': o3.Irreps("1x0e"),
-        # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
-        'irreps_edge_attr': o3.Irreps("1x1o"),
         'layers': 4,
         'max_radius': 10,
         'number_of_basis': 8,
         'embed_dim': 8,
         'max_atom_types': 25,
-        'radial_neurons': [8, 16],
+        'radial_neurons': [16],
         'num_neighbors': 15,
-        'constraints': 'bindingall'
+        'constraints': 'chaintriangle'             #chain, triangle, chaintriangle
 
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
