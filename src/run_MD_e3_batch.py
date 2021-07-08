@@ -24,21 +24,21 @@ from src.network_eq import network_eq_simple
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
-    torch.set_default_dtype(torch.float64)
+    torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.mode ='standard'
     args.n_train = 1000
     args.n_val = 1000
-    args.batch_size = 20
+    args.batch_size = 8
     args.n_input_samples = 1
     args.nskip = 0
-    args.epochs_for_lr_adjustment = 40
+    args.epochs_for_lr_adjustment = 30
     args.use_validation = True
     args.use_test = True
-    args.lr = 5e-3
+    args.debug = False
+    args.lr = 1e-2
     args.seed = 123545
-    args.epochs = 100
+    args.epochs = 1000
     args.network_type = 'EQ'
     args.loss = 'EQ'
     args.train_idx = None
@@ -51,14 +51,14 @@ if __name__ == '__main__':
         'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
         # 'irreps_node_attr': o3.Irreps("1x0e"),
         # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
-        'irreps_edge_attr': o3.Irreps("1x1o"),
+        'irreps_edge_attr': o3.Irreps("2x1o"),
         'layers': 4,
         'max_radius': 15,
         'number_of_basis': 8,
         'embed_dim': 8,
         'max_atom_types': 20,
-        'radial_neurons': [8, 16],
-        'num_neighbors': 15,
+        'radial_neurons': [16, 16],
+        'num_neighbors': -1,
         'constraints': ''
     }
     args.basefolder = os.path.basename(__file__).split(".")[0]
@@ -87,8 +87,8 @@ if __name__ == '__main__':
     # np.savez("{:}/splitting_indices".format(result_dir_base), **splitting_indices)
 
 
-    constraints_hist = ['','P']
-    nskips = [0,9,99,999,9999]
+    constraints_hist = ['']
+    nskips = [9999,999,99,9,0]
     job = 0
     for nskip in nskips:
         c['nskip'] = nskip

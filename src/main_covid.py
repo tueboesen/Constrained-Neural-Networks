@@ -169,8 +169,6 @@ def main_covid(c):
         dataloader_test = DataLoader(dataset_test, batch_size=c['batch_size'], shuffle=False, drop_last=False)
 
     PU = ProjectUplift(cn['irreps_inout'], cn['irreps_hidden'])
-
-    # constraints = torch.nn.Sequential()
     if cn['constraints'] == 'chain':
         constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids))
     elif cn['constraints'] == 'triangle':

@@ -200,7 +200,9 @@ class ProjectUplift(torch.nn.Module):
 
         w = torch.empty((self.n_vec_low, self.n_vec_high))
         torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.n_vec_low)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        self.M = torch.nn.Parameter(w)
+        # self.M = torch.nn.Parameter(w)
+        self.register_buffer("M", w)
+
         return
 
     def make_matrix_semi_unitary(self, debug=False):
@@ -258,6 +260,72 @@ class ProjectUplift(torch.nn.Module):
         x2 = y2 @ self.Mu.t()
         x = x2.transpose(1,2).reshape(y.shape[0],-1)
         return x
+
+
+class ProjectUplift_conv(torch.nn.Module):
+    '''
+    Note that this will only work if the low dimension is purely a vector space for now
+    '''
+    def __init__(self,irreps_low,irreps_high):
+        super(ProjectUplift_conv, self).__init__()
+        self.irreps_low = irreps_low
+        self.irreps_high = irreps_high
+        self.n_vec_low = ExtractIr(irreps_low, '1o').irreps_out.num_irreps
+        self.n_vec_high = ExtractIr(irreps_high, '1o').irreps_out.num_irreps
+
+        w = torch.empty((self.n_vec_low, self.n_vec_high,1))
+        torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.n_vec_low)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
+        # self.w = torch.nn.Parameter(torch.eye(self.n_vec_low, self.n_vec_high).unsqueeze(-1))
+        self.w = torch.nn.Parameter(w)
+        return
+
+    def make_matrix_semi_unitary(self, debug=False):
+        pass
+        return
+
+    def uplift(self,x):
+        irreps_in = self.irreps_low
+        irreps_out = self.irreps_high
+        nd_out = irreps_out.dim
+        idx0 = 0
+        for mul, ir in irreps_in:
+            li = 2 * ir.l + 1
+            idx1 = idx0 + li*mul
+            if ir == o3.Irrep('1o'):
+                x_vec = x[:,idx0:idx1]
+                break
+            idx0 = idx1
+        x2 = x_vec.reshape(x_vec.shape[0], -1, 3)
+        y2 = F.conv_transpose1d(x2,self.w)
+        y_vec = y2.reshape(x.shape[0],-1)
+        y = torch.zeros((x_vec.shape[0],nd_out),dtype=x.dtype,device=x.device)
+        idx0=0
+        for mul, ir in irreps_out:
+            li = 2 * ir.l + 1
+            idx1 = idx0 + li*mul
+            if ir == o3.Irrep('1o'):
+                y[:,idx0:idx1] = y_vec
+                break
+            idx0 = idx1
+        return y
+
+    def project(self,y):
+        irreps_in = self.irreps_high
+        irreps_out = self.irreps_low
+        ir_vec = ExtractIr(irreps_in,'1o')
+        idx0 = 0
+        for mul, ir in irreps_in:
+            li = 2 * ir.l + 1
+            idx1 = idx0 + li*mul
+            if ir == o3.Irrep('1o'):
+                y_vec = y[:,idx0:idx1]
+                break
+            idx0 = idx1
+        y2 = y_vec.reshape(y.shape[0],-1,3)
+        x2 = F.conv1d(y2,self.w)
+        x = x2.reshape(y.shape[0],-1)
+        return x
+
 
 
 

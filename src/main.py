@@ -17,10 +17,11 @@ from e3nn import o3
 
 from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
+from src.EQ_operations import ProjectUplift, ProjectUplift_conv
 from src.log import log_all_parameters, close_logger
 from src.network import network_simple
 from src.network_e3 import constrained_network
-from src.constraints import MomentumConstraints
+from src.constraints import MomentumConstraints, PointChain, PointToPoint
 from src.network_eq import network_eq_simple
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, \
     run_network_eq, run_network_e3, atomic_masses, Distogram
@@ -38,6 +39,8 @@ def main(c):
         )
     model_name = "{}/{}.pt".format(c['result_dir'], 'model')
     model_name_best = "{}/{}.pt".format(c['result_dir'], 'model_best')
+    model_name_last = "{}/{}.pt".format(c['result_dir'], 'model_last')
+    optimizer_name_last = "{}/{}.pt".format(c['result_dir'], 'optimizer_last')
     os.makedirs(c['result_dir'])
     logfile_loc = "{}/{}.log".format(c['result_dir'], 'output')
     LOG = log.setup_custom_logger('runner', logfile_loc, c['debug'])
@@ -156,21 +159,22 @@ def main(c):
 
     dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
 
-    if cn['constraints'] == 'EP':
-        PE_predictor = generate_FE_network(natoms=natoms)
-        PE_predictor.load_state_dict(torch.load(c['PE_predictor'], map_location=torch.device('cpu')))
-        PE_predictor.eval()
-    elif cn['constraints'] == 'P':
-        constraint = MomentumConstraints(masses)
+    PU = ProjectUplift(cn['irreps_inout'], cn['irreps_hidden'])
+    if cn['constraints'] == 'chain':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids))
+    elif cn['constraints'] == 'triangle':
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+    elif cn['constraints'] == 'chaintriangle':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+        # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
     else:
-        PE_predictor = None
-        constraint = None
+        constraints = None
 
     if c['network_type'] == 'EQ':
-        model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], irreps_edge_attr=cn['irreps_edge_attr'], layers=cn['layers'],
-                                max_radius=cn['max_radius'],
-                                number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], masses=masses, constraints=constraint)
+        model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
+                                    max_radius=cn['max_radius'],
+                                    number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
+                                    num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, PU=PU)
     elif c['network_type'] == 'mim':
         model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], constraints=cn['constraints'], masses=masses)
     else:
@@ -187,7 +191,15 @@ def main(c):
     t0 = time.time()
     epochs_since_best = 0
     results=None
-    for epoch in range(c['epochs']):
+    epoch = 0
+
+    # model_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_11_34_05/1/model_last.pt'
+    # optimizer_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_11_34_05/1/optimizer_last.pt'
+    # LOG.info(f'Loading model from file')
+    # model.load_state_dict(torch.load(model_name_prev))
+    # optimizer.load_state_dict(torch.load(optimizer_name_prev))
+
+    while epoch < c['epochs']:
         t1 = time.time()
         aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, ap_t, MAEr_t, MAEv_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'], log=LOG)
         t2 = time.time()
@@ -201,25 +213,39 @@ def main(c):
             alossBest = aloss_v
             # epochs_since_best = 0
             torch.save(model.state_dict(), f"{model_name_best}")
-        if (epoch+1) % c['epochs_for_lr_adjustment'] == 0:
+        else:
+            epochs_since_best += 1
+            if epochs_since_best >= c['epochs_for_lr_adjustment']:
+                for g in optimizer.param_groups:
+                    g['lr'] *= 0.8
+                    lr = g['lr']
+                epochs_since_best = 0
+        # if (epoch+1) % c['epochs_for_lr_adjustment'] == 0:
+        #     for g in optimizer.param_groups:
+        #         g['lr'] *= 0.8
+        #         lr = g['lr']
+        #
+
+        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss(val): {aloss_v:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e}   MAE_r(train): {MAEr_t:.2e}  MAE_v(train): {MAEv_t:.2e} P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
+        if torch.isnan(aloss_t):
+            LOG.info(f'nan detected, reloading model, resetting epoch and lowering lr')
+            model.load_state_dict(torch.load(model_name_last))
+            epoch -= 1
             for g in optimizer.param_groups:
                 g['lr'] *= 0.8
                 lr = g['lr']
-        #
-        # else:
-        #     epochs_since_best += 1
-        #     if epochs_since_best >= c['epochs_for_lr_adjustment']:
-        #         for g in optimizer.param_groups:
-        #             g['lr'] *= 0.8
-        #             lr = g['lr']
-        #         epochs_since_best = 0
+            epochs_since_best = 0
+            optimizer.load_state_dict(torch.load(optimizer_name_last))
+        else:
+            torch.save(model.state_dict(), f"{model_name_last}")
+            torch.save(optimizer.state_dict(),f"{optimizer_name_last}")
+        epoch += 1
 
-        LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss(val): {aloss_v:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e}   MAE_r(train): {MAEr_t:.2e}  MAE_v(train): {MAEv_t:.2e} P(train): {ap_t:.2e}  P(val): {ap_v:.2e}  Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
     torch.save(model.state_dict(), f"{model_name}")
     if c['use_test']:
         model.load_state_dict(torch.load(model_name_best))
         aloss, alossr, alossv, alossD, alossDr, alossDv, ap, MAEr, MAEv = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'])
-        LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {ap:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e}')
+        LOG.info(f'Loss: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {ap:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e}')
         results = {'loss': aloss,
             'loss_rel': aloss,
             'loss_D': alossD,

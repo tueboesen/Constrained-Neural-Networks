@@ -188,6 +188,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         edge_dst = edge_index[1]
 
         output = model(x, batch, z_vec, edge_src, edge_dst)
+        if output.isnan().any():
+            output2 = model(x,batch, z_vec, edge_src, edge_dst)
         Rpred = output[:, 0:3]
         Vpred = output[:, 3:]
 
@@ -235,12 +237,29 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
                 loss = lossD_rel
 
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, norm_type=2.0)
-            torch.nn.utils.clip_grad_value_(model.parameters(), 1.0)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0, norm_type=2.0)
+            # torch.nn.utils.clip_grad_value_(model.parameters(), 1.0)
+            if debug:
+                weights = optimizer.param_groups[0]['params']
+                weights_flat = [torch.flatten(weight) for weight in weights]
+                weights_1d = torch.cat(weights_flat)
+                assert not torch.isnan(weights_1d).any()
+                assert not torch.isinf(weights_1d).any()
+                print(f"{weights_1d.max()}, {weights_1d.min()}")
+
+                grad_flat = [torch.flatten(weight.grad) for weight in weights]
+                grad_1d = torch.cat(grad_flat)
+                assert not torch.isnan(grad_1d).any()
+                assert not torch.isinf(grad_1d).any()
+                print(f"{grad_1d.max()}, {grad_1d.min()}")
             optimizer.step()
 
         if debug:
             log.debug(f"Loss={loss:2.2e}")
+
+
+            ab_grad = [torch.flatten(group.grad) for group in aa]
+            ac_grad = torch.cat(ab_grad)
 
         aloss += loss_rel.detach()
         alossr += loss_r_rel.detach()

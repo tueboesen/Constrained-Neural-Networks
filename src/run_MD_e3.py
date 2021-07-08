@@ -34,7 +34,7 @@ if __name__ == '__main__':
     args.n_input_samples = 1
     args.nskip = 9999
     args.train_idx = None
-    args.epochs_for_lr_adjustment = 10
+    args.epochs_for_lr_adjustment = 3
     args.use_validation = True
     args.use_test = True
     args.debug = True
