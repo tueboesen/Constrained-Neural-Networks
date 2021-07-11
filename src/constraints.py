@@ -89,6 +89,7 @@ import torch.nn as nn
 #             if ctry_norm < converged:
 #                 break
 #         return y
+from torch.autograd import grad
 
 
 class PointToPoint(nn.Module):
@@ -289,100 +290,7 @@ class PointChain(nn.Module):
             if ctry_norm < converged:
                 break
         return {'y':y,'batch':batch}
-#
-#
-# class BindingConstraintsAB(nn.Module):
-#     def __init__(self,d_ab,d_an,fragmentid):
-#         super(BindingConstraintsAB, self).__init__()
-#         self.d_ab = d_ab
-#         self.d_an = d_an
-#         self.fragid = fragmentid
-#         self.fragid_unique = torch.unique(fragmentid)
-#         self.project = None
-#         self.uplift = None
-#         return
-#
-#     def set_projectuplift(self,project,uplift):
-#         self.project = project
-#         self.uplift = uplift
-#
-#     def diff(self,x,x0):
-#         return x - x0
-#
-#     def diffT(self,dx,x0):
-#         return dx+x0
-#
-#     def constraint(self,x,x0,d):
-#         e = torch.ones((3,1),device=x.device)
-#         dx = self.diff(x,x0)
-#         c = d/torch.sqrt(dx**2@e) - 1
-#         return c
-#
-#     def dConstraintT(self,c,x,x0):
-#         dx = self.diff(x,x0)
-#         lam = - dx * c
-#         return lam
-#
-#     def forward(self, y, batch, n=10, debug=False, converged=1e-4):
-#         for j in range(n):
-#             x = self.project(y)
-#             ndim = x.shape[-1]//2
-#             nvec = ndim // 3
-#             lam_x = torch.zeros_like(x)
-#             nb = batch.max() + 1
-#             r = x[:, 0:ndim].view(nb, -1, ndim)
-#             v = x[:, ndim:].view(nb, -1, ndim)
-#             cnorm = 0
-#             for fragi in self.fragid_unique:
-#                 idx = self.fragid == fragi
-#                 ri = r[:,idx,:]
-#                 ri0 = ri[:, :,:3]
-#                 rib = ri[:, :,3:6]
-#                 rin = ri[:, :,6:9]
-#                 cib = self.constraint(rib,ri0,self.d_ab[idx][None,:,None])
-#                 cin = self.constraint(rin,ri0,self.d_an[idx][None,:,None])
-#                 lam_xib = self.dConstraintT(cib, rib,ri0)
-#                 lam_xin = self.dConstraintT(cin, rin,ri0)
-#                 lam_x[idx,3:6] = lam_xib
-#                 lam_x[idx,6:9] = lam_xin
-#                 cnormib = torch.sum(cib**2)
-#                 cnormin = torch.sum(cin**2)
-#                 cnorm = cnorm + cnormib + cnormin
-#             lam_y = self.uplift(lam_x.view(-1, 2*ndim))
-#             with torch.no_grad():
-#                 if j == 0:
-#                     alpha = 1.0 #/ lam_y.norm()
-#                 lsiter = 0
-#                 while True:
-#                     ytry = y - alpha * lam_y
-#                     x = self.project(ytry)
-#                     r = x[:, 0:ndim].view(nb, -1, ndim)
-#                     v = x[:, ndim:].view(nb, -1, ndim)
-#                     ctry_norm = 0
-#                     for fragi in self.fragid_unique:
-#                         idx = self.fragid == fragi
-#                         ri = r[:,idx,:]
-#                         ri0 = ri[:, :, :3]
-#                         rib = ri[:, :, 3:6]
-#                         rin = ri[:, :, 6:9]
-#                         ctryb = self.constraint(rib, ri0,self.d_ab[idx][None,:,None])
-#                         ctryn = self.constraint(rin, ri0,self.d_an[idx][None,:,None])
-#                         ctry_norm = ctry_norm + torch.sum(ctryb**2) + torch.sum(ctryn**2)
-#                     if ctry_norm < cnorm:
-#                         break
-#                     alpha = alpha / 2
-#                     lsiter = lsiter + 1
-#                     if lsiter > 10:
-#                         break
-#                 if lsiter == 0 and ctry_norm > converged:
-#                     alpha = alpha * 1.5
-#             y = y - alpha * lam_y
-#             if debug:
-#                 print(f"ABN constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
-#             if ctry_norm < converged:
-#                 break
-#         return y
-#
+
 
 class MomentumConstraints(nn.Module):
     def __init__(self,project,uplift,m):
@@ -441,7 +349,257 @@ class MomentumConstraints(nn.Module):
                     alpha = alpha * 1.5
             y = y - alpha * lam_y
             if debug:
-                print(f"{j} c: {c.detach().cpu().norm():2.4f} -> {ctry.detach().cpu().norm():2.4f}   ")
+                print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
             if ctry_norm < converged:
                 break
         return {'y':y,'batch':batch}
+
+
+
+class EnergyMomentumConstraints(nn.Module):
+    def __init__(self,project, uplift, potential_energy_predictor,m,rescale_r=1,rescale_v=1):
+        super(EnergyMomentumConstraints, self).__init__()
+        self.register_buffer("m", m[None,:,None])
+        self.project = project
+        self.uplift = uplift
+        self.pep = potential_energy_predictor
+        self.pep.eval()
+        self.rescale_r = rescale_r
+        self.rescale_v = rescale_v
+        return
+
+    def fix_reference_energy(self,r,v,z,KE_ref=None,PE_ref=None):
+        # Difference between 3.8087988458171926
+        conv = 3.8087988458171926
+        m = self.m
+        F = self.pep
+        E_kin = 0.5*torch.sum(m*v**2,dim=(1,2))*conv
+        with torch.no_grad():
+            r_vec = r.reshape(-1, r.shape[-1])
+            z_vec = z.reshape(-1, z.shape[-1])
+            batch = torch.arange(r.shape[0]).repeat_interleave(r.shape[1]).to(device=r.device)
+            E_pot = F(r_vec,z_vec,batch)
+        E = E_kin + E_pot
+        self.E0 = E.mean()
+        # if KE_ref is not None:
+
+        return
+
+
+    def Energy(self,r,v, batch, z,save_E_grad=False):
+        conv = 3.8087988458171926
+        m = self.m
+        F = self.pep
+        e = torch.ones((3,1),dtype=v.dtype,device=v.device)
+        E_kin = 0.5*torch.sum(m*v**2,dim=(1,2))*conv
+        r_vec = r.reshape(-1, r.shape[-1])
+        z_vec = z.reshape(-1, z.shape[-1])
+        E_pot = F(r_vec,z_vec,batch).squeeze()
+        E = E_pot + E_kin
+        if save_E_grad:
+            E_grad = grad(torch.sum(E_pot), r, create_graph=True)[0].requires_grad_(True) # This goes well since the kinetic energy does not depend on r and since r is not connected across different batches
+            self.E_grad = E_grad
+        return E
+
+    def constraint(self,r,v,batch,z,save_E_grad):
+        m = self.m
+        E1 = self.Energy(r,v,batch, z,save_E_grad=save_E_grad)
+        E = E1 - self.E0
+        # P = v.transpose(1,2) @ m
+        P = torch.sum(v * m,dim=1)
+        c = torch.cat([E[:,None],P],dim=1)
+        return c
+
+    def dConstraintT(self,r,v,c):
+        m = self.m
+        E = c[:,0][:,None,None]
+        P = c[:,1:][:,:,None]
+        p = v * m
+        # p_flat = p.T.view(-1)
+        e3 = torch.ones((3,1),dtype=v.dtype,device=v.device)
+        en = torch.ones((v.shape[1],1),dtype=v.dtype,device=v.device)
+        jr = self.E_grad * E
+        jv = p * E + m @ e3.T * (en @ P.transpose(1,2))
+        j = torch.cat([jv,jr],dim=-1)
+        return j
+
+    def forward(self, data, n=10, debug=True, converged=1e-3):
+        y = data['y']
+        batch = data['batch']
+        z = data['z']
+        nb = batch.max() + 1
+
+        for j in range(n):
+            x = self.project(y)
+            r = x[:, 0:3].view(nb,-1,3)*self.rescale_r
+            v = x[:, 3:].view(nb,-1,3)*self.rescale_v
+            c = self.constraint(r,v,batch,z,save_E_grad=True)
+            lam_x = self.dConstraintT(r,v,c)
+            cnorm = torch.norm(c)
+            lam_y = self.uplift(lam_x.view(-1,6))
+            with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 / lam_y.norm()
+                lsiter = 0
+                while True:
+                    ytry = y - alpha * lam_y
+                    x = self.project(ytry)
+                    r = x[:, 0:3].view(nb, -1, 3)
+                    v = x[:, 3:].view(nb, -1, 3)
+                    ctry = self.constraint(r,v,batch,z,save_E_grad=False)
+                    ctry_norm = torch.norm(ctry)
+                    if ctry_norm < cnorm:
+                        break
+                    alpha = alpha / 2
+                    lsiter = lsiter + 1
+                    if lsiter > 10:
+                        print("line search not working")
+                        break
+                if lsiter == 0 and ctry_norm > converged:
+                    alpha = alpha * 1.5
+            y = y - alpha * lam_y
+            if debug:
+                print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
+            if ctry_norm < converged:
+                break
+        return  {'y':y,'batch':batch, 'z':z}
+
+#
+# class EnergyMomentumConstraints(nn.Module):
+#     def __init__(self,project,uplift,m,potential_energy_predictor):
+#         super(EnergyMomentumConstraints, self).__init__()
+#         self.register_buffer("m", m[:,None])
+#         self.project = project
+#         self.uplift = uplift
+#         self.pep = potential_energy_predictor
+#         self.pep.eval()
+#         return
+#
+#     def fix_reference_energy(self,r,v):
+#         m = self.m
+#         F = self.pep
+#         E_kin = 0.5*m*torch.sum(v**2,dim=-1)
+#         with torch.no_grad:
+#             E_pot = F(r)
+#         E = E_kin + E_pot
+#         self.E0 = E.mean()
+#         return
+#
+#     def Energy(self,m,r,v,return_gradient=False):
+#         F = self.pep
+#         m = self.m
+#         E_kin = 0.5*m*torch.sum(v**2,dim=-1)
+#         E_pot = F(r)
+#         E = E_pot + E_kin
+#         if return_gradient:
+#             E_grad = grad(E, r, create_graph=False)[0]
+#             return E, E_grad
+#         else:
+#             return E
+#
+#     def constraint(self,m,r,v,return_gradient):
+#         E1, E_grad = self.Energy(m,r,v,return_gradient=return_gradient)
+#         E = E1 - self.E0
+#         p = m @ v
+#         # c = torch.cat([E,p],dim=-1)
+#         return E, p, E_grad
+#
+#     def dConstraintT(self,m,E,p,E_grad):
+#         J1 = E_grad * E
+#         J2 = p * E + m * p
+#         J = torch.cat([J1,J2],dim=-1)
+#         return J
+#
+#     # def constraint(self,v):
+#     #     m = self.m
+#     #     P = v.transpose(1,2) @ m
+#     #     return P
+#     #
+#     def dConstraintT(self,v,c):
+#         m = self.m
+#         e3 = torch.ones((3,1),dtype=v.dtype,device=v.device)
+#         en = torch.ones((m.shape[0],1),dtype=v.dtype,device=v.device)
+#         jv = m @ e3.T * (en @ c.transpose(1,2))
+#         jr = torch.zeros_like(jv)
+#         j = torch.cat([jr,jv],dim=-1)
+#         return j
+#
+#     def forward(self, data, n=10, debug=False, converged=1e-4):
+#         y = data['y']
+#         batch = data['batch']
+#
+#         for j in range(n):
+#             x = self.project(y)
+#             nb = batch.max()+1
+#             r = x[:, 0:3].view(nb,-1,3)
+#             v = x[:, 3:].view(nb,-1,3)
+#             c = self.constraint(v)
+#             lam_x = self.dConstraintT(v,c)
+#             cnorm = torch.norm(c)
+#             lam_y = self.uplift(lam_x.view(-1,6))
+#             with torch.no_grad():
+#                 if j == 0:
+#                     alpha = 1.0 / lam_y.norm()
+#                 lsiter = 0
+#                 while True:
+#                     ytry = y - alpha * lam_y
+#                     x = self.project(ytry)
+#                     r = x[:, 0:3].view(nb, -1, 3)
+#                     v = x[:, 3:].view(nb, -1, 3)
+#                     ctry = self.constraint(v)
+#                     ctry_norm = torch.norm(ctry)
+#                     if ctry_norm < cnorm:
+#                         break
+#                     alpha = alpha / 2
+#                     lsiter = lsiter + 1
+#                     if lsiter > 10:
+#                         break
+#                 if lsiter == 0 and ctry_norm > converged:
+#                     alpha = alpha * 1.5
+#             y = y - alpha * lam_y
+#             if debug:
+#                 print(f"{j} c: {c.detach().cpu().norm():2.4f} -> {ctry.detach().cpu().norm():2.4f}   ")
+#             if ctry_norm < converged:
+#                 break
+#         return {'y':y,'batch':batch}
+#
+# #
+#
+# class EnergyMomentumConstraints(nn.Module):
+#     def __init__(self,potential_energy_predictor,m):
+#         super(EnergyMomentumConstraints, self).__init__()
+#         self.F = potential_energy_predictor
+#         self.E0 = None
+#         return
+#
+#     def Energy(self,m,r,v,save_E0=False,return_gradient=False):
+#         F = self.F
+#         E_kin = 0.5*m*torch.sum(v**2,dim=-1)
+#         E_pot = F(r)
+#         E = E_pot + E_kin
+#         if save_E0:
+#             self.E0 = E
+#         if return_gradient:
+#             E_grad = grad(E, r, create_graph=False)[0]
+#             return E, E_grad
+#         else:
+#             return E
+#
+#     def constraint(self,m,r,v,return_gradient):
+#         E1, E_grad = self.Energy(m,r,v,return_gradient=return_gradient)
+#         E = E1 - self.E0
+#         p = m @ v
+#         # c = torch.cat([E,p],dim=-1)
+#         return E, p, E_grad
+#
+#     def dConstraintT(self,m,E,p,E_grad):
+#         J1 = E_grad * E
+#         J2 = p * E + m * p
+#         J = torch.cat([J1,J2],dim=-1)
+#         return J
+#
+#     def forward(self,m,r,v):
+#         E,p, E_grad = self.constraint(m,r,v,return_gradient=True)
+#         c = torch.cat([E, p], dim=-1)
+#         J = self.dConstraintT(m,E,p,E_grad)
+#         return c, J

@@ -187,12 +187,12 @@ class SelfInteraction(torch.nn.Module):
                 print(f"Normalize variance={normalize_variance}, input var: {x.var():2.2f}, output var: {y.var():2.2f}")
         return y
 
-class ProjectUplift(torch.nn.Module):
+class ProjectUpliftEQ(torch.nn.Module):
     '''
     Note that this will only work if the low dimension is purely a vector space for now
     '''
     def __init__(self,irreps_low,irreps_high):
-        super(ProjectUplift, self).__init__()
+        super(ProjectUpliftEQ, self).__init__()
         self.irreps_low = irreps_low
         self.irreps_high = irreps_high
         self.n_vec_low = ExtractIr(irreps_low, '1o').irreps_out.num_irreps
@@ -260,6 +260,43 @@ class ProjectUplift(torch.nn.Module):
         x2 = y2 @ self.Mu.t()
         x = x2.transpose(1,2).reshape(y.shape[0],-1)
         return x
+
+
+class ProjectUplift(torch.nn.Module):
+    '''
+    Note that this will only work if the low dimension is purely a vector space for now
+    '''
+    def __init__(self,low_dim,high_dim):
+        super(ProjectUplift, self).__init__()
+        self.low_dim = low_dim
+        self.high_dim = high_dim
+        w = torch.empty((self.low_dim, self.high_dim))
+        torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
+        # self.M = torch.nn.Parameter(w)
+        self.register_buffer("M", w)
+
+        return
+
+    def make_matrix_semi_unitary(self, debug=False):
+        M = self.M.clone()
+        I = torch.eye(M.shape[-2],device=M.device)
+        for i in range(100):
+            M = M - 0.5 * (M @ M.t() - I) @ M
+
+        if debug:
+            pre_error = torch.norm(I - self.M @ self.M.t())
+            post_error = torch.norm(I - M @ M.t())
+            print(f"Deviation from unitary before: {pre_error:2.2e}, deviation from unitary after: {post_error:2.2e}")
+        self.Mu = M
+        return
+
+    def project(self, y):
+        x = y @ self.Mu.t()
+        return x
+
+    def uplift(self, x):
+        y = x @ self.Mu
+        return y
 
 
 class ProjectUplift_conv(torch.nn.Module):

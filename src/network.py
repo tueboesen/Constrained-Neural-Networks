@@ -149,21 +149,15 @@ class network_simple(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, nmax_atom_types=10,atom_type_embed_dim=8,max_radius=5,constraints=None, masses=None):
+    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=5,constraints=None):
         super().__init__()
 
         self.nlayers = nlayers
-
-        w = torch.empty((node_dim_in,node_dim_latent))
-        nn.init.xavier_normal_(w,gain=1/math.sqrt(node_dim_in)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        self.projection_matrix = nn.Parameter(w)
+        self.PU = PU
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
         self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
-        if constraints == 'P':
-            self.constraints = MomentumConstraints(masses, project=self.project, uplift=self.uplift)
-        else:
-            self.constraints = None
+        self.constraints = constraints
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -171,38 +165,11 @@ class network_simple(nn.Module):
             self.PropagationBlocks.append(block)
         return
 
-
-
-    def make_matrix_semi_unitary(self, M,debug=False):
-        I = torch.eye(M.shape[-2],device=M.device)
-        if debug:
-            M_org = M.clone()
-        for i in range(10):
-            M = M - 0.5 * (M @ M.t() - I) @ M
-
-        if debug:
-            pre_error = torch.norm(I - M_org @ M_org.t())
-            post_error = torch.norm(I - M @ M.t())
-            print(f"Deviation from unitary before: {pre_error:2.2e}, deviation from unitary after: {post_error:2.2e}")
-        return M
-
-    def project(self,y):
-        M = self.projection_matrix
-        M = self.make_matrix_semi_unitary(M)
-        x = y @ M.t()
-        return x
-
-    def uplift(self,x):
-        M = self.projection_matrix
-        M = self.make_matrix_semi_unitary(M)
-        y = x @ M
-        return y
-
-
     def forward(self, x, batch, node_attr, edge_src, edge_dst):
 
+        self.PU.make_matrix_semi_unitary()
         node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
-        y = self.uplift(x)
+        y = self.PU.uplift(x)
 
         y_old = y
         for i in range(self.nlayers):
@@ -218,10 +185,9 @@ class network_simple(nn.Module):
             y_old = tmp
 
             if self.constraints is not None:
-                y = self.constraints(y, batch, n=20)
-
-            # y = self.apply_constraints(y, n=100)
-            x = self.project(y)
+                data = self.constraints({'y':y,'batch':batch,'z':node_attr})
+                y = data['y']
+            x = self.PU.project(y)
 
         return x
 

@@ -157,8 +157,7 @@ class NequIP(torch.nn.Module):
                 self.irreps_node_attr,
                 self.irreps_edge_attr,
                 gate.irreps_in,
-                radial_neurons,
-                num_neighbors
+                radial_neurons
             )
             irreps = gate.irreps_out
             self.convolutions.append(conv)
@@ -195,8 +194,8 @@ class NequIP(torch.nn.Module):
             cutoff=False
         ).mul(self.number_of_basis**0.5)
         edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
-        print("#n = {:2.2f}".format(edge_dst.shape[0]/ x.shape[0] ))
-
+        # print("#n = {:2.2f}".format(edge_dst.shape[0]/ x.shape[0] ))
+        num_neighbors = edge_dst.shape[0] / x.shape[0]
         x = x.new_ones((x.shape[0], 1))
 
         # scalar_z = self.ext_z(z)
@@ -205,7 +204,7 @@ class NequIP(torch.nn.Module):
         z = self.node_embedder(z.to(dtype=torch.int64)).squeeze()
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
-            y = conv(x, z, edge_src, edge_dst, edge_attr, edge_features)
+            y = conv(x, z, edge_src, edge_dst, edge_attr, edge_features,num_neighbors)
             y = gate(y)
             if y.shape == x.shape:
                 y = self.self_interaction[i](y)
@@ -330,8 +329,8 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float64)
 
     n_train = 1000
-    n_val = 50
-    batch_size = 50
+    n_val = 500
+    batch_size = 5
     model_name = './../pretrained_networks/force_energy_model.pt'
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
@@ -348,6 +347,9 @@ if __name__ == '__main__':
     E = data['PE']
     Force = data['F']
     R = data['R']
+    # Rscale = np.sqrt(np.mean(R**2))
+
+
     epochs_for_lr_adjustment = 50
     z = torch.from_numpy(data['z']).to(device=device)
     ndata = E.shape[0]

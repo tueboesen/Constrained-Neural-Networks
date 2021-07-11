@@ -143,6 +143,7 @@ def atomic_masses(z):
 def Distogram(r):
     """
     r should be of shape (n,3) or shape (nb,n,3)
+    Note that it computes the distance squared, this is due to stability reasons in connection with autograd, if you want the actual distance, take the square-root
     """
     if r.ndim == 2:
         D = torch.relu(torch.sum(r.t() ** 2, dim=0, keepdim=True) + torch.sum(r.t() ** 2, dim=0, keepdim=True).t() - 2 * r @ r.t())
@@ -154,7 +155,7 @@ def Distogram(r):
     return D
 
 
-def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None):
+def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None, rscale=1, vscale=1):
     aloss = 0.0
     alossr = 0.0
     alossv = 0.0
@@ -164,6 +165,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
     amomentum = 0.0
     aMAEr = 0.0
     aMAEv = 0.0
+    P_hist = []
+    E_hist = []
     torch.set_grad_enabled(train)
     if train:
         model.train()
@@ -201,10 +204,23 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         loss_r_rel = loss_r / loss_r_ref
         loss_v_rel = loss_v / loss_v_ref
         loss_rel = (loss_r_rel + loss_v_rel)/2
-        MAEr = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
-        MAEv = torch.mean(torch.abs(Vpred - Vout_vec)).detach()
+        MAEr = torch.mean(torch.abs(Rpred - Rout_vec)*rscale).detach()
+        MAEv = torch.mean(torch.abs(Vpred - Vout_vec)*vscale).detach()
 
-        Ppred = torch.sum((Vpred.view(Vout.shape).transpose(1, 2) @ m).norm(dim=1)) / nb
+        Vpred_real = Vpred.view(Vout.shape) * vscale
+        Rpred_real = Rpred.view(Rout.shape) * rscale
+        Vin_real = Vin * vscale
+        Rin_real = Rin * rscale
+
+        Econv = 3.8087988458171926 #Converts from au*Angstrom^2/fs^2 to Hatree energy
+
+        Ppred = torch.sum((Vpred_real.transpose(1, 2) @ m).norm(dim=1),dim=1) #Momentum is directional so do we take the correct magnitude here?
+        Ekin_pred = torch.sum(0.5*m[...,0]*Vpred_real.norm(dim=-1)**2, dim=1)
+        V_lj = LJ_potential(Rpred_real)
+        Epot_pred = torch.sum(V_lj,dim=(1,2))
+        Epred = (Ekin_pred + Epot_pred)*Econv
+        E_hist.append(Epred.detach())
+        P_hist.append(Ppred.detach())
 
         dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
         dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
@@ -219,7 +235,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         lossD_v = F.mse_loss(dVPred,dVTrue)/nb
         lossD_r_rel = lossD_r / lossD_r_ref
         lossD_v_rel = lossD_v / lossD_v_ref
-        lossD_abs = lossD_r + lossD_v
+        # lossD_abs = lossD_r + lossD_v
         lossD_rel = (lossD_r_rel + lossD_v_rel)/2
 
         if check_equivariance:
@@ -256,10 +272,15 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
 
         if debug:
             log.debug(f"Loss={loss:2.2e}")
+            Ekin_ref = torch.sum(0.5*m[...,0]*Vin_real.norm(dim=-1)**2, dim=1)
+            V_lj = LJ_potential(Rin_real)
+            Epot_ref = torch.sum(V_lj,dim=(1,2))
+            Eref = Ekin_ref + Epot_ref
+            Eref_conv = Eref * Econv
+            torch.set_printoptions(precision=16)
+            print(Eref_conv)
 
 
-            ab_grad = [torch.flatten(group.grad) for group in aa]
-            ac_grad = torch.cat(ab_grad)
 
         aloss += loss_rel.detach()
         alossr += loss_r_rel.detach()
@@ -267,21 +288,39 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         alossD += lossD_rel.detach()
         alossDr += lossD_r_rel.detach()
         alossDv += lossD_v_rel.detach()
-        amomentum += Ppred.detach()
         aMAEr += MAEr
         aMAEv += MAEv
         if (i + 1) * batch_size >= max_samples:
             break
+    P_mean = torch.cat(P_hist).mean()
+    E_std = torch.cat(E_hist).std()
+    E_mean = torch.cat(E_hist).mean()
+    E_rel_diff = (E_std / E_mean).abs()
+
     aloss /= (i + 1)
     alossr /= (i + 1)
     alossv /= (i + 1)
     alossD /= (i + 1)
     alossDr /= (i + 1)
     alossDv /= (i + 1)
-    amomentum /= (i + 1)
     aMAEr /= (i + 1)
     aMAEv /= (i + 1)
-    return aloss, alossr, alossv, alossD, alossDr, alossDv, amomentum, aMAEr, aMAEv
+    return aloss, alossr, alossv, alossD, alossDr, alossDv, aMAEr, aMAEv, P_mean, E_rel_diff
+
+def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.5640976472642336e-06):
+    # eps_conv=31.453485691837958
+    # V(r) = 4.0 * EPSILON * [(SIGMA / r) ^ 12 - (SIGMA / r) ^ 6]
+    D = torch.sqrt(Distogram(r))
+    M = D >= rcut
+    Delta = sigma / D
+    # Delta_au = Delta*5.291772E-1
+    tmp = (Delta) ** 6
+    V = 4.0 * eps * (tmp ** 2 - tmp)
+    V[:, torch.arange(V.shape[-1]), torch.arange(V.shape[-1])] = 0
+    V[M] = 0
+    V *= Energy_conversion
+    return V
+
 
 
 def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15, debug=True):
