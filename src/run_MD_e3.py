@@ -20,28 +20,28 @@ from src import log
 from src.log import log_all_parameters
 from src.main import main
 from src.network_e3 import constrained_network
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     torch.autograd.set_detect_anomaly(False)
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 20
-    args.n_val = 80
+    args.n_train = 1000
+    args.n_val = 1000
     args.batch_size = 8
     args.n_input_samples = 1
     args.nskip = 9999
     args.train_idx = None
     args.epochs_for_lr_adjustment = 3
-    args.use_validation = True
+    args.use_val = True
     args.use_test = True
     args.debug = False
     args.lr = 5e-3
     args.seed = 123545
-    args.loss = 'distogram'
-    args.network_type = 'mim' #EQ or mim
-    args.epochs = 10000
+    args.loss = 'EQ'
+    args.network_type = 'EQ' #EQ or mim
+    args.epochs = 1000
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     args.data = './../../../data/MD/argon/argon.npz'
     # args.data = './../../../data/MD/water_jones/water.npz'

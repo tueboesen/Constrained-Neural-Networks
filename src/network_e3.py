@@ -11,7 +11,7 @@ from e3nn.nn import FullyConnectedNet, Gate, ExtractIr, Activation, Extract
 import torch.nn.functional as F
 from torch_scatter import scatter
 
-from src.EQ_operations import SelfInteraction, Convolution, ProjectUplift
+from src.EQ_operations import SelfInteraction, Convolution
 from src.constraints import MomentumConstraints
 from src.utils import smooth_cutoff
 

@@ -60,72 +60,6 @@ def fix_seed(seed, include_cuda=True):
         torch.backends.cudnn.deterministic = True
 
 
-class DatasetFutureState(data.Dataset):
-    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu'):
-        self.Rin = Rin
-        self.Rout = Rout
-        self.z = z
-        self.Vin = Vin
-        self.Vout = Vout
-        self.Fin = Fin
-        self.Fout = Fout
-        self.KEin = KEin
-        self.KEout = KEout
-        self.PEin = PEin
-        self.PEout = PEout
-        self.m = m
-        self.device = device
-        if Fin is None or Fout is None:
-            self.useF = False
-        else:
-            self.useF = True
-        if KEin is None or KEout is None:
-            self.useKE = False
-        else:
-            self.useKE = True
-        if PEin is None or PEout is None:
-            self.usePE = False
-        else:
-            self.usePE = True
-        return
-
-    def __getitem__(self, index):
-        device = self.device
-        Rin = self.Rin[index].to(device=device)
-        Rout = self.Rout[index].to(device=device)
-        z = self.z[:,None].to(device=device)
-        Vin = self.Vin[index].to(device=device)
-        Vout = self.Vout[index].to(device=device)
-        if self.m is not None:
-            m = self.m[:,None]
-        else:
-            m = 0
-        if self.useF:
-            Fin = self.Fin[index].to(device=device)
-            Fout = self.Fout[index].to(device=device)
-        else:
-            Fin = 0
-            Fout = 0
-        if self.useKE:
-            KEin = self.KEin[index].to(device=device)
-            KEout = self.KEout[index].to(device=device)
-        else:
-            KEin = 0
-            KEout = 0
-        if self.usePE:
-            PEin = self.PEin[index].to(device=device)
-            PEout = self.PEout[index].to(device=device)
-        else:
-            PEin = 0
-            PEout = 0
-        return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout,m
-
-    def __len__(self):
-        return len(self.Rin)
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' + ')'
-
 
 def split_data(data,train_idx,val_idx,test_idx):
     data_train = data[train_idx]
@@ -155,7 +89,9 @@ def Distogram(r):
     return D
 
 
-def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None, rscale=1, vscale=1):
+def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None):
+    rscale = dataloader.dataset.rscale
+    vscale = dataloader.dataset.vscale
     aloss = 0.0
     alossr = 0.0
     alossv = 0.0

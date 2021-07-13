@@ -17,13 +17,13 @@ from e3nn import o3
 
 from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
-from src.EQ_operations import ProjectUplift, ProjectUplift_conv, ProjectUpliftEQ
+from src.dataloader import load_data
 from src.log import log_all_parameters, close_logger
 from src.network import network_simple
 from src.network_e3 import constrained_network
-from src.constraints import MomentumConstraints, PointChain, PointToPoint, EnergyMomentumConstraints
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, \
-    run_network_eq, run_network_e3, atomic_masses, Distogram, LJ_potential
+from src.constraints import MomentumConstraints, PointChain, PointToPoint, EnergyMomentumConstraints, load_constraints
+from src.project_uplift import ProjectUpliftEQ, ProjectUplift
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network_eq, run_network_e3, atomic_masses, Distogram, LJ_potential
 
 
 def main(c):
@@ -48,169 +48,21 @@ def main(c):
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
     # load training data
-    data = np.load(c['data'])
-    R = torch.from_numpy(data['R']).to(device=device,dtype=torch.get_default_dtype())
-    V = torch.from_numpy(data['V']).to(device=device,dtype=torch.get_default_dtype())
-    F = torch.from_numpy(data['F']).to(device=device,dtype=torch.get_default_dtype())
-    KE = torch.from_numpy(data['KE']).to(device=device,dtype=torch.get_default_dtype())
-    PE = torch.from_numpy(data['PE']).to(device=device,dtype=torch.get_default_dtype())
-    z = torch.from_numpy(data['z']).to(device=device)
-    masses = atomic_masses(z)
-
-    # ndata_rand = 0 + np.arange(R.shape[0])
-    # np.random.shuffle(ndata_rand)
-    # nsamples = 10000
-    # idx = ndata_rand[:nsamples]
-    # R0 = R[idx]
-    # vlj = LJ_potential(R0)
-    # Epot = torch.sum(vlj,dim=(1,2))
-    # # conv = PE[idx] / Epot
-    # # Epot_conv = Epot * conv
-    #
-    # Econv = 3.8087988458171926
-    # Ekin = torch.sum(0.5*masses[None,:]*(V[idx].norm(dim=-1))**2,dim=(1))*Econv
-    #
-    # Etotal = Epot + Ekin
-    # Etotal_ref = KE[idx] + PE[idx]
-    # torch.set_printoptions(precision=16)
-    # print(torch.sum(torch.abs(Epot-PE[idx])))
-    # print(torch.sum(torch.abs(Ekin-KE[idx])))
-    # print(torch.std(Etotal))
-    # print(torch.std(Etotal_ref))
-
-
-
-    #We rescale the data
-    Rscale = torch.sqrt(R.pow(2).mean())
-    Vscale = torch.sqrt(V.pow(2).mean())
-    R /= Rscale
-    V /= Vscale
-
-    DR0 = Distogram(R[0]).fill_diagonal_(99.0)
-    nn_dist_start = torch.min(DR0,dim=0)[0].max()
-    DRend = Distogram(R[-1]).fill_diagonal_(99.0)
-    nn_dist_end = torch.min(DRend,dim=0)[0].max()
-
-    Rin, Rout = convert_snapshots_to_future_state_dataset(c['nskip'], R)
-    Vin, Vout = convert_snapshots_to_future_state_dataset(c['nskip'], V)
-    Fin, Fout = convert_snapshots_to_future_state_dataset(c['nskip'], F)
-    KEin, KEout = convert_snapshots_to_future_state_dataset(c['nskip'], KE)
-    PEin, PEout = convert_snapshots_to_future_state_dataset(c['nskip'], PE)
-
-    R = None
-    V = None
-    F = None
-
-    # p = torch.sum(V * masses[None,:,None],dim=1)
-
-    ndata = Rout.shape[0]
-    natoms = z.shape[0]
-
-    print('Number of data: {:}, Number of atoms {:}'.format(ndata, natoms))
-
-    ndata_rand = 0 + np.arange(ndata)
-    np.random.shuffle(ndata_rand)
-    if c['train_idx'] is None:
-        train_idx = ndata_rand[:c['n_train']]
-        val_idx = ndata_rand[c['n_train']:c['n_train'] + c['n_val']]
-        test_idx = ndata_rand[c['n_train'] + c['n_val']:]
-    else:
-        train_idx = c['train_idx']
-        val_idx = c['val_idx']
-        test_idx = c['test_idx']
-
-
-    Rin_train = Rin[train_idx]
-    Rout_train = Rout[train_idx]
-    Vin_train = Vin[train_idx]
-    Vout_train = Vout[train_idx]
-    Fin_train = Fin[train_idx]
-    Fout_train = Fout[train_idx]
-    KEin_train = KEin[train_idx]
-    KEout_train = KEout[train_idx]
-    PEin_train = PEin[train_idx]
-    PEout_train = PEout[train_idx]
-
-
-
-    if c['use_validation']:
-        Rin_val = Rin[val_idx]
-        Rout_val = Rout[val_idx]
-        Vin_val = Vin[val_idx]
-        Vout_val = Vout[val_idx]
-        Fin_val = Fin[val_idx]
-        Fout_val = Fout[val_idx]
-        KEin_val = KEin[val_idx]
-        KEout_val = KEout[val_idx]
-        PEin_val = PEin[val_idx]
-        PEout_val = PEout[val_idx]
-
-    if c['use_test']:
-        Rin_test = Rin[test_idx]
-        Rout_test = Rout[test_idx]
-        Vin_test = Vin[test_idx]
-        Vout_test = Vout[test_idx]
-        Fin_test = Fin[test_idx]
-        Fout_test = Fout[test_idx]
-        KEin_test = KEin[test_idx]
-        KEout_test = KEout[test_idx]
-        PEin_test = PEin[test_idx]
-        PEout_test = PEout[test_idx]
-
-
-    Fin = None
-    Fout = None
-    KEin = None
-    KEout = None
-    PEin = None
-    PEout = None
-    Fin_train = None
-    Fout_train = None
-    # KEin_train = None
-    KEout_train = None
-    # PEin_train = None
-    PEout_train = None
-
-    dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses,device=device)
-    if c['use_validation']:
-        dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device)
-        dataloader_val = DataLoader(dataset_val, batch_size=c['batch_size'], shuffle=True, drop_last=False)
-
-
-    if c['use_test']:
-        dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device)
-        dataloader_test = DataLoader(dataset_test, batch_size=c['batch_size'], shuffle=False, drop_last=False)
-
-    dataloader_train = DataLoader(dataset_train, batch_size=c['batch_size'], shuffle=True, drop_last=True)
+    dataloader_train, dataloader_val, dataloader_test = load_data(c['data'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'])
 
     if c['network_type'] == 'EQ':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
     elif c['network_type'] == 'mim':
         PU = ProjectUplift(cn['node_dim_in'], cn['node_dim_latent'])
 
-    if cn['constraints'] == 'chain':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids))
-    elif cn['constraints'] == 'triangle':
-        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
-    elif cn['constraints'] == 'chaintriangle':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
-        # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
-    elif cn['constraints'] == 'P':
-        constraints = torch.nn.Sequential(MomentumConstraints(PU.project, PU.uplift, masses))
-    elif cn['constraints'] == 'EP':
-        force_predictor = generate_FE_network(natoms=Rin.shape[1])
-        force_predictor.load_state_dict(torch.load(c['PE_predictor'], map_location=torch.device('cpu')))
-        force_predictor.eval()
-        constraints = torch.nn.Sequential(EnergyMomentumConstraints(PU.project, PU.uplift,force_predictor, masses))
-        constraints[0].fix_reference_energy(Rin_train*Rscale,Vin_train*Vscale,z.repeat(20,1)[:,:,None],KE_ref=KEin_train,PE_ref=PEin_train)
-    else:
-        constraints = None
+    ds = dataloader_train.dataset
+    constraints = load_constraints(cn['constraints'], PU, masses=ds.m, R=ds.Rin, V=ds.Vin, z=ds.z, rscale=ds.rscale, vscale=ds.vscale, energy_predictor=c['PE_predictor'])
 
     if c['network_type'] == 'EQ':
         model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                    num_nodes=natoms, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, PU=PU)
+                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, PU=PU)
     elif c['network_type'] == 'mim':
         model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], PU=PU, constraints=constraints)
     else:
@@ -229,18 +81,19 @@ def main(c):
     results=None
     epoch = 0
 
-    # model_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_11_34_05/1/model_last.pt'
-    # optimizer_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_11_34_05/1/optimizer_last.pt'
+    # model_name_prev = '/media/tue/Data/Dropbox/ComputationalGenetics/results/2021-07-07_13_28_06/1/model_best.pt'
+    # # optimizer_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_11_34_05/1/optimizer_last.pt'
     # LOG.info(f'Loading model from file')
-    # model.load_state_dict(torch.load(model_name_prev))
-    # optimizer.load_state_dict(torch.load(optimizer_name_prev))
+    # model.load_state_dict(torch.load(model_name_prev,map_location=torch.device('cpu')))
+    # # optimizer.load_state_dict(torch.load(optimizer_name_prev))
+    # epoch = 9999
 
     while epoch < c['epochs']:
         t1 = time.time()
-        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, MAEr_t, MAEv_t, P_mean_t, E_rel_diff_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'], log=LOG, rscale=Rscale, vscale=Vscale)
+        aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, MAEr_t, MAEv_t, P_mean_t, E_rel_diff_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'], log=LOG)
         t2 = time.time()
         if c['use_validation']:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = run_network_e3(model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*10, max_radius=cn['max_radius'], log=LOG, rscale=Rscale, vscale=Vscale)
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = run_network_e3(model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*10, max_radius=cn['max_radius'], log=LOG)
         else:
             aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
@@ -279,7 +132,7 @@ def main(c):
 
     torch.save(model.state_dict(), f"{model_name}")
     if c['use_test']:
-        model.load_state_dict(torch.load(model_name_best))
+        model.load_state_dict(torch.load(model_name_best)) #TODO UNCLEAR THIS
         aloss, alossr, alossv, alossD, alossDr, alossDv, MAEr, MAEv, P_mean, E_rel_diff = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'], rscale=Rscale, vscale=Vscale)
         LOG.info(f'Loss: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {P_mean:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e} E_rel_diff{E_rel_diff:.2e}')
         results = {'loss': aloss,
