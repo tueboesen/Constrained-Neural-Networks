@@ -57,15 +57,15 @@ def read_xyz_force(filename,n):
 
 
 if __name__ == '__main__':
-    # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/ethanol/'
-    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/argon/'
+    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/water300/'
+    # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/argon/'
     # folder = '/home/tue/data/MD/ethanol_heating/'
-    name_ener = 'ar108-1.ener'
-    name_vel = 'ar108-vel-1.xyz'
-    name_pos = 'ar108-pos-1.xyz'
+    name_ener = 'T300-1.ener'
+    name_vel = 'T300-vel-1.xyz'
+    name_pos = 'T300-pos-1.xyz'
     name_force = 'forces.xyz'
 
-    name_out = 'argon.npz'
+    name_out = 'water.npz'
     folder_out = folder
     # name_pos = 'test2.xyz'
     filename_ener = folder + name_ener
@@ -74,6 +74,7 @@ if __name__ == '__main__':
     filename_force = folder + name_force
     filename_out = folder_out + name_out
 
+    # dat = np.load(filename_out)
     df = pd.read_csv(filename_ener, delimiter='\s+', names=["step", 'time', 'KE', 'temp', 'PE', 'const', 'used'], skiprows=1)
     df.head()
 
@@ -112,15 +113,28 @@ if __name__ == '__main__':
 
     ndata = np.min([pos.shape[0], force.shape[0], vel.shape[0], temp.shape[0], KE.shape[0], PE.shape[0]])
 
-
-    data = {'R': pos[:ndata],
+    data = {'R1': pos[:ndata,0::3],
+            'R2': pos[:ndata, 1::3],
+            'R3': pos[:ndata, 2::3],
+            'V1': vel[:ndata,0::3],
+            'V2': vel[:ndata,1::3],
+            'V3': vel[:ndata,2::3],
             'F': force[:ndata],
-            'V': vel[:ndata],
             'z': atomic_numbers,
             'temp': temp[:ndata],
             'KE': KE[:ndata],
             'PE': PE[:ndata]
             }
+
+
+    # data = {'R': pos[:ndata],
+    #         'F': force[:ndata],
+    #         'V': vel[:ndata],
+    #         'z': atomic_numbers,
+    #         'temp': temp[:ndata],
+    #         'KE': KE[:ndata],
+    #         'PE': PE[:ndata]
+    #         }
 
     np.savez(filename_out,**data)
     # print("done")

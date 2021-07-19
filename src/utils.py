@@ -110,6 +110,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         model.eval()
     for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
         nb, natoms, ndim = Rin.shape
+        ndims = Rin.shape[-1]
         optimizer.zero_grad()
         # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
 
@@ -129,8 +130,8 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         output = model(x, batch, z_vec, edge_src, edge_dst)
         if output.isnan().any():
             output2 = model(x,batch, z_vec, edge_src, edge_dst)
-        Rpred = output[:, 0:3]
-        Vpred = output[:, 3:]
+        Rpred = output[:, 0:ndims]
+        Vpred = output[:, ndims:]
 
         loss_r = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
         loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
@@ -150,13 +151,15 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
 
         Econv = 3.8087988458171926 #Converts from au*Angstrom^2/fs^2 to Hatree energy
 
-        Ppred = torch.sum((Vpred_real.transpose(1, 2) @ m).norm(dim=1),dim=1) #Momentum is directional so do we take the correct magnitude here?
-        Ekin_pred = torch.sum(0.5*m[...,0]*Vpred_real.norm(dim=-1)**2, dim=1)
-        V_lj = LJ_potential(Rpred_real)
-        Epot_pred = torch.sum(V_lj,dim=(1,2))
-        Epred = (Ekin_pred + Epot_pred)*Econv
-        E_hist.append(Epred.detach())
-        P_hist.append(Ppred.detach())
+        # Ppred = torch.sum((Vpred_real.transpose(1, 2) @ m).norm(dim=1),dim=1) #Momentum is directional so do we take the correct magnitude here?
+        # Ekin_pred = torch.sum(0.5*m[...,0]*Vpred_real.norm(dim=-1)**2, dim=1)
+        # V_lj = LJ_potential(Rpred_real)
+        # Epot_pred = torch.sum(V_lj,dim=(1,2))
+        # Epred = (Ekin_pred + Epot_pred)*Econv
+        # E_hist.append(Epred.detach())
+        # P_hist.append(Ppred.detach())
+        E_hist.append(torch.ones(5))
+        P_hist.append(torch.ones(5))
 
         dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
         dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)

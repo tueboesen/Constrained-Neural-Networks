@@ -328,7 +328,7 @@ def generate_FE_network(natoms):
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float64)
 
-    n_train = 1000
+    n_train = 99000
     n_val = 500
     batch_size = 5
     model_name = './../pretrained_networks/force_energy_model.pt'
@@ -396,7 +396,7 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     alossBest = 1e6
-    epochs = 10
+    epochs = 5
 
     bestModel = model
     hist = torch.zeros(epochs)

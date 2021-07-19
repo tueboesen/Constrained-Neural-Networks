@@ -79,10 +79,21 @@ class DatasetFutureState(data.Dataset):
 def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size):
     data = np.load(file)
 
-    R = torch.from_numpy(data['R']).to(device=device,dtype=torch.get_default_dtype())
+    if 'R' in data.files:
+        R = torch.from_numpy(data['R']).to(device=device,dtype=torch.get_default_dtype())
+    else:
+        R1 = torch.from_numpy(data['R1']).to(device=device,dtype=torch.get_default_dtype())
+        R2 = torch.from_numpy(data['R2']).to(device=device,dtype=torch.get_default_dtype())
+        R3 = torch.from_numpy(data['R3']).to(device=device,dtype=torch.get_default_dtype())
+        R = torch.cat([R1,R2,R3],dim=2)
     z = torch.from_numpy(data['z']).to(device=device)
     if 'V' in data.files:
         V = torch.from_numpy(data['V']).to(device=device,dtype=torch.get_default_dtype())
+    elif 'V1' in data.files:
+        V1 = torch.from_numpy(data['V1']).to(device=device,dtype=torch.get_default_dtype())
+        V2 = torch.from_numpy(data['V2']).to(device=device,dtype=torch.get_default_dtype())
+        V3 = torch.from_numpy(data['V3']).to(device=device,dtype=torch.get_default_dtype())
+        V = torch.cat([V1,V2,V3],dim=2)
     else: #Alternatively we use the positions to generate velocities, but we need to remove the first datasample for this to work
         V = R[1:] - R[:-1]
         R = R[1:]
@@ -100,11 +111,41 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size):
         PE = None
     masses = atomic_masses(z)
 
+    #Analyse the system for creating constraints
+    # n_particles = R.shape[-1]//3
+    # if particles_pr_node != n_particles:
+    #
+    # Ro = R[:,0::3,:]
+    # Rh1 = R[:,1::3,:]
+    # Rh2 = R[:,2::3,:]
+    #
+    # Vo = V[:,0::3,:]
+    # Vh1 = V[:,1::3,:]
+    # Vh2 = V[:,2::3,:]
+    #
+    # Roh1 = Ro - Rh1
+    # Roh2 = Ro - Rh2
+    # Rh1h2 = Rh1 - Rh2
+    # doh1 = Roh1.norm(dim=-1)
+    # doh2 = Roh2.norm(dim=-1)
+    # dh1h2 = Rh1h2.norm(dim=-1)
+    #
+    # doh1_mean = doh1.mean()
+    # doh2_mean = doh2.mean()
+    # dh1h2_mean = dh1h2.mean()
+    #
+    # doh = 0.9608
+    # dhh = 1.5118
+
+    z = z[1::3]
+
     #We rescale the data
     Rscale = torch.sqrt(R.pow(2).mean())
     Vscale = torch.sqrt(V.pow(2).mean())
     R /= Rscale
     V /= Vscale
+    # Rscale=1
+    # Vscale=1
 
     Rin, Rout = convert_snapshots_to_future_state_dataset(nskip, R)
     Vin, Vout = convert_snapshots_to_future_state_dataset(nskip, V)
@@ -179,10 +220,14 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size):
     if use_val:
         dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
         dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True, drop_last=False)
+    else:
+        dataloader_val = None
 
 
     if use_test:
         dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device, rscale=Rscale, vscale=Vscale)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False)
+    else:
+        dataloader_test = None
 
     return dataloader_train, dataloader_val, dataloader_test
