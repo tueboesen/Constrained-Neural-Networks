@@ -24,6 +24,7 @@ class DatasetFutureState(data.Dataset):
         self.device = device
         self.rscale = rscale
         self.vscale = vscale
+        self.particles_pr_node = Rin.shape[-1] // 3
         if Fin is None or Fout is None:
             self.useF = False
         else:

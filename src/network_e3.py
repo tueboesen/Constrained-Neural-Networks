@@ -43,6 +43,7 @@ class constrained_network(torch.nn.Module):
         constraints=None,
         constrain_all_layers=True,
         PU=None,
+        particles_pr_node = 1,
     ) -> None:
         super().__init__()
         self.max_radius = max_radius
@@ -56,6 +57,7 @@ class constrained_network(torch.nn.Module):
         self.constraints = constraints
         self.constrain_all_layers = constrain_all_layers
         self.PU = PU
+        self.particles_pr_nodes = particles_pr_node
         if self.num_neighbors < 0:
             self.automatic_neighbors = True
         else:
@@ -81,7 +83,7 @@ class constrained_network(torch.nn.Module):
         self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
         # self.h = torch.ones(layers)*1e-2
         self.mix = torch.nn.Parameter(torch.ones(layers)*0.5)
-        radial_neurons_prepend = [self.irreps_edge_attr.num_irreps*embed_dim] + radial_neurons
+        radial_neurons_prepend = [2*particles_pr_node*self.number_of_basis] + radial_neurons
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
             irreps_gated = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l > 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -151,7 +153,7 @@ class constrained_network(torch.nn.Module):
                 data = self.constraints({'y':y,'batch':batch})
                 y = data['y']
             x = self.PU.project(y)
-            if self.constraints is not None and self.constrain_all_layers is False:
-                data = self.constraints({'x':x,'batch':batch})
-                x = data['x']
+        if self.constraints is not None and self.constrain_all_layers is False:
+            data = self.constraints({'x':x,'batch':batch})
+            x = data['x']
         return x

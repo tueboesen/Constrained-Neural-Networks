@@ -62,7 +62,7 @@ def main(c):
         model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, constrain_all_layers=cn['constrain_all_layers'], PU=PU)
+                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, constrain_all_layers=cn['constrain_all_layers'], PU=PU, particles_pr_node=ds.particles_pr_node)
     elif c['network_type'] == 'mim':
         model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], PU=PU, constraints=constraints)
     else:
@@ -116,18 +116,18 @@ def main(c):
         #
 
         LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss_r(train): {alossr_t:.2e}  Loss_v(train): {alossv_t:.2e}   Loss(val): {aloss_v:.2e}  LossD(train): {alossD_t:.2e}  LossD(val): {alossD_v:.2e} MAE_r(val): {MAEr_v:.2e}  MAE_v(val): {MAEv_v:.2e}   MAE_r(train): {MAEr_t:.2e}  MAE_v(train): {MAEv_t:.2e} P(train): {P_mean_t:.2e}   E(train): {E_rel_diff_t:.2e} Loss_best(val): {alossBest:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
-        if torch.isnan(aloss_t):
-            LOG.info(f'nan detected, reloading model, resetting epoch and lowering lr')
-            model.load_state_dict(torch.load(model_name_last))
-            epoch -= 1
-            for g in optimizer.param_groups:
-                g['lr'] *= 0.8
-                lr = g['lr']
-            epochs_since_best = 0
-            optimizer.load_state_dict(torch.load(optimizer_name_last))
-        else:
-            torch.save(model.state_dict(), f"{model_name_last}")
-            torch.save(optimizer.state_dict(),f"{optimizer_name_last}")
+        # if torch.isnan(aloss_t):
+        #     LOG.info(f'nan detected, reloading model, resetting epoch and lowering lr')
+        #     model.load_state_dict(torch.load(model_name_last))
+        #     epoch -= 1
+        #     for g in optimizer.param_groups:
+        #         g['lr'] *= 0.8
+        #         lr = g['lr']
+        #     epochs_since_best = 0
+        #     optimizer.load_state_dict(torch.load(optimizer_name_last))
+        # else:
+        #     torch.save(model.state_dict(), f"{model_name_last}")
+        #     torch.save(optimizer.state_dict(),f"{optimizer_name_last}")
         epoch += 1
 
     torch.save(model.state_dict(), f"{model_name}")

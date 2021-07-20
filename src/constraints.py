@@ -9,7 +9,7 @@ def load_constraints(ctype,PU,masses=None,R=None,V=None,z=None,rscale=1,vscale=1
     if ctype == 'chain':
         constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids))
     elif ctype == 'triangle':
-        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=0.9608/rscale),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=0.9608/rscale,r2=1.5118/rscale))
     elif ctype == 'chaintriangle':
         constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
         # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
@@ -38,7 +38,7 @@ class PointToPoint(nn.Module):
     def constraint(self,p1,p2):
         r = self.r
         d = p2 - p1
-        lam = d * (1 - (r[None,:,None] / d.norm(dim=-1).unsqueeze(-1)))
+        lam = d * (1 - (r / d.norm(dim=-1).unsqueeze(-1)))
         return lam
 
     def constrain_high_dim(self,data,debug=False):
@@ -67,7 +67,7 @@ class PointToPoint(nn.Module):
             print(f"{self._get_name()} constraint c: {cnorm:2.4f} -> {cnorm_after:2.4f}")
         return {'y': y, 'batch': batch}
 
-    def constrain_low_dim(self,data):
+    def constrain_low_dim(self,data,debug=True):
         batch = data['batch']
         nb = batch.max() + 1
         x = data['x']
@@ -75,12 +75,18 @@ class PointToPoint(nn.Module):
         r = x[:, 0:ndim].view(nb, -1, ndim)
         v = x[:, ndim:].view(nb, -1, ndim)
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6])
-        x[:,3:6] = x[:,3:6] + lam_p2
+        x[:,3:6] = x[:,3:6] - lam_p2
+        if debug:
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+            lam_p2_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6])
+            cnorm = torch.mean(torch.sum(lam_p2 ** 2, dim=-1))
+            cnorm_after = torch.mean(torch.sum(lam_p2_after ** 2, dim=-1))
+            print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
         return {'x': x, 'batch': batch}
 
 
     def forward(self, data, n=10, debug=True, converged=1e-4):
-        if 'x' in data.files:
+        if 'x' in data:
             data = self.constrain_low_dim(data)
         else:
             data = self.constrain_high_dim(data)
@@ -100,7 +106,7 @@ class PointToSphereSphereIntersection(nn.Module):
         r2 = self.r2
         d = p2 - p1
         dn = d.norm(dim=-1)
-        a = 1 / (2 * dn) * torch.sqrt(4 * dn ** 2 * r2 ** 2 - (dn ** 2 - r1 ** 2 + r2 ** 2))
+        a = 1 / (2 * dn) * torch.sqrt(4 * dn ** 2 * r2 ** 2 - (dn ** 2 - r1 ** 2 + r2 ** 2)**2)
 
         cn = (dn ** 2 - r2 ** 2 + r1 ** 2) / (2 * dn)
         c = cn[:,:,None] / dn[:,:,None] * d + p1
@@ -109,11 +115,11 @@ class PointToSphereSphereIntersection(nn.Module):
         q = p3 - c - (torch.sum(n*(p3 - c),dim=-1,keepdim=True) * n)
         K = c + a.unsqueeze(-1) * q / q.norm(dim=-1).unsqueeze(-1)
 
-        lam_p3 = K - p3
+        lam_p3 = -(K - p3)
         return lam_p3
 
-    def constrain_low_dim(self,data):
-        x = data['y']
+    def constrain_low_dim(self,data,debug=True):
+        x = data['x']
         batch = data['batch']
         ndim = x.shape[-1]//2
         nvec = ndim // 3
@@ -123,7 +129,13 @@ class PointToSphereSphereIntersection(nn.Module):
         v = x[:, ndim:].view(nb, -1, ndim)
 
         lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9])
-        x[:,6:9] = x[:,6:9] + lam_p3
+        x[:,6:9] = x[:,6:9] - lam_p3
+        if debug:
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+            lam_p3_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6], r[:, :, 6:9])
+            cnorm = torch.mean(torch.sum(lam_p3 ** 2, dim=-1))
+            cnorm_after = torch.mean(torch.sum(lam_p3_after ** 2, dim=-1))
+            print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
         return {'x':x,'batch':batch}
 
     def constrain_high_dim(self,data,debug=False,n=10,converged=1E-4):
@@ -148,7 +160,7 @@ class PointToSphereSphereIntersection(nn.Module):
                     alpha = 1.0 #/ lam_y.norm()
                 lsiter = 0
                 while True:
-                    ytry = y + alpha * lam_y
+                    ytry = y - alpha * lam_y
                     x = self.project(ytry)
                     r = x[:, 0:ndim].view(nb, -1, ndim)
                     v = x[:, ndim:].view(nb, -1, ndim)
@@ -160,9 +172,9 @@ class PointToSphereSphereIntersection(nn.Module):
                     lsiter = lsiter + 1
                     if lsiter > 10:
                         break
-                if lsiter == 0 and ctry_norm > converged:
-                    alpha = alpha * 1.5
             y = y - alpha * lam_y
+            if lsiter == 0 and ctry_norm > converged:
+                alpha = alpha * 1.5
             if debug:
                 print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
             if ctry_norm < converged:
@@ -170,7 +182,7 @@ class PointToSphereSphereIntersection(nn.Module):
         return {'y':y,'batch':batch}
 
     def forward(self, data, n=10, debug=True, converged=1e-4):
-        if 'x' in data.files:
+        if 'x' in data:
             data = self.constrain_low_dim(data)
         else:
             data = self.constrain_high_dim(data)
