@@ -17,12 +17,10 @@ from e3nn import o3
 
 from preprocess.train_force_and_energy_predictor import generate_FE_network
 from src import log
-from src.EQ_operations import ProjectUplift
 from src.constraints import PointChain, PointToSphereSphereIntersection, PointToPoint
 from src.log import log_all_parameters, close_logger
 from src.network_e3 import constrained_network
-from src.network_eq import network_eq_simple
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses, run_network_covid_e3, split_data
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses, run_network_covid_e3, split_data
 
 
 def main_covid(c):

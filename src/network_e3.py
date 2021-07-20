@@ -41,6 +41,7 @@ class constrained_network(torch.nn.Module):
         embed_dim,
         max_atom_types,
         constraints=None,
+        constrain_all_layers=True,
         PU=None,
     ) -> None:
         super().__init__()
@@ -53,6 +54,7 @@ class constrained_network(torch.nn.Module):
         self.irreps_out = o3.Irreps(irreps_inout)
         self.irreps_edge_attr = o3.Irreps(irreps_inout)
         self.constraints = constraints
+        self.constrain_all_layers = constrain_all_layers
         self.PU = PU
         if self.num_neighbors < 0:
             self.automatic_neighbors = True
@@ -145,8 +147,11 @@ class constrained_network(torch.nn.Module):
             tmp = y.clone()
             y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
             y_old = tmp
-            if self.constraints is not None:
+            if self.constraints is not None and self.constrain_all_layers is True:
                 data = self.constraints({'y':y,'batch':batch})
                 y = data['y']
             x = self.PU.project(y)
+            if self.constraints is not None and self.constrain_all_layers is False:
+                data = self.constraints({'x':x,'batch':batch})
+                x = data['x']
         return x

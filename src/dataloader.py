@@ -76,7 +76,7 @@ class DatasetFutureState(data.Dataset):
         return self.__class__.__name__ + ' (' + ')'
 
 
-def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size):
+def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True):
     data = np.load(file)
 
     if 'R' in data.files:
@@ -162,7 +162,8 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size):
     print('Number of data: {:}, Number of atoms {:}'.format(ndata, natoms))
 
     ndata_rand = 0 + np.arange(ndata)
-    np.random.shuffle(ndata_rand)
+    if shuffle:
+        np.random.shuffle(ndata_rand)
     train_idx = ndata_rand[:n_train]
     val_idx = ndata_rand[n_train:n_train + n_val]
     test_idx = ndata_rand[n_train + n_val:]
@@ -216,10 +217,10 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size):
     # PEout_train = None
 
     dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses,device=device, rscale=Rscale, vscale=Vscale)
-    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True)
+    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
     if use_val:
         dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True, drop_last=False)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=shuffle, drop_last=False)
     else:
         dataloader_val = None
 
