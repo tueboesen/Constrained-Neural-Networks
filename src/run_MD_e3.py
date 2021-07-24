@@ -27,9 +27,9 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 100
+    args.n_train = 2
     args.n_val = 100
-    args.batch_size = 20
+    args.batch_size = 2
     args.n_input_samples = 1
     args.nskip = 9999
     args.train_idx = None
@@ -37,6 +37,7 @@ if __name__ == '__main__':
     args.use_val = True
     args.use_test = True
     args.debug = False
+    args.viz = True
     args.lr = 5e-3
     args.seed = 123545
     args.loss = 'EQ'

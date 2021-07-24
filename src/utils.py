@@ -5,7 +5,8 @@ import torch.utils.data as data
 import numpy as np
 import random
 import math
-
+import matplotlib
+import matplotlib.pyplot as plt
 from e3nn import o3
 from torch_cluster import radius_graph
 
@@ -89,7 +90,7 @@ def Distogram(r):
     return D
 
 
-def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None):
+def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, log=None, viz=False):
     rscale = dataloader.dataset.rscale
     vscale = dataloader.dataset.vscale
     aloss = 0.0
@@ -244,6 +245,45 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
     alossDv /= (i + 1)
     aMAEr /= (i + 1)
     aMAEv /= (i + 1)
+
+    if viz:
+        fig = plt.figure(num=1, figsize=[15, 10])
+        plt.clf()
+        axes = plt.axes(projection='3d')
+        axes.set_xlabel("x")
+        axes.set_ylabel("y")
+        axes.set_zlabel("z")
+
+        rO_in = Rin[0, :, 0:3] * rscale.cpu()
+        rH1_in = Rin[0, :, 3:6] * rscale.cpu()
+        rH2_in = Rin[0, :, 6:9] * rscale.cpu()
+
+        rO_out = Rout[0, :, 0:3] * rscale.cpu()
+        rH1_out = Rout[0, :, 3:6] * rscale.cpu()
+        rH2_out = Rout[0, :, 6:9] * rscale.cpu()
+
+        axes.scatter(rO_out[:, 0], rO_out[:, 1], rO_out[:, 2], s=100, c='blue', depthshade=True)
+        axes.scatter(rH1_out[:, 0], rH1_out[:, 1], rH1_out[:, 2], s=100, c='red', depthshade=True)
+        axes.scatter(rH2_out[:, 0], rH2_out[:, 1], rH2_out[:, 2], s=100, c='red', depthshade=True)
+
+        rO_pred = Rpred_real[0, :, 0:3].detach().cpu()
+        rH1_pred = Rpred_real[0, :, 3:6].detach().cpu()
+        rH2_pred = Rpred_real[0, :, 6:9].detach().cpu()
+
+        axes.scatter(rO_pred[:, 0], rO_pred[:, 1], rO_pred[:, 2], s=100, c='lightblue', depthshade=True)
+        axes.scatter(rH1_pred[:, 0], rH1_pred[:, 1], rH1_pred[:, 2], s=100, c='lightpink', depthshade=True)
+        axes.scatter(rH2_pred[:, 0], rH2_pred[:, 1], rH2_pred[:, 2], s=100, c='lightpink', depthshade=True)
+
+        axes.scatter(rO_in[:, 0], rO_in[:, 1], rO_in[:, 2], s=100, c='lightblue', depthshade=True)
+        axes.scatter(rH1_in[:, 0], rH1_in[:, 1], rH1_in[:, 2], s=100, c='lightpink', depthshade=True)
+        axes.scatter(rH2_in[:, 0], rH2_in[:, 1], rH2_in[:, 2], s=100, c='lightpink', depthshade=True)
+
+        axes.quiver(rO_in[:, 0], rO_in[:, 1], rO_in[:, 2], rO_pred[:, 0] - rO_in[:, 0], rO_pred[:, 1] - rO_in[:, 1], rO_pred[:, 2] - rO_in[:, 2])
+        axes.quiver(rO_pred[:, 0], rO_pred[:, 1], rO_pred[:, 2], rO_out[:, 0] - rO_pred[:, 0], rO_out[:, 1] - rO_pred[:, 1], rO_out[:, 2] - rO_pred[:, 2])
+
+        filename = "{}fig.png".format(viz)
+        fig.savefig(filename)
+
     return aloss, alossr, alossv, alossD, alossDr, alossDv, aMAEr, aMAEv, P_mean, E_rel_diff
 
 def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.5640976472642336e-06):

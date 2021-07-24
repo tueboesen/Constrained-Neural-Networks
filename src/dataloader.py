@@ -221,7 +221,7 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuff
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
     if use_val:
         dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=shuffle, drop_last=False)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=False)
     else:
         dataloader_val = None
 

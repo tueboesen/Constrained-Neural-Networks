@@ -87,13 +87,21 @@ def main(c):
     # model.load_state_dict(torch.load(model_name_prev))
     # # optimizer.load_state_dict(torch.load(optimizer_name_prev))
     # epoch = 9999
+    if c['viz']:
+        vizdir = "{:}/figures/".format(c['result_dir'])
+        os.makedirs(vizdir)
 
     while epoch < c['epochs']:
+        if c['viz']:
+            viz = "{:}{:}".format(vizdir, epoch)
+        else:
+            viz = ''
+
         t1 = time.time()
         aloss_t, alossr_t, alossv_t, alossD_t, alossDr_t, alossDv_t, MAEr_t, MAEv_t, P_mean_t, E_rel_diff_t = run_network_e3(model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'], log=LOG)
         t2 = time.time()
         if c['use_val']:
-            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = run_network_e3(model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*10, max_radius=cn['max_radius'], log=LOG)
+            aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = run_network_e3(model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*10, max_radius=cn['max_radius'], log=LOG, viz=viz)
         else:
             aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
