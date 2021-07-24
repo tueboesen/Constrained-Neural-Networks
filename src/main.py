@@ -81,10 +81,10 @@ def main(c):
     results=None
     epoch = 0
 
-    # model_name_prev = '/media/tue/Data/Dropbox/ComputationalGenetics/results/2021-07-07_13_28_06/1/model_best.pt'
+    # model_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_13_28_06/5/model_best.pt'
     # # optimizer_name_prev = 'C:/Users/Tue/PycharmProjects/results/run_MD_e3_batch/2021-07-07_11_34_05/1/optimizer_last.pt'
     # LOG.info(f'Loading model from file')
-    # model.load_state_dict(torch.load(model_name_prev,map_location=torch.device('cpu')))
+    # model.load_state_dict(torch.load(model_name_prev))
     # # optimizer.load_state_dict(torch.load(optimizer_name_prev))
     # epoch = 9999
 
@@ -98,8 +98,12 @@ def main(c):
             aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
 
-        if aloss_v < alossBest:
-            alossBest = aloss_v
+        if c['loss'] == 'EQ':
+            loss = aloss_v
+        else:
+            loss = alossD_v
+        if loss < alossBest:
+            alossBest = loss
             # epochs_since_best = 0
             torch.save(model.state_dict(), f"{model_name_best}")
         else:
@@ -133,7 +137,7 @@ def main(c):
     torch.save(model.state_dict(), f"{model_name}")
     if c['use_test']:
         model.load_state_dict(torch.load(model_name_best)) #TODO UNCLEAR THIS
-        aloss, alossr, alossv, alossD, alossDr, alossDv, MAEr, MAEv, P_mean, E_rel_diff = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'], rscale=Rscale, vscale=Vscale)
+        aloss, alossr, alossv, alossD, alossDr, alossDv, MAEr, MAEv, P_mean, E_rel_diff = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'])
         LOG.info(f'Loss: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {P_mean:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e} E_rel_diff{E_rel_diff:.2e}')
         results = {'loss': aloss,
             'loss_rel': aloss,

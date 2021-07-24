@@ -27,15 +27,15 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 1
-    args.n_val = 1000
-    args.batch_size = 1
+    args.n_train = 100
+    args.n_val = 100
+    args.batch_size = 20
     args.n_input_samples = 1
     args.nskip = 9999
     args.train_idx = None
     args.epochs_for_lr_adjustment = 3
-    args.use_val = False
-    args.use_test = False
+    args.use_val = True
+    args.use_test = True
     args.debug = False
     args.lr = 5e-3
     args.seed = 123545
@@ -53,7 +53,7 @@ if __name__ == '__main__':
             'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
             # 'irreps_node_attr': o3.Irreps("1x0e"),
             # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
-            'layers': 4,
+            'layers': 8,
             'max_radius': 15,
             'number_of_basis': 8,
             'embed_dim': 8,
@@ -61,7 +61,7 @@ if __name__ == '__main__':
             'radial_neurons': [48],
             'num_neighbors': -1,
             'constraints': 'triangle',
-            'constrain_all_layers': False,
+            'constrain_all_layers': True,
         }
     elif args.network_type.lower() == 'mim':
         args.network = {

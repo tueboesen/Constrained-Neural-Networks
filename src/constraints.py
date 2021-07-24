@@ -54,10 +54,9 @@ class PointToPoint(nn.Module):
         r = x[:, 0:ndim].view(nb, -1, ndim)
         v = x[:, ndim:].view(nb, -1, ndim)
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6])
-        lam_x[:, 3:6] = lam_p2
+        lam_x[:, 3:6] = lam_p2.view(-1,3)
         lam_y = self.uplift(lam_x.view(-1, 2 * ndim))
-        alpha = 1
-        y = y - alpha * lam_y
+        y = y - lam_y
         if debug:
             x = self.project(y)
             r = x[:, 0:ndim].view(nb, -1, ndim)
@@ -67,7 +66,7 @@ class PointToPoint(nn.Module):
             print(f"{self._get_name()} constraint c: {cnorm:2.4f} -> {cnorm_after:2.4f}")
         return {'y': y, 'batch': batch}
 
-    def constrain_low_dim(self,data,debug=True):
+    def constrain_low_dim(self,data,debug=False):
         batch = data['batch']
         nb = batch.max() + 1
         x = data['x']
@@ -75,7 +74,7 @@ class PointToPoint(nn.Module):
         r = x[:, 0:ndim].view(nb, -1, ndim)
         v = x[:, ndim:].view(nb, -1, ndim)
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6])
-        x[:,3:6] = x[:,3:6] - lam_p2
+        x[:,3:6] = x[:,3:6] - lam_p2.view(-1,3)
         if debug:
             r = x[:, 0:ndim].view(nb, -1, ndim)
             lam_p2_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6])
@@ -118,7 +117,7 @@ class PointToSphereSphereIntersection(nn.Module):
         lam_p3 = -(K - p3)
         return lam_p3
 
-    def constrain_low_dim(self,data,debug=True):
+    def constrain_low_dim(self,data,debug=False):
         x = data['x']
         batch = data['batch']
         ndim = x.shape[-1]//2
@@ -129,7 +128,7 @@ class PointToSphereSphereIntersection(nn.Module):
         v = x[:, ndim:].view(nb, -1, ndim)
 
         lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9])
-        x[:,6:9] = x[:,6:9] - lam_p3
+        x[:,6:9] = x[:,6:9] - lam_p3.view(-1,3)
         if debug:
             r = x[:, 0:ndim].view(nb, -1, ndim)
             lam_p3_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6], r[:, :, 6:9])
@@ -138,47 +137,30 @@ class PointToSphereSphereIntersection(nn.Module):
             print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
         return {'x':x,'batch':batch}
 
-    def constrain_high_dim(self,data,debug=False,n=10,converged=1E-4):
+    def constrain_high_dim(self,data,debug=False):
         y = data['y']
         batch = data['batch']
-        for j in range(n):
+        # for j in range(n):
+        x = self.project(y)
+        ndim = x.shape[-1]//2
+        nvec = ndim // 3
+        lam_x = torch.zeros_like(x)
+        nb = batch.max() + 1
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        v = x[:, ndim:].view(nb, -1, ndim)
+
+        lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9])
+        lam_x[:,6:9] = lam_p3.view(-1,3)
+        lam_y = self.uplift(lam_x.view(-1, 2*ndim))
+        y = y - lam_y
+        if debug:
             x = self.project(y)
-            ndim = x.shape[-1]//2
-            nvec = ndim // 3
-            lam_x = torch.zeros_like(x)
-            nb = batch.max() + 1
             r = x[:, 0:ndim].view(nb, -1, ndim)
             v = x[:, ndim:].view(nb, -1, ndim)
-
-            lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9])
-            lam_x[:,6:9] = lam_p3
-
-            lam_y = self.uplift(lam_x.view(-1, 2*ndim))
-            cnorm = torch.sum(lam_p3**2)
-            with torch.no_grad():
-                if j == 0:
-                    alpha = 1.0 #/ lam_y.norm()
-                lsiter = 0
-                while True:
-                    ytry = y - alpha * lam_y
-                    x = self.project(ytry)
-                    r = x[:, 0:ndim].view(nb, -1, ndim)
-                    v = x[:, ndim:].view(nb, -1, ndim)
-                    lam_p3_try = self.constraint(r[:, :,0:3], r[:, :,3:6], r[:, :,6:9])
-                    ctry_norm = torch.sum(lam_p3_try**2)
-                    if ctry_norm < cnorm:
-                        break
-                    alpha = alpha / 2
-                    lsiter = lsiter + 1
-                    if lsiter > 10:
-                        break
-            y = y - alpha * lam_y
-            if lsiter == 0 and ctry_norm > converged:
-                alpha = alpha * 1.5
-            if debug:
-                print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
-            if ctry_norm < converged:
-                break
+            lam_p3_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6], r[:, :, 6:9])
+            cnorm = torch.mean(torch.sum(lam_p3 ** 2, dim=-1))
+            cnorm_after = torch.mean(torch.sum(lam_p3_after ** 2, dim=-1))
+            print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
         return {'y':y,'batch':batch}
 
     def forward(self, data, n=10, debug=True, converged=1e-4):

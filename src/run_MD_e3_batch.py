@@ -20,47 +20,58 @@ from src import log
 from src.log import log_all_parameters
 from src.main import main
 from src.network_e3 import constrained_network
-from src.network_eq import network_eq_simple
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, DatasetFutureState, run_network, run_network_eq, run_network_e3, atomic_masses
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 1000
+    args.n_train = 10000
     args.n_val = 1000
-    args.batch_size = 8
+    args.batch_size = 20
     args.n_input_samples = 1
-    args.nskip = 0
-    args.epochs_for_lr_adjustment = 30
-    args.use_validation = True
+    args.nskip = 9999
+    args.epochs_for_lr_adjustment = 5
+    args.use_val = True
     args.use_test = True
     args.debug = False
     args.lr = 1e-2
     args.seed = 123545
-    args.epochs = 1000
+    args.epochs = 50
     args.network_type = 'EQ'
     args.loss = 'EQ'
     args.train_idx = None
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
-    args.data = './../../../data/MD/argon/argon.npz'
-    # args.data = './../../../data/MD/water_jones/water.npz'
+    # args.data = './../../../data/MD/argon/argon.npz'
+    args.data = './../../../data/MD/water_jones/water.npz'
     # args.data = './../../../data/MD/MD17/ethanol_dft.npz'
-    args.network = {
-        'irreps_inout': o3.Irreps("2x1o"),
-        'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
-        # 'irreps_node_attr': o3.Irreps("1x0e"),
-        # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
-        'irreps_edge_attr': o3.Irreps("2x1o"),
-        'layers': 4,
-        'max_radius': 15,
-        'number_of_basis': 8,
-        'embed_dim': 8,
-        'max_atom_types': 20,
-        'radial_neurons': [16, 16],
-        'num_neighbors': -1,
-        'constraints': ''
-    }
+
+    if args.network_type.lower() == 'eq':
+        args.network = {
+            'irreps_inout': o3.Irreps("6x1o"),
+            'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
+            # 'irreps_node_attr': o3.Irreps("1x0e"),
+            # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
+            'layers': 8,
+            'max_radius': 15,
+            'number_of_basis': 8,
+            'embed_dim': 2,
+            'max_atom_types': 20,
+            'radial_neurons': [48],
+            'num_neighbors': -1,
+            'constraints': 'triangle',
+        }
+    elif args.network_type.lower() == 'mim':
+        args.network = {
+            'node_dim_in': 6,
+            'node_attr_dim_in': 1,
+            'node_dim_latent': 60,
+            'nlayers': 6,
+            'max_radius': 15,
+            'constraints': '',
+        }
+
+
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
 
@@ -87,13 +98,18 @@ if __name__ == '__main__':
     # np.savez("{:}/splitting_indices".format(result_dir_base), **splitting_indices)
 
 
-    constraints_hist = ['']
-    nskips = [9999,999,99,9,0]
+
+    constrain_all_layers = [True,False]
+    nskips = [9999]
     job = 0
     for nskip in nskips:
         c['nskip'] = nskip
-        for constraint in constraints_hist:
-            c['network']['constraints'] = constraint
+        for constraint in constrain_all_layers:
+            c['network']['constrain_all_layers'] = constraint
             job += 1
             c['result_dir'] = "{:}/{:}".format(result_dir_base,job)
             results = main(c)
+    job += 1
+    c['result_dir'] = "{:}/{:}".format(result_dir_base, job)
+    c['network']['constraints'] = ''
+    results = main(c)
