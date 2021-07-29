@@ -7,11 +7,35 @@ from preprocess.train_force_and_energy_predictor import generate_FE_network
 
 def load_constraints(ctype,PU,masses=None,R=None,V=None,z=None,rscale=1,vscale=1,energy_predictor=None):
     if ctype == 'chain':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids))
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=None))
     elif ctype == 'triangle':
         constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=0.9608/rscale),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=0.9608/rscale,r2=1.5118/rscale))
     elif ctype == 'chaintriangle':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=fragids),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=None),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
+        # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
+    elif ctype == 'P':
+        constraints = torch.nn.Sequential(MomentumConstraints(PU.project, PU.uplift, masses))
+    elif ctype == 'EP':
+        force_predictor = generate_FE_network(natoms=z.shape[1])
+        force_predictor.load_state_dict(torch.load(energy_predictor, map_location=torch.device('cpu')))
+        force_predictor.eval()
+        constraints = torch.nn.Sequential(EnergyMomentumConstraints(PU.project, PU.uplift,force_predictor, masses,rescale_r=rscale,rescale_v=vscale))
+        constraints[0].fix_reference_energy(R,V,z)
+    elif ctype == '':
+        constraints = None
+    else:
+        raise NotImplementedError("The constraint chosen has not been implemented.")
+    return constraints
+
+
+
+def load_constraints_protein(ctype,PU,masses=None,R=None,V=None,z=None,rscale=1,vscale=1,energy_predictor=None):
+    if ctype == 'chain':
+        constraints = torch.nn.Sequential(PointChain_pos_only(PU.project,PU.uplift,3.8, fragmentid=None))
+    elif ctype == 'triangle':
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=0.9608/rscale),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=0.9608/rscale,r2=1.5118/rscale))
+    elif ctype == 'chaintriangle':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=None),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
         # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
     elif ctype == 'P':
         constraints = torch.nn.Sequential(MomentumConstraints(PU.project, PU.uplift, masses))
@@ -171,15 +195,118 @@ class PointToSphereSphereIntersection(nn.Module):
         return data
 
 
+class PointChain_pos_only(nn.Module):
+    def __init__(self,project,uplift,distance,fragmentid=None):
+        super(PointChain_pos_only, self).__init__()
+        self.project = project
+        self.uplift = uplift
+        self.d = distance
+        if fragmentid is not None:
+            self.fragid = fragmentid
+            self.fragid_unique = torch.unique(fragmentid)
+        else:
+            self.fragid = -1
+            self.fragid_unique = [-1]
+        return
+
+    def diff(self,x):
+        return x[:,1:] - x[:,:-1]
+
+    def diffT(self,dx):
+        x = dx[:,:-1] - dx[:,1:]
+        x0 = -dx[:,:1]
+        x1 = dx[:,-1:]
+        X = torch.cat([x0,x,x1],dim=1)
+        return X
+
+    def constraint(self,x):
+        e = torch.ones((3,1),device=x.device)
+        dx = self.diff(x)
+        c = self.d/torch.sqrt((dx**2)@e) - 1
+        return c
+
+    def dConstraintT(self,c,x):
+        dx = self.diff(x)
+        drn2 = torch.sum(dx**2,dim=2,keepdim=True)
+        lam0 = self.d*drn2[:,:1]**(-3/2)*c[:,0]*dx[:,:1]
+        lam1 = -self.d*drn2[:,-1:]**(-3/2)*c[:,-1]*dx[:,-1:]
+        lam01 = -self.d*drn2[:,:-1]**(-3/2)*c[:,:-1]*dx[:,:-1] + self.d*drn2[:,1:]**(-3/2)*c[:,1:]*dx[:,1:]
+        lam = torch.cat([lam0,lam01,lam1],dim=1)
+        return lam
+
+    def forward(self, data, n=10, debug=False, converged=1e-4):
+        y = data['y']
+        batch = data['batch']
+        for j in range(n):
+            x = self.project(y)
+            ndim = x.shape[-1]
+            nvec = ndim // 3
+            lam_x = torch.zeros_like(x)
+            nb = batch.max() + 1
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+            cnorm = 0
+            for fragi in self.fragid_unique:
+                if fragi != -1:
+                    idx = self.fragid == fragi
+                else:
+                    idx = r[0,:,0] == r[0,:,0]
+                ri = r[:,idx,:]
+                ria = ri[:, :,:3]
+                ci = self.constraint(ria)
+                lam_xia = self.dConstraintT(ci, ria)
+                lam_xi = lam_xia.repeat(1,1,nvec)
+                lam_x[idx,:ndim] = lam_xi
+                cnormi = torch.sum(ci**2)
+                cnorm = cnorm + cnormi
+            lam_y = self.uplift(lam_x.view(-1, ndim))
+            with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 #/ lam_y.norm()
+                lsiter = 0
+                while True:
+                    ytry = y - alpha * lam_y
+                    x = self.project(ytry)
+                    r = x[:, 0:ndim].view(nb, -1, ndim)
+                    ctry_norm = 0
+                    for fragi in self.fragid_unique:
+                        if fragi != -1:
+                            idx = self.fragid == fragi
+                        else:
+                            idx = r[0, :, 0] == r[0, :, 0]
+                        ri = r[:,idx,:]
+                        ria = ri[:, :, :3]
+                        ctry = self.constraint(ria)
+                        ctry_norm = ctry_norm + torch.sum(ctry**2)
+                    if ctry_norm < cnorm:
+                        break
+                    alpha = alpha / 2
+                    lsiter = lsiter + 1
+                    if lsiter > 10:
+                        break
+                if lsiter == 0 and ctry_norm > converged:
+                    alpha = alpha * 1.5
+            y = y - alpha * lam_y
+            if debug:
+                print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.4f} -> {ctry_norm.detach().cpu():2.4f}   ")
+            if ctry_norm < converged:
+                break
+        return {'y':y,'batch':batch}
+
+
+
 
 class PointChain(nn.Module):
-    def __init__(self,project,uplift,distance,fragmentid):
+    def __init__(self,project,uplift,distance,fragmentid=None):
         super(PointChain, self).__init__()
         self.project = project
         self.uplift = uplift
         self.d = distance
-        self.fragid = fragmentid
-        self.fragid_unique = torch.unique(fragmentid)
+        if fragmentid is not None:
+            self.fragid = fragmentid
+            self.fragid_unique = torch.unique(fragmentid)
+        else:
+            self.fragid = -1
+            self.fragid_unique = -1
         return
 
     def diff(self,x):
@@ -220,7 +347,10 @@ class PointChain(nn.Module):
             v = x[:, ndim:].view(nb, -1, ndim)
             cnorm = 0
             for fragi in self.fragid_unique:
-                idx = self.fragid == fragi
+                if fragi != -1:
+                    idx = self.fragid == fragi
+                else:
+                    idx = r[0,:,0] == r[0,:,0]
                 ri = r[:,idx,:]
                 ria = ri[:, :,:3]
                 ci = self.constraint(ria)
@@ -241,7 +371,10 @@ class PointChain(nn.Module):
                     v = x[:, ndim:].view(nb, -1, ndim)
                     ctry_norm = 0
                     for fragi in self.fragid_unique:
-                        idx = self.fragid == fragi
+                        if fragi != -1:
+                            idx = self.fragid == fragi
+                        else:
+                            idx = r[0, :, 0] == r[0, :, 0]
                         ri = r[:,idx,:]
                         ria = ri[:, :, :3]
                         ctry = self.constraint(ria)

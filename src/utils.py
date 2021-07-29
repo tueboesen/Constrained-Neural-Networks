@@ -302,6 +302,55 @@ def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.564097647
 
 
 
+def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_size=1, debug=False, viz=False, epoch=0):
+    aloss = 0.0
+    aloss_distogram_rel = 0.0
+    aloss_distogram = 0.0
+    aloss_coords = 0.0
+    if train:
+        model.train()
+    else:
+        model.eval()
+    t3 = time.time()
+    for i, (seq,batch, coords, M, edge_index,edge_index_all) in enumerate(dataloader):
+        nb = len(torch.unique(batch))
+        edge_src = edge_index[0]
+        edge_dst = edge_index[1]
+        edge_src_all = edge_index_all[0]
+        edge_dst_all = edge_index_all[1]
+
+        optimizer.zero_grad()
+        coords_init = 2*torch.ones_like(coords)
+        coords_init = torch.cumsum(coords_init,dim=0)
+        coords_pred = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
+        dd = coords[1:, :3] - coords[:-1, :3]
+        dn = torch.norm(dd,p=2,dim=1)
+        dd2 = coords_init[1:,:3] - coords_init[:-1,:3]
+        dn2 = torch.norm(dd2,p=2,dim=1)
+
+        dRPred = torch.norm(coords_pred[edge_src_all] - coords_pred[edge_dst_all],p=2,dim=1)
+        dRTrue = torch.norm(coords[edge_src_all] - coords[edge_dst_all],p=2,dim=1)
+        lossD = F.mse_loss(dRPred,dRTrue)/nb
+        lossD_rel = lossD / F.mse_loss(dRTrue * 0, dRTrue)
+
+        t2 = time.time()
+        # with profiler.record_function("backward"):
+        if train:
+            lossD.backward()
+            optimizer.step()
+        aloss += lossD.detach()
+        aloss_distogram_rel += lossD_rel.detach()
+        if (i + 1) * batch_size >= max_samples:
+            break
+        # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+
+    aloss /= (i + 1)
+    aloss_distogram_rel /= (i + 1)
+
+    return aloss, aloss_distogram_rel
+
+
+
 def run_network_covid_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=15, debug=True):
     aloss = 0.0
     alossr = 0.0

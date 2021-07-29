@@ -149,7 +149,7 @@ class network_simple(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=5,constraints=None):
+    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,constraints=None):
         super().__init__()
 
         self.nlayers = nlayers
@@ -190,6 +190,8 @@ class network_simple(nn.Module):
             x = self.PU.project(y)
 
         return x
+
+
 
 
 class nn_distance_constraints(nn.Module):
