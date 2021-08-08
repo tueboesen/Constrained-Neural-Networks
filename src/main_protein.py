@@ -56,7 +56,7 @@ def main_protein(c):
         PU = ProjectUplift(cn['node_dim_in'], cn['node_dim_latent'])
 
     ds = dataloader_train.dataset
-    constraints = load_constraints_protein(cn['constraints'], PU)
+    constraints = load_constraints_protein(cn['constraints'], PU,device=device)
 
     if c['network_type'] == 'EQ':
         model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
@@ -64,7 +64,7 @@ def main_protein(c):
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                     num_nodes=20, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, constrain_all_layers=cn['constrain_all_layers'], PU=PU, particles_pr_node=3)
     elif c['network_type'] == 'mim':
-        model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], PU=PU, constraints=constraints)
+        model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], PU=PU, constraints=constraints,constrain_all_layers=cn['constrain_all_layers'])
     else:
         raise NotImplementedError("Network type is not implemented")
     model.to(device)
@@ -106,41 +106,24 @@ def main_protein(c):
             aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
         LOG.info(f'{epoch:2d}  Loss(train): {aloss_t:.2e}  Loss_rel(train): {aloss_rel_t:.2e}  Loss(val): {aloss_v:.2e}  Loss_rel(val): {aloss_rel_v:.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  Lr: {lr:2.2e} ')
-        # if torch.isnan(aloss_t):
-        #     LOG.info(f'nan detected, reloading model, resetting epoch and lowering lr')
-        #     model.load_state_dict(torch.load(model_name_last))
-        #     epoch -= 1
-        #     for g in optimizer.param_groups:
-        #         g['lr'] *= 0.8
-        #         lr = g['lr']
-        #     epochs_since_best = 0
-        #     optimizer.load_state_dict(torch.load(optimizer_name_last))
-        # else:
-        #     torch.save(model.state_dict(), f"{model_name_last}")
-        #     torch.save(optimizer.state_dict(),f"{optimizer_name_last}")
+        if aloss_v < alossBest:
+            alossBest = aloss_v
+            # epochs_since_best = 0
+            torch.save(model.state_dict(), f"{model_name_best}")
+        else:
+            epochs_since_best += 1
+            if epochs_since_best >= c['epochs_for_lr_adjustment']:
+                for g in optimizer.param_groups:
+                    g['lr'] *= 0.8
+                    lr = g['lr']
+                epochs_since_best = 0
+
         epoch += 1
 
     torch.save(model.state_dict(), f"{model_name}")
     if c['use_test']:
         model.load_state_dict(torch.load(model_name_best)) #TODO UNCLEAR THIS
-        aloss, alossr, alossv, alossD, alossDr, alossDv, MAEr, MAEv, P_mean, E_rel_diff = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'])
-        LOG.info(f'Loss: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {P_mean:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e} E_rel_diff{E_rel_diff:.2e}')
-        results = {'loss': aloss,
-            'loss_rel': aloss,
-            'loss_D': alossD,
-            'loss_Dr': alossDr,
-            'loss_Dv': alossDv,
-            'loss_r': alossr,
-            'loss_v': alossv,
-            'momentum': P_mean,
-            'mean_absolute_error_r': MAEr,
-            'mean_absolute_error_r': MAEv,
-            'E_rel_diff': E_rel_diff,
-                   }
-        output = {"config":c,
-               'results': results,
-               }
-        np.save("{:}/test_results".format(c['result_dir']),output)
-
+        aloss, aloss_rel = use_proteinmodel(model, dataloader_test, train=False, max_samples=999999,optimizer=optimizer, batch_size=c['batch_size'])
+        LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss_rel:.2e}')
     close_logger(LOG)
     return results

@@ -26,20 +26,21 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 10000
+    args.n_train = 1000
     args.n_val = 1000
-    args.batch_size = 20
+    args.batch_size = 80
     args.n_input_samples = 1
-    args.nskip = 9999
-    args.epochs_for_lr_adjustment = 5
+    args.nskip = 999
+    args.epochs_for_lr_adjustment = 50
     args.use_val = True
     args.use_test = True
     args.debug = False
+    args.viz = True
     args.lr = 1e-2
     args.seed = 123545
-    args.epochs = 50
-    args.network_type = 'EQ'
-    args.loss = 'EQ'
+    args.epochs = 1000
+    args.network_type = 'mim'
+    args.loss = 'distogram'
     args.train_idx = None
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     # args.data = './../../../data/MD/argon/argon.npz'
@@ -63,13 +64,15 @@ if __name__ == '__main__':
         }
     elif args.network_type.lower() == 'mim':
         args.network = {
-            'node_dim_in': 6,
+            'node_dim_in': 18,
             'node_attr_dim_in': 1,
-            'node_dim_latent': 60,
+            'node_dim_latent': 90,
             'nlayers': 6,
             'max_radius': 15,
             'constraints': '',
         }
+    else:
+        raise NotImplementedError("Network type not supported")
 
 
     args.basefolder = os.path.basename(__file__).split(".")[0]
@@ -99,7 +102,7 @@ if __name__ == '__main__':
 
 
 
-    constrain_all_layers = [True,False]
+    constrain_all_layers = [True]
     nskips = [9999]
     job = 0
     for nskip in nskips:

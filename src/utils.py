@@ -254,13 +254,13 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         axes.set_ylabel("y")
         axes.set_zlabel("z")
 
-        rO_in = Rin[0, :, 0:3] * rscale.cpu()
-        rH1_in = Rin[0, :, 3:6] * rscale.cpu()
-        rH2_in = Rin[0, :, 6:9] * rscale.cpu()
+        rO_in = (Rin[0, :, 0:3] * rscale).cpu()
+        rH1_in = (Rin[0, :, 3:6] * rscale).cpu()
+        rH2_in = (Rin[0, :, 6:9] * rscale).cpu()
 
-        rO_out = Rout[0, :, 0:3] * rscale.cpu()
-        rH1_out = Rout[0, :, 3:6] * rscale.cpu()
-        rH2_out = Rout[0, :, 6:9] * rscale.cpu()
+        rO_out = (Rout[0, :, 0:3] * rscale).cpu()
+        rH1_out = (Rout[0, :, 3:6] * rscale).cpu()
+        rH2_out = (Rout[0, :, 6:9] * rscale).cpu()
 
         axes.scatter(rO_out[:, 0], rO_out[:, 1], rO_out[:, 2], s=100, c='blue', depthshade=True)
         axes.scatter(rH1_out[:, 0], rH1_out[:, 1], rH1_out[:, 2], s=100, c='red', depthshade=True)
@@ -313,6 +313,9 @@ def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_
         model.eval()
     t3 = time.time()
     for i, (seq,batch, coords, M, edge_index,edge_index_all) in enumerate(dataloader):
+        if torch.sum(M) < 5 or len(edge_index_all[0]) == 0:
+            continue
+
         nb = len(torch.unique(batch))
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
@@ -320,7 +323,8 @@ def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_
         edge_dst_all = edge_index_all[1]
 
         optimizer.zero_grad()
-        coords_init = 2*torch.ones_like(coords)
+        coords_init = torch.ones_like(coords)
+        coords_init[::2,::3] += 0.1
         coords_init = torch.cumsum(coords_init,dim=0)
         coords_pred = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
         dd = coords[1:, :3] - coords[:-1, :3]
@@ -343,6 +347,8 @@ def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_
         if (i + 1) * batch_size >= max_samples:
             break
         # print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        if torch.isnan(aloss):
+            print("problems")
 
     aloss /= (i + 1)
     aloss_distogram_rel /= (i + 1)

@@ -27,18 +27,18 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 5
-    args.n_val = 5
+    args.n_train = 1000
+    args.n_val = 100
     args.batch_size = 1
     args.n_input_samples = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 5
+    args.epochs_for_lr_adjustment = 50
     args.use_val = True
-    args.use_test = False
+    args.use_test = True
     args.debug = False
     args.lr = 1e-3
     args.seed = 123545
-    args.epochs = 5000
+    args.epochs = 100
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
@@ -57,16 +57,16 @@ if __name__ == '__main__':
             'max_atom_types': 20,
             'radial_neurons': [48],
             'num_neighbors': -1,
-            'constraints': 'triangle',
+            'constraints': '',
         }
     elif args.network_type.lower() == 'mim':
         args.network = {
             'node_dim_in': 9,
             'node_attr_dim_in': 1,
-            'node_dim_latent': 60,
-            'nlayers': 6,
+            'node_dim_latent': 120,
+            'nlayers': 9,
             'max_radius': 15,
-            'constraints': 'chain',
+            # 'constraints': 'chaintriangle',
         }
 
 
@@ -79,18 +79,22 @@ if __name__ == '__main__':
         date=datetime.now(),
     )
 
-    constrain_all_layers = [True]
+    constrain_all_layers = [True,False]
+    constraints = ['chain','triangle','chaintriangle']
     nskips = [9999]
     job = 0
-    for nskip in nskips:
-        c['nskip'] = nskip
-        for constraint in constrain_all_layers:
-            c['network']['constrain_all_layers'] = constraint
-            job += 1
-            c['result_dir'] = "{:}/{:}".format(result_dir_base,job)
-            results = main_protein(c)
     job += 1
+    c['network']['constrain_all_layers'] = True
     c['result_dir'] = "{:}/{:}".format(result_dir_base, job)
     c['network']['constraints'] = ''
     results = main_protein(c)
+    for nskip in nskips:
+        c['nskip'] = nskip
+        for constrain_all_layersi in constrain_all_layers:
+            c['network']['constrain_all_layers'] = constrain_all_layersi
+            for constraint in constraints:
+                c['network']['constraints'] = constraint
+                job += 1
+                c['result_dir'] = "{:}/{:}".format(result_dir_base,job)
+                results = main_protein(c)
 

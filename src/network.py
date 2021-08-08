@@ -149,7 +149,7 @@ class network_simple(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,constraints=None):
+    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,constraints=None,constrain_all_layers=True):
         super().__init__()
 
         self.nlayers = nlayers
@@ -158,6 +158,7 @@ class network_simple(nn.Module):
         self.max_radius = max_radius
         self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
         self.constraints = constraints
+        self.constrain_all_layers = constrain_all_layers
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -184,10 +185,13 @@ class network_simple(nn.Module):
             y = 2*y - y_old - self.h[i]**2 * y_new
             y_old = tmp
 
-            if self.constraints is not None:
-                data = self.constraints({'y':y,'batch':batch,'z':node_attr})
+            if self.constraints is not None and self.constrain_all_layers is True:
+                data = self.constraints({'y': y, 'batch': batch,'z':node_attr})
                 y = data['y']
             x = self.PU.project(y)
+        if self.constraints is not None and self.constrain_all_layers is False:
+            data = self.constraints({'x': x, 'batch': batch,'z':node_attr})
+            x = data['x']
 
         return x
 

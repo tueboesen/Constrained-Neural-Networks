@@ -340,18 +340,19 @@ def compute_all_connections(n,mask=None, include_self_connections=False, device=
 class Dataset_protein(data.Dataset):
     def __init__(self, seq, rCa,rCb,rN, device):
         self.scale = 1e1
-        self.seq = seq
-        self.rCa = rCa
-        self.rCb = rCb
-        self.rN = rN
+        self.seq = [torch.from_numpy(seqi).to(device=device) for seqi in seq]
+        # self.seq = torch.from_numpy(seq).to(device=device)
+        self.rCa = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCa]
+        self.rCb = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCb]
+        self.rN = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rN]
         self.device = device
         return
 
     def __getitem__(self, index):
-        seq = torch.from_numpy(self.seq[index])
-        rCa = torch.from_numpy(self.rCa[index])*self.scale #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
-        rCb = torch.from_numpy(self.rCb[index])*self.scale #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
-        rN = torch.from_numpy(self.rN[index])*self.scale #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
+        seq = self.seq[index]
+        rCa = self.rCa[index] #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
+        rCb = self.rCb[index] #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
+        rN = self.rN[index] #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
         m1 = rCa[:,0] != 0.0
         m2 = rCb[:,0] != 0.0
         m3 = rN[:,0] != 0.0
@@ -362,7 +363,7 @@ class Dataset_protein(data.Dataset):
         rCa_init[:,0] = torch.arange(rCa.shape[0])
         coords_init = torch.cat([rCa_init,rCa_init,rCa_init],dim=-1)
 
-        return seq.to(device=self.device), coords.to(device=self.device,dtype=torch.get_default_dtype()),coords_init.to(device=self.device,dtype=torch.get_default_dtype()), M.to(device=self.device)
+        return seq, coords,coords_init, M
 
     def __len__(self):
         return len(self.seq)
@@ -383,7 +384,7 @@ def compute_spherical_coords_init(n,nn_dist):
     return coords_init.to(dtype=torch.get_default_dtype())
 
 
-def load_data_protein(path,device,n_train,n_val,use_val,use_test,batch_size, shuffle=True):
+def load_data_protein(path,device,n_train,n_val,use_val,use_test,batch_size, shuffle=False):
 
     # load training data
     # Aind = torch.load(path + '/AminoAcidIdx.pt')
@@ -416,20 +417,29 @@ def load_data_protein(path,device,n_train,n_val,use_val,use_test,batch_size, shu
     rCa = data['rCa']
     rCb = data['rCb']
     rN = data['rN']
+    ndata = len(seq)
+    print('Number of datapoints={:}'.format(ndata))
+    ndata_rand = 0 + np.arange(ndata)
+    if shuffle:
+        np.random.shuffle(ndata_rand)
+    train_idx = ndata_rand[:n_train]
+    val_idx = ndata_rand[n_train:n_train + n_val]
+    test_idx = ndata_rand[n_train + n_val:]
+
 
 
     collator = GraphCollate()
-    dataset_train = Dataset_protein(seq[:n_train],rCa[:n_train],rCb[:n_train],rN[:n_train],device=device)
+    dataset_train = Dataset_protein(seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],device=device)
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
 
     if use_val:
-        dataset_val = Dataset_protein(seq[n_train:n_train+n_val], rCa[n_train:n_train+n_val], rCb[n_train:n_train+n_val], rN[n_train:n_train+n_val], device=device)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
+        dataset_val = Dataset_protein(seq[val_idx], rCa[val_idx], rCb[val_idx], rN[val_idx], device=device)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collator)
     else:
         dataloader_val = None
 
     if use_test:
-        dataset_test = Dataset_protein(AindTest,YobsTest,MSKTest,STest,device=device)
+        dataset_test = Dataset_protein(seq[test_idx], rCa[test_idx], rCb[test_idx], rN[test_idx], device=device)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collator)
     else:
         dataloader_test = None
