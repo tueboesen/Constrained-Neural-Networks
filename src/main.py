@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import math
 import torch.autograd.profiler as profiler
-
+import pandas as pd
 from torch.utils.data import DataLoader
 from e3nn import o3
 
@@ -91,6 +91,8 @@ def main(c):
         vizdir = "{:}/figures/".format(c['result_dir'])
         os.makedirs(vizdir)
 
+    csv_file = f"{c['result_dir']}/training.csv"
+
     while epoch < c['epochs']:
         if c['viz']:
             viz = "{:}{:}".format(vizdir, epoch)
@@ -105,6 +107,23 @@ def main(c):
         else:
             aloss_v, alossr_v, alossv_v, alossD_v, alossDr_v, alossDv_v, MAEr_v,MAEv_v, P_mean_v, E_rel_diff_v = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
         t3 = time.time()
+
+        result = pd.DataFrame({
+        'epoch': [epoch],
+        'loss_t': [aloss_t.numpy()],
+        'loss_v': [aloss_v.numpy()],
+        'lossD_t': [alossD_t.numpy()],
+        'lossD_v': [alossD_v.numpy()]},dtype=np.float32)
+        result = result.astype({'epoch': np.int64})
+        if epoch == 0:
+            aresults = result
+            aresults.iloc[-1:].to_csv(csv_file, header=True, sep='\t')
+        else:
+            aresults = aresults.append(result, ignore_index=True)
+            aresults.iloc[-1:].to_csv(csv_file, mode='a', header=False, sep='\t')
+
+            # aresults = aresults.append(result, ignore_index=True)
+            # aresults.iloc[-1:].to_csv(csv_file, mode='a', header=False, sep='\t')
 
         if c['loss'] == 'EQ':
             loss = aloss_v
@@ -147,22 +166,28 @@ def main(c):
         model.load_state_dict(torch.load(model_name_best)) #TODO UNCLEAR THIS
         aloss, alossr, alossv, alossD, alossDr, alossDv, MAEr, MAEv, P_mean, E_rel_diff = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'])
         LOG.info(f'Loss: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {P_mean:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e} E_rel_diff{E_rel_diff:.2e}')
-        results = {'loss': aloss,
-            'loss_rel': aloss,
-            'loss_D': alossD,
-            'loss_Dr': alossDr,
-            'loss_Dv': alossDv,
-            'loss_r': alossr,
-            'loss_v': alossv,
-            'momentum': P_mean,
-            'mean_absolute_error_r': MAEr,
-            'mean_absolute_error_r': MAEv,
-            'E_rel_diff': E_rel_diff,
-                   }
-        output = {"config":c,
-               'results': results,
-               }
-        np.save("{:}/test_results".format(c['result_dir']),output)
 
     close_logger(LOG)
-    return results
+    fig = plt.figure(num=2)
+    plt.plot(aresults['epoch'],aresults['loss_t'],label='training')
+    plt.plot(aresults['epoch'],aresults['loss_v'],label='validation')
+    plt.ylim(0,1)
+    plt.xlabel('epochs')
+    plt.ylabel('loss')
+    plt.legend()
+    # plt.show()
+    plt.savefig(f"{c['result_dir']}/loss.png")
+
+    plt.clf()
+    plt.plot(aresults['epoch'],aresults['lossD_t'],label='training')
+    plt.plot(aresults['epoch'],aresults['lossD_v'],label='validation')
+    plt.ylim(0,1)
+    plt.xlabel('epochs')
+    plt.ylabel('lossD')
+    plt.legend()
+    # plt.show()
+    plt.savefig(f"{c['result_dir']}/lossD.png")
+    # aresults.plot(x='epoch',y='loss_v')
+    # aresults.plot(kind='scatter', x='epoch', y='loss_t', color='red')
+    # aresults.plot(kind='line', x='epoch', y='loss_t', color='red')
+    return aresults

@@ -28,21 +28,21 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.n_train = 2
-    args.n_val = 100
+    args.n_val = 2
     args.batch_size = 2
     args.n_input_samples = 1
     args.nskip = 9999
     args.train_idx = None
     args.epochs_for_lr_adjustment = 3
     args.use_val = True
-    args.use_test = True
+    args.use_test = False
     args.debug = False
     args.viz = True
     args.lr = 5e-3
     args.seed = 123545
     args.loss = 'EQ'
     args.network_type = 'EQ' #EQ or mim
-    args.epochs = 1000
+    args.epochs = 10
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     # args.data = './../../../data/MD/argon/argon.npz'
     args.data = './../../../data/MD/water_jones/water.npz'
