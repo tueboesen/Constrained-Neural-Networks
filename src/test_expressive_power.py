@@ -33,13 +33,13 @@ if __name__ == '__main__':
     args.batch_size = 1
     args.n_input_samples = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 3
+    args.epochs_for_lr_adjustment = 2
     args.use_val = False
     args.use_test = False
     args.debug = False
     args.lr = 1e-3
     args.seed = 133548
-    args.epochs = 50
+    args.epochs = 20
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None

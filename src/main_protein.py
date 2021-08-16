@@ -139,9 +139,9 @@ def main_protein(c,dataloader_train=None,dataloader_val=None,dataloader_test=Non
         epoch += 1
 
     torch.save(model.state_dict(), f"{model_name}")
-    if c['use_test']:
+    if True: #c['use_test']:
         model.load_state_dict(torch.load(model_name_best)) #TODO UNCLEAR THIS
-        aloss, aloss_rel = use_proteinmodel(model, dataloader_test, train=False, max_samples=999999,optimizer=optimizer, batch_size=c['batch_size'],reg=reg)
+        aloss, aloss_rel = use_proteinmodel(model, dataloader_train, train=False, max_samples=999999,optimizer=optimizer, batch_size=c['batch_size'],reg=reg)
         LOG.info(f'Loss: {aloss:.2e}  Loss_rel: {aloss_rel:.2e}')
     close_logger(LOG)
     fig = plt.figure(num=2)
