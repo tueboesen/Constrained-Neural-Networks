@@ -26,7 +26,7 @@ from src.project_uplift import ProjectUpliftEQ, ProjectUplift
 from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network_eq, run_network_e3, atomic_masses, Distogram, LJ_potential
 
 
-def main(c):
+def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None):
     cn = c['network']
     fix_seed(c['seed'])  # Set a seed, so we make reproducible results.
 
@@ -48,7 +48,8 @@ def main(c):
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # device='cpu'
     # load training data
-    dataloader_train, dataloader_val, dataloader_test = load_data(c['data'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'])
+    if dataloader_train is None:
+        dataloader_train, dataloader_val, dataloader_test = load_data(c['data'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'])
 
     if c['network_type'] == 'EQ':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
@@ -110,10 +111,10 @@ def main(c):
 
         result = pd.DataFrame({
         'epoch': [epoch],
-        'loss_t': [aloss_t.numpy()],
-        'loss_v': [aloss_v.numpy()],
-        'lossD_t': [alossD_t.numpy()],
-        'lossD_v': [alossD_v.numpy()]},dtype=np.float32)
+        'loss_t': [aloss_t.cpu().numpy()],
+        'loss_v': [aloss_v.cpu().numpy()],
+        'lossD_t': [alossD_t.cpu().numpy()],
+        'lossD_v': [alossD_v.cpu().numpy()]},dtype=np.float32)
         result = result.astype({'epoch': np.int64})
         if epoch == 0:
             aresults = result
@@ -169,6 +170,7 @@ def main(c):
 
     close_logger(LOG)
     fig = plt.figure(num=2)
+    plt.clf()
     plt.plot(aresults['epoch'],aresults['loss_t'],label='training')
     plt.plot(aresults['epoch'],aresults['loss_v'],label='validation')
     plt.ylim(0,1)
@@ -190,4 +192,4 @@ def main(c):
     # aresults.plot(x='epoch',y='loss_v')
     # aresults.plot(kind='scatter', x='epoch', y='loss_t', color='red')
     # aresults.plot(kind='line', x='epoch', y='loss_t', color='red')
-    return aresults
+    return aresults, dataloader_train, dataloader_val, dataloader_test

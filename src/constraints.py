@@ -30,18 +30,18 @@ def load_constraints(ctype,PU,masses=None,R=None,V=None,z=None,rscale=1,vscale=1
 
 
 
-def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rscale=1,vscale=1,energy_predictor=None):
+def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rscale=1,vscale=1,energy_predictor=None, reg=False):
     dat = np.load('./../results/protein_stat.npz')
     rnn = (torch.from_numpy(dat['dnn']) * 10).to(device=device,dtype=torch.get_default_dtype())
     r = (torch.from_numpy(dat['dab']) * 10).to(device=device,dtype=torch.get_default_dtype())
     r1 = (torch.from_numpy(dat['dan']) * 10).to(device=device,dtype=torch.get_default_dtype())
     r2 = (torch.from_numpy(dat['dbn']) * 10).to(device=device,dtype=torch.get_default_dtype())
     if ctype == 'chain':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True))
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True,reg=reg))
     elif ctype == 'triangle':
-        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=r/rscale,pos_only=True),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=r1/rscale,r2=r2/rscale,pos_only=True))
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=r/rscale,pos_only=True,reg=reg),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=r1/rscale,r2=r2/rscale,pos_only=True,reg=reg))
     elif ctype == 'chaintriangle':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True),PointToPoint(PU.project,PU.uplift,r=r/rscale,pos_only=True),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=r1/rscale,r2=r2/rscale,pos_only=True))
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True,reg=reg),PointToPoint(PU.project,PU.uplift,r=r/rscale,pos_only=True,reg=reg),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=r1/rscale,r2=r2/rscale,pos_only=True,reg=reg))
         # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
     elif ctype == 'P':
         constraints = torch.nn.Sequential(MomentumConstraints(PU.project, PU.uplift, masses))
@@ -58,17 +58,17 @@ def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rs
     return constraints
 
 class PointToPoint(nn.Module):
-    def __init__(self,project,uplift,r,pos_only=False):
+    def __init__(self,project,uplift,r,pos_only=False, reg=False):
         super(PointToPoint, self).__init__()
         self.r = r
         self.project = project
         self.uplift = uplift
         self.pos_only = pos_only
-
+        self.reg = reg
         return
 
     def constraint(self,p1,p2,z):
-        if isinstance(self.r,float):
+        if self.r.ndim==0:
             r = self.r
         else:
             r = self.r[z]
@@ -133,6 +133,18 @@ class PointToPoint(nn.Module):
 
 
     def forward(self, data, n=10, debug=True, converged=1e-4):
+        if self.reg:
+            x = data['x']
+            z = data['z']
+            if 'c' in data:
+                c = data['c']
+            else:
+                c = 0
+            r = x.view(1, -1, 9)
+            z2 = z.view(1, -1, 1)
+            lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6], z2)
+            c_new = torch.sum(lam_p2**2)
+            return {'x':x,'z': z, 'c':c+c_new}
         if 'x' in data:
             data = self.constrain_low_dim(data)
         else:
@@ -140,17 +152,18 @@ class PointToPoint(nn.Module):
         return data
 
 class PointToSphereSphereIntersection(nn.Module):
-    def __init__(self,project,uplift,r1,r2, pos_only=False):
+    def __init__(self,project,uplift,r1,r2, pos_only=False, reg=False):
         super(PointToSphereSphereIntersection, self).__init__()
         self.r1 = r1
         self.r2 = r2
         self.project = project
         self.uplift = uplift
         self.pos_only = pos_only
+        self.reg = reg
         return
 
     def constraint(self,p1,p2,p3,z):
-        if isinstance(self.r1, float):
+        if self.r1.ndim == 0:
             r1 = self.r1
             r2 = self.r2
         else:
@@ -230,6 +243,28 @@ class PointToSphereSphereIntersection(nn.Module):
         return {'y':y,'batch':batch, 'z':z}
 
     def forward(self, data, n=10, debug=True, converged=1e-4):
+        if self.reg:
+            x = data['x']
+            z = data['z']
+            if 'c' in data:
+                c = data['c']
+            else:
+                c = 0
+            r = x.view(1, -1, 9)
+            z2 = z.view(1, -1)
+            p1 = r[:, :, 0:3]
+            p2 = r[:, :, 3:6]
+            p3 = r[:, :, 6:9]
+            r1 = self.r1[z2]
+            r2 = self.r2[z2]
+
+            d23 = (p3 - p2).norm(dim=-1)
+            d13 = (p3 - p1).norm(dim=-1)
+
+            c23 = torch.sum((d23 - r2)**2)
+            c13 = torch.sum((d13 - r1)**2)
+            c_new = c23 + c13
+            return {'x':x,'z': z, 'c':c+c_new}
         if 'x' in data:
             data = self.constrain_low_dim(data)
         else:
@@ -240,12 +275,13 @@ class PointToSphereSphereIntersection(nn.Module):
 
 
 class PointChain(nn.Module):
-    def __init__(self,project,uplift,distance,fragmentid=None,pos_only=False):
+    def __init__(self,project,uplift,distance,fragmentid=None,pos_only=False, reg=False):
         super(PointChain, self).__init__()
         self.project = project
         self.uplift = uplift
         self.d = distance
         self.pos_only = pos_only
+        self.reg = reg
         if fragmentid is not None:
             self.fragid = fragmentid
             self.fragid_unique = torch.unique(fragmentid)
@@ -265,7 +301,7 @@ class PointChain(nn.Module):
         return X
 
     def constraint(self,x,z):
-        if isinstance(self.d, float):
+        if self.d.ndim==0:
             d = self.d
         else:
             d = self.d[z[:, :-1], z[:, 1:]]
@@ -281,7 +317,7 @@ class PointChain(nn.Module):
          C2 = self.diffT(C)
          return 2 * C2
 
-    def constrain_high_dim(self, data, n=1000, debug=False, converged=1e-4):
+    def constrain_high_dim(self, data, n=10, debug=False, converged=1e-9):
         y = data['y']
         batch = data['batch']
         z = data['z']
@@ -349,7 +385,7 @@ class PointChain(nn.Module):
         return {'y':y,'batch':batch, 'z': z}
 
 
-    def constrain_low_dim(self, data, n=1000, debug=False, converged=1e-4):
+    def constrain_low_dim(self, data, n=10, debug=False, converged=1e-9):
         x = data['x']
         batch = data['batch']
         z = data['z']
@@ -416,6 +452,18 @@ class PointChain(nn.Module):
 
 
     def forward(self, data, n=10, debug=True, converged=1e-4):
+        if self.reg:
+            x = data['x']
+            z = data['z']
+            if 'c' in data:
+                c = data['c']
+            else:
+                c = 0
+            z2 = z.view(1, -1, 1)
+            r = x[:, :3].view(1, -1, 3)
+            cc = self.constraint(r, z2)
+            c_new = torch.sum(torch.abs(cc))
+            return {'x':x,'z': z, 'c':c+c_new}
         if 'x' in data:
             data = self.constrain_low_dim(data)
         else:

@@ -41,7 +41,7 @@ class constrained_network(torch.nn.Module):
         embed_dim,
         max_atom_types,
         constraints=None,
-        constrain_all_layers=True,
+        constrain_method=None,
         PU=None,
         particles_pr_node = 1,
     ) -> None:
@@ -55,7 +55,7 @@ class constrained_network(torch.nn.Module):
         self.irreps_out = o3.Irreps(irreps_inout)
         self.irreps_edge_attr = o3.Irreps(irreps_inout)
         self.constraints = constraints
-        self.constrain_all_layers = constrain_all_layers
+        self.constrain_method = constrain_method
         self.PU = PU
         self.particles_pr_nodes = particles_pr_node
         if self.num_neighbors < 0:
@@ -149,11 +149,12 @@ class constrained_network(torch.nn.Module):
             tmp = y.clone()
             y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
             y_old = tmp
+            raise NotImplementedError("Fix constraints")
             if self.constraints is not None and self.constrain_all_layers is True:
-                data = self.constraints({'y':y,'batch':batch})
+                data = self.constraints({'y':y,'batch':batch,'z':node_attr})
                 y = data['y']
             x = self.PU.project(y)
         if self.constraints is not None and self.constrain_all_layers is False:
-            data = self.constraints({'x':x,'batch':batch})
+            data = self.constraints({'x':x,'batch':batch,'z':node_attr})
             x = data['x']
         return x

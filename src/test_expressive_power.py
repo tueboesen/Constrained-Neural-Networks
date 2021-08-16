@@ -28,18 +28,18 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 10000
-    args.n_val = 10
+    args.n_train = 39589
+    args.n_val = 0
     args.batch_size = 1
     args.n_input_samples = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 1
+    args.epochs_for_lr_adjustment = 3
     args.use_val = False
     args.use_test = False
     args.debug = False
     args.lr = 1e-3
     args.seed = 133548
-    args.epochs = 10
+    args.epochs = 50
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
@@ -65,7 +65,7 @@ if __name__ == '__main__':
             'node_dim_in': 9,
             'node_attr_dim_in': 1,
             'node_dim_latent': 60,
-            'nlayers': 1,
+            'nlayers': 3,
             'max_radius': 15,
             # 'constraints': 'chaintriangle',
         }
@@ -86,7 +86,7 @@ if __name__ == '__main__':
         dataloader_train = None
         dataloader_val = None
         dataloader_test = None
-        constrain_method = ['all_layers','end_layer','reg']
+        constrain_method = ['all_layers']
         # constrain_method = ['reg']
         constraints = ['chain','triangle','chaintriangle']
         nskips = [9999]

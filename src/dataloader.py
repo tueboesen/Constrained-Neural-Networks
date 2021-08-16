@@ -411,7 +411,7 @@ def load_data_protein(path,device,n_train,n_val,use_val,use_test,batch_size, shu
     #     MSKTest = torch.load(path + '/MasksTesting.pt')
     #     STest = torch.load(path + '/PSSMTesting.pt')
 
-    data = np.load(path + '/casp11.npz',allow_pickle=True)
+    data = np.load(path + '/casp11_sel.npz',allow_pickle=True)
 
     seq = data['seq']
     rCa = data['rCa']

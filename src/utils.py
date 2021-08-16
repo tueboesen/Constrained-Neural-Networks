@@ -302,7 +302,7 @@ def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.564097647
 
 
 
-def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_size=1, debug=False, viz=False, epoch=0):
+def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_size=1, reg=False):
     aloss = 0.0
     aloss_distogram_rel = 0.0
     aloss_distogram = 0.0
@@ -323,7 +323,7 @@ def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_
         edge_dst_all = edge_index_all[1]
 
         optimizer.zero_grad()
-        coords_init = torch.ones_like(coords)
+        coords_init = 0.001*torch.ones_like(coords)
         coords_init[::2,::3] += 0.1
         coords_init = torch.cumsum(coords_init,dim=0)
         coords_pred = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
@@ -339,8 +339,14 @@ def use_proteinmodel(model,dataloader,train,max_samples,optimizer, w=0.0, batch_
 
         t2 = time.time()
         # with profiler.record_function("backward"):
+        if reg:
+            con = model.constraints({'x': coords_pred, 'batch': batch,'z':seq})
+            R = con['c']
+            loss = lossD + R
+        else:
+            loss = lossD
         if train:
-            lossD.backward()
+            loss.backward()
             optimizer.step()
         aloss += lossD.detach()
         aloss_distogram_rel += lossD_rel.detach()
