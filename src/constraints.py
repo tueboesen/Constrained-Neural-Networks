@@ -57,6 +57,39 @@ def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rs
         raise NotImplementedError("The constraint chosen has not been implemented.")
     return constraints
 
+
+def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rscale=1,vscale=1,energy_predictor=None):
+    dat = np.load('./../results/protein_stat.npz')
+    rnn = (torch.from_numpy(dat['dnn']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    rmin = (torch.from_numpy(dat['dabmin']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    rmax = (torch.from_numpy(dat['dabmax']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    r1min = (torch.from_numpy(dat['danmin']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    r1max = (torch.from_numpy(dat['danmax']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    r2min = (torch.from_numpy(dat['dbnmin']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    r2max = (torch.from_numpy(dat['dbnmax']) * 10).to(device=device,dtype=torch.get_default_dtype())
+    if ctype == 'chain':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True))
+    elif ctype == 'triangle':
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,rmin=rmin/rscale,rmax=rmax/rscale,pos_only=True),PointToSphereSphereIntersection(PU.project,PU.uplift,r1min=r1min/rscale,r1max=r1max/rscale,r2min=r2min/rscale,r2max=r2max/rscale,pos_only=True))
+    elif ctype == 'chaintriangle':
+        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True),PointToPoint(PU.project,PU.uplift,r=r/rscale,pos_only=True),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=r1/rscale,r2=r2/rscale,pos_only=True))
+        # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
+    elif ctype == 'P':
+        constraints = torch.nn.Sequential(MomentumConstraints(PU.project, PU.uplift, masses))
+    elif ctype == 'EP':
+        force_predictor = generate_FE_network(natoms=z.shape[1])
+        force_predictor.load_state_dict(torch.load(energy_predictor, map_location=torch.device('cpu')))
+        force_predictor.eval()
+        constraints = torch.nn.Sequential(EnergyMomentumConstraints(PU.project, PU.uplift,force_predictor, masses,rescale_r=rscale,rescale_v=vscale))
+        constraints[0].fix_reference_energy(R,V,z)
+    elif ctype == '':
+        constraints = None
+    else:
+        raise NotImplementedError("The constraint chosen has not been implemented.")
+    return constraints
+
+
+
 class PointToPoint(nn.Module):
     def __init__(self,project,uplift,r,pos_only=False, reg=False):
         super(PointToPoint, self).__init__()
@@ -150,6 +183,102 @@ class PointToPoint(nn.Module):
         else:
             data = self.constrain_high_dim(data)
         return data
+#
+#
+# class PointToPointDomain(nn.Module):
+#     def __init__(self,project,uplift,rmin,rmax,pos_only=False):
+#         super(PointToPointDomain, self).__init__()
+#         self.rmin = rmin
+#         self.rmax = rmax
+#         self.project = project
+#         self.uplift = uplift
+#         self.pos_only = pos_only
+#
+#         return
+#
+#     def constraint(self,p1,p2,z):
+#         if isinstance(self.r,float):
+#             rmin = self.rmin
+#             rmax = self.rmax
+#         else:
+#             rmin = self.rmin[z]
+#             rmax = self.rmax[z]
+#         d = p2 - p1
+#         m1 = d < rmin
+#         m2 = d > rmax
+#         m = m1 + m2
+#         dn = d.norm(dim=-1)
+#         drmin = torch.abs(dn - rmin)
+#         drmax = torch.abs(dn - rmax)
+#         idx = drmin > drmax
+#         r = rmin.clone()
+#         r[idx] = rmax[idx]
+#         lam = d * (1 - (r / d.norm(dim=-1).unsqueeze(-1)))
+#         return lam*m
+#
+#     def constrain_high_dim(self,data,debug=False):
+#         batch = data['batch']
+#         z = data['z']
+#         nb = batch.max() + 1
+#         y = data['y']
+#         # for j in range(n):
+#         x = self.project(y)
+#         if self.pos_only:
+#             ndim = x.shape[-1]
+#         else:
+#             ndim = x.shape[-1] // 2
+#         nvec = ndim // 3
+#         lam_x = torch.zeros_like(x)
+#         nb = batch.max() + 1
+#         r = x[:, 0:ndim].view(nb, -1, ndim)
+#         z2 = z.view(nb,-1,1)
+#         # v = x[:, ndim:].view(nb, -1, ndim)
+#         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
+#         lam_x[:, 3:6] = lam_p2.view(-1,3)
+#         if self.pos_only:
+#             lam_y = self.uplift(lam_x.view(-1, ndim))
+#         else:
+#             lam_y = self.uplift(lam_x.view(-1, 2 * ndim))
+#         y = y - lam_y
+#         if debug:
+#             x = self.project(y)
+#             r = x[:, 0:ndim].view(nb, -1, ndim)
+#             lam_p2_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
+#             cnorm = torch.mean(torch.sum(lam_p2 ** 2, dim=-1))
+#             cnorm_after = torch.mean(torch.sum(lam_p2_after ** 2, dim=-1))
+#             print(f"{self._get_name()} constraint c: {cnorm:2.4f} -> {cnorm_after:2.4f}")
+#         return {'y': y, 'batch': batch, 'z': z}
+#
+#     def constrain_low_dim(self,data,debug=False):
+#         batch = data['batch']
+#         nb = batch.max() + 1
+#         x = data['x']
+#         z = data['z']
+#         if self.pos_only:
+#             ndim = x.shape[-1]
+#         else:
+#             ndim = x.shape[-1] // 2
+#         r = x[:, 0:ndim].view(nb, -1, ndim)
+#         z2 = z.view(nb,-1,1)
+#         # v = x[:, ndim:].view(nb, -1, ndim)
+#         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
+#         x[:,3:6] = x[:,3:6] - lam_p2.view(-1,3)
+#         if debug:
+#             r = x[:, 0:ndim].view(nb, -1, ndim)
+#             lam_p2_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
+#             cnorm = torch.mean(torch.sum(lam_p2 ** 2, dim=-1))
+#             cnorm_after = torch.mean(torch.sum(lam_p2_after ** 2, dim=-1))
+#             print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
+#         return {'x': x, 'batch': batch,'z':z}
+#
+#
+#     def forward(self, data, n=10, debug=True, converged=1e-4):
+#         if 'x' in data:
+#             data = self.constrain_low_dim(data)
+#         else:
+#             data = self.constrain_high_dim(data)
+#         return data
+
 
 class PointToSphereSphereIntersection(nn.Module):
     def __init__(self,project,uplift,r1,r2, pos_only=False, reg=False):
@@ -270,6 +399,123 @@ class PointToSphereSphereIntersection(nn.Module):
         else:
             data = self.constrain_high_dim(data)
         return data
+
+#
+# class PointToSphereSphereIntersectionDomain(nn.Module):
+#     def __init__(self,project,uplift,r1min,r1max,r2min,r2max, pos_only=False):
+#         super(PointToSphereSphereIntersectionDomain, self).__init__()
+#         self.r1min = r1min
+#         self.r1max = r1max
+#         self.r2min = r2min
+#         self.r2max = r2max
+#         self.project = project
+#         self.uplift = uplift
+#         self.pos_only = pos_only
+#         return
+#
+#     def constraint(self,p1,p2,p3,z):
+#         if isinstance(self.r1, float):
+#             r1min = self.r1min
+#             r1max = self.r1max
+#             r2min = self.r2min
+#             r2max = self.r2max
+#         else:
+#             r1min = self.r1min[z]
+#             r1max = self.r1max[z]
+#             r2min = self.r2min[z]
+#             r2max = self.r2max[z]
+#         d = p2 - p1
+#         dn = d.norm(dim=-1)
+#
+#         m1 = d < rmin
+#         m2 = d > rmax
+#         m = m1 + m2
+#         dn = d.norm(dim=-1)
+#         drmin = torch.abs(dn - rmin)
+#         drmax = torch.abs(dn - rmax)
+#         idx = drmin > drmax
+#         r = rmin.clone()
+#         r[idx] = rmax[idx]
+#
+#
+#
+#         a = 1 / (2 * dn) * torch.sqrt(4 * dn ** 2 * r2 ** 2 - (dn ** 2 - r1 ** 2 + r2 ** 2)**2)
+#
+#         cn = (dn ** 2 - r2 ** 2 + r1 ** 2) / (2 * dn)
+#         c = cn[:,:,None] / dn[:,:,None] * d + p1
+#         n = d / dn.unsqueeze(-1)
+#
+#         q = p3 - c - (torch.sum(n*(p3 - c),dim=-1,keepdim=True) * n)
+#         K = c + a.unsqueeze(-1) * q / q.norm(dim=-1).unsqueeze(-1)
+#
+#         lam_p3 = -(K - p3)
+#         return lam_p3
+#
+#     def constrain_low_dim(self,data,debug=False):
+#         x = data['x']
+#         batch = data['batch']
+#         z = data['z']
+#         if self.pos_only:
+#             ndim = x.shape[-1]
+#         else:
+#             ndim = x.shape[-1] // 2
+#         nvec = ndim // 3
+#         lam_x = torch.zeros_like(x)
+#         nb = batch.max() + 1
+#         r = x[:, 0:ndim].view(nb, -1, ndim)
+#         z2 = z.view(nb,-1)
+#         # v = x[:, ndim:].view(nb, -1, ndim)
+#
+#         lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9],z2)
+#         x[:,6:9] = x[:,6:9] - lam_p3.view(-1,3)
+#         if debug:
+#             r = x[:, 0:ndim].view(nb, -1, ndim)
+#             lam_p3_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6], r[:, :, 6:9],z2)
+#             cnorm = torch.mean(torch.sum(lam_p3 ** 2, dim=-1))
+#             cnorm_after = torch.mean(torch.sum(lam_p3_after ** 2, dim=-1))
+#             print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
+#         return {'x':x,'batch':batch,'z':z}
+#
+#     def constrain_high_dim(self,data,debug=False):
+#         y = data['y']
+#         z = data['z']
+#         batch = data['batch']
+#         # for j in range(n):
+#         x = self.project(y)
+#         if self.pos_only:
+#             ndim = x.shape[-1]
+#         else:
+#             ndim = x.shape[-1]//2
+#         nvec = ndim // 3
+#         lam_x = torch.zeros_like(x)
+#         nb = batch.max() + 1
+#         r = x[:, 0:ndim].view(nb, -1, ndim)
+#         z2 = z.view(nb,-1)
+#         # v = x[:, ndim:].view(nb, -1, ndim)
+#
+#         lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9],z2)
+#         lam_x[:,6:9] = lam_p3.view(-1,3)
+#         if self.pos_only:
+#             lam_y = self.uplift(lam_x.view(-1, ndim))
+#         else:
+#             lam_y = self.uplift(lam_x.view(-1, 2 * ndim))
+#         y = y - lam_y
+#         if debug:
+#             x = self.project(y)
+#             r = x[:, 0:ndim].view(nb, -1, ndim)
+#             v = x[:, ndim:].view(nb, -1, ndim)
+#             lam_p3_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6], r[:, :, 6:9],z2)
+#             cnorm = torch.mean(torch.sum(lam_p3 ** 2, dim=-1))
+#             cnorm_after = torch.mean(torch.sum(lam_p3_after ** 2, dim=-1))
+#             print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
+#         return {'y':y,'batch':batch, 'z':z}
+#
+#     def forward(self, data, n=10, debug=True, converged=1e-4):
+#         if 'x' in data:
+#             data = self.constrain_low_dim(data)
+#         else:
+#             data = self.constrain_high_dim(data)
+#         return data
 
 
 
