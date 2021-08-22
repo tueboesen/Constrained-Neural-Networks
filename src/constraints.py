@@ -10,7 +10,7 @@ def load_constraints(ctype,PU,masses=None,R=None,V=None,z=None,rscale=1,vscale=1
     if ctype == 'chain':
         constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=None))
     elif ctype == 'triangle':
-        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=0.9608/rscale),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=0.9608/rscale,r2=1.5118/rscale))
+        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,r=0.957/rscale),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=0.957/rscale,r2=1.513/rscale))
     elif ctype == 'chaintriangle':
         constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,3.8, fragmentid=None),PointToPoint(PU.project,PU.uplift,r=dist_abz.to(device)),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=dist_anz.to(device),r2=dist_bnz.to(device)))
         # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
