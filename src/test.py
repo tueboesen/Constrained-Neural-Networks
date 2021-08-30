@@ -79,6 +79,7 @@ if __name__ == '__main__':
         runner_name='run_protein_folding',
         date=datetime.now(),
     )
+    result_dir_base = 'E:/'
     seeds = [1234,1235,1236,1237,1238]
     # res_his = []
     # for ii,seed in enumerate(seeds):
@@ -113,7 +114,7 @@ if __name__ == '__main__':
     #                     res_his.append([])
     #                 res_his[job].append(results)
 
-    outputfile = "{:}/results_history.pickle".format(result_dir_base)
+    outputfile = "{:}results_history.pickle".format(result_dir_base)
     # with open(outputfile, "wb") as fp:  # Pickling
     #     pickle.dump(res_his, fp)
     with open(outputfile, "rb") as fp:   # Unpickling

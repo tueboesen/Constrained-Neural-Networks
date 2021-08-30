@@ -8,10 +8,81 @@ from torch_cluster import radius_graph
 
 from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset
 
+#
+# class DatasetEndStepPropagation(data.Dataset):
+#     def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1):
+#         self.Rin = Rin
+#         self.Rout = Rout
+#         self.z = z
+#         self.Vin = Vin
+#         self.Vout = Vout
+#         self.Fin = Fin
+#         self.Fout = Fout
+#         self.KEin = KEin
+#         self.KEout = KEout
+#         self.PEin = PEin
+#         self.PEout = PEout
+#         self.m = m
+#         self.device = device
+#         self.rscale = rscale
+#         self.vscale = vscale
+#         self.particles_pr_node = Rin.shape[-1] // 3
+#         if Fin is None or Fout is None:
+#             self.useF = False
+#         else:
+#             self.useF = True
+#         if KEin is None or KEout is None:
+#             self.useKE = False
+#         else:
+#             self.useKE = True
+#         if PEin is None or PEout is None:
+#             self.usePE = False
+#         else:
+#             self.usePE = True
+#         return
+#
+#     def __getitem__(self, index):
+#         device = self.device
+#         Rin = self.Rin[index].to(device=device)
+#         Rout = self.Rout[index].to(device=device)
+#         z = self.z[:,None].to(device=device)
+#         Vin = self.Vin[index].to(device=device)
+#         Vout = self.Vout[index].to(device=device)
+#         if self.m is not None:
+#             m = self.m[:,None]
+#         else:
+#             m = 0
+#         if self.useF:
+#             Fin = self.Fin[index].to(device=device)
+#             Fout = self.Fout[index].to(device=device)
+#         else:
+#             Fin = 0
+#             Fout = 0
+#         if self.useKE:
+#             KEin = self.KEin[index].to(device=device)
+#             KEout = self.KEout[index].to(device=device)
+#         else:
+#             KEin = 0
+#             KEout = 0
+#         if self.usePE:
+#             PEin = self.PEin[index].to(device=device)
+#             PEout = self.PEout[index].to(device=device)
+#         else:
+#             PEin = 0
+#             PEout = 0
+#         return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout,m
+#
+#     def __len__(self):
+#         return len(self.Rin)
+#
+#     def __repr__(self):
+#         return self.__class__.__name__ + ' (' + ')'
+#
+
 
 
 class DatasetFutureState(data.Dataset):
-    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1):
+    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1):
         self.Rin = Rin
         self.Rout = Rout
         self.z = z
@@ -27,6 +98,7 @@ class DatasetFutureState(data.Dataset):
         self.device = device
         self.rscale = rscale
         self.vscale = vscale
+        self.nskip = nskip
         self.particles_pr_node = Rin.shape[-1] // 3
         if Fin is None or Fout is None:
             self.useF = False
@@ -80,7 +152,7 @@ class DatasetFutureState(data.Dataset):
         return self.__class__.__name__ + ' (' + ')'
 
 
-def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True):
+def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
     data = np.load(file)
 
     if 'R' in data.files:
@@ -171,6 +243,7 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuff
     train_idx = ndata_rand[:n_train]
     val_idx = ndata_rand[n_train:n_train + n_val]
     test_idx = ndata_rand[n_train + n_val:]
+    endstep_idx = np.arange(10)
 
     Rin_train = Rin[train_idx]
     Rout_train = Rout[train_idx]
@@ -207,6 +280,20 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuff
         PEin_test = PEin[test_idx]
         PEout_test = PEout[test_idx]
 
+    if use_endstep:
+        nrepeats = 10
+        nsteps = int(np.ceil((Rin.shape[0]-nrepeats) / (nskip+1)))
+        Rin_endstep = torch.empty((nrepeats,nsteps,Rin.shape[-2],Rin.shape[-1]))
+        Rout_endstep = torch.empty((nrepeats,nsteps,Rout.shape[-2],Rout.shape[-1]))
+        Vin_endstep = torch.empty((nrepeats,nsteps,Rin.shape[-2],Rin.shape[-1]))
+        Vout_endstep = torch.empty((nrepeats,nsteps,Rout.shape[-2],Rout.shape[-1]))
+        for i in range(nrepeats):
+            endstep_idx = torch.arange(start=i, end=Rin.shape[0]-nrepeats, step=nskip+1,dtype=torch.int64)
+            Rin_endstep[i,:,:,:] = Rin[endstep_idx]
+            Rout_endstep[i,:,:,:] = Rout[endstep_idx]
+            Vin_endstep[i,:,:,:] = Vin[endstep_idx]
+            Vout_endstep[i,:,:,:] = Vout[endstep_idx]
+
     Fin = None
     Fout = None
     KEin = None
@@ -235,7 +322,12 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuff
     else:
         dataloader_test = None
 
-    return dataloader_train, dataloader_val, dataloader_test
+    if use_endstep:
+        dataset_endstep = DatasetFutureState(Rin_endstep, Rout_endstep, z, Vin_endstep, Vout_endstep, m=masses,device=device, rscale=Rscale, vscale=Vscale,nskip=nskip)
+        dataloader_endstep = DataLoader(dataset_endstep, batch_size=1, shuffle=False, drop_last=False)
+
+
+    return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
 
 
 

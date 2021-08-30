@@ -31,10 +31,11 @@ if __name__ == '__main__':
     args.n_val = 10
     args.batch_size = 10
     args.n_input_samples = 1
-    args.nskip = 999
+    args.nskip = 9999
     args.epochs_for_lr_adjustment = 50
     args.use_val = True
     args.use_test = False
+    args.use_endstep = True
     args.debug = False
     args.viz = True
     args.lr = 1e-2
