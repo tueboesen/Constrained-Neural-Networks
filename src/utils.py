@@ -286,6 +286,112 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
 
     return aloss, alossr, alossv, alossD, alossDr, alossDv, aMAEr, aMAEv, P_mean, E_rel_diff
 
+
+
+def run_endstep(model, dataloader, max_radius=15,log=None,viz=None):
+    rscale = dataloader.dataset.rscale
+    vscale = dataloader.dataset.vscale
+    model.eval()
+    nrep = len(dataloader.dataset)
+    nsteps = dataloader.dataset.Rin.shape[1]
+
+    lossD_his = torch.zeros(nrep,nsteps)
+    loss_his = torch.zeros(nrep,nsteps)
+    MAE_r_his = torch.zeros(nrep,nsteps)
+    MAE_v_his = torch.zeros(nrep,nsteps)
+
+    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
+        nb, _,natoms, ndim = Rin.shape
+        for j in range(nsteps):
+            if j==0:
+                Rin_vec = Rin[:,j].reshape(-1,Rin.shape[-1])
+                Vin_vec = Vin[:,j].reshape(-1,Vin.shape[-1])
+            else:
+                Rin_vec = Rpred
+                Vin_vec = Vpred
+
+            Rout_vec = Rout[:, j].reshape(-1, Rout.shape[-1])
+            Vout_vec = Vout[:, j].reshape(-1, Vout.shape[-1])
+            x = torch.cat([Rin_vec, Vin_vec], dim=-1)
+            z_vec = z.reshape(-1,z.shape[-1])
+            batch = torch.arange(nb).repeat_interleave(natoms).to(device=Rin.device)
+            edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
+            edge_src = edge_index[0]
+            edge_dst = edge_index[1]
+            output = model(x, batch, z_vec, edge_src, edge_dst)
+            Rpred = output[:, 0:ndim]
+            Vpred = output[:, ndim:]
+
+            loss_r = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
+            loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
+            loss_abs = loss_r + loss_v
+            loss_r_ref = torch.sum(torch.norm(Rin[:,j].reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
+            loss_v_ref = torch.sum(torch.norm(Vin[:,j].reshape(Vout_vec.shape) - Vout_vec, p=2, dim=1)) / nb
+            loss_r_rel = loss_r / loss_r_ref
+            loss_v_rel = loss_v / loss_v_ref
+            loss_rel = (loss_r_rel + loss_v_rel)/2
+            MAEr = torch.mean(torch.abs(Rpred - Rout_vec)*rscale).detach()
+            MAEv = torch.mean(torch.abs(Vpred - Vout_vec)*vscale).detach()
+
+            Vpred_real = Vpred.view(Vout[:,j].shape) * vscale
+            Rpred_real = Rpred.view(Rout[:,j].shape) * rscale
+            Vin_real = Vin[:,j] * vscale
+            Rin_real = Rin[:,j] * rscale
+
+            dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
+            dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
+            dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
+            dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
+            dRLast = torch.norm(Rin[:,j].reshape(Rout_vec.shape)[edge_src] - Rin[:,j].reshape(Rout_vec.shape)[edge_dst], p=2,dim=1)
+            dVLast = torch.norm(Vin[:,j].reshape(Vout_vec.shape)[edge_src] - Vin[:,j].reshape(Vout_vec.shape)[edge_dst], p=2,dim=1)
+            lossD_r_ref = F.mse_loss(dRLast,dRTrue)/nb
+            lossD_v_ref = F.mse_loss(dVLast,dVTrue)/nb
+            # lossD_rel = lossD_r_rel + lossD_v_rel
+            lossD_r = F.mse_loss(dRPred,dRTrue)/nb
+            lossD_v = F.mse_loss(dVPred,dVTrue)/nb
+            lossD_r_rel = lossD_r / lossD_r_ref
+            lossD_v_rel = lossD_v / lossD_v_ref
+            # lossD_abs = lossD_r + lossD_v
+            lossD_rel = (lossD_r_rel + lossD_v_rel)/2
+
+            lossD_his[i,j] = lossD_rel.cpu().detach()
+            loss_his[i,j] = loss_rel.cpu().detach()
+            MAE_r_his[i,j] = MAEr.cpu().detach()
+            MAE_v_his[i,j] = MAEv.cpu().detach()
+
+    lossD_mean = lossD_his.mean(dim=0)
+    loss_mean = loss_his.mean(dim=0)
+    MAE_r_mean = MAE_r_his.mean(dim=0)
+    MAE_v_mean = MAE_v_his.mean(dim=0)
+
+    lossD_std = lossD_his.std(dim=0)
+    loss_std = loss_his.std(dim=0)
+    MAE_r_std = MAE_r_his.std(dim=0)
+    MAE_v_std = MAE_v_his.std(dim=0)
+    results_mean = [loss_mean,lossD_mean,MAE_r_mean,MAE_v_mean]
+    results_std = [loss_std,lossD_std,MAE_r_std,MAE_v_std]
+    outputfile = "{:}/endstep_results.torch".format(viz)
+    data = {'loss':loss_his,'lossD':lossD_his,'MAE_r':MAE_r_his,'MAE_v':MAE_v_his}
+    torch.save(data,outputfile)
+    if viz is not None:
+        nskip = dataloader.dataset.nskip
+        x = torch.arange(nsteps)*(nskip+1)
+        # fig, ax = plt.subplots()
+        legends = ['loss','lossD','MAE_r','MAE_v']
+        for ii,(legend,mean,std) in enumerate(zip(legends,results_mean,results_std)):
+            fig, ax = plt.subplots()
+            pngfile = "{:}/endstep_{:}.png".format(viz,legend)
+            ax.semilogy(x, mean, '-',label=legend)
+            ax.fill_between(x, mean - std, mean + std, alpha=0.2)
+            ax.legend()
+            plt.savefig(pngfile)
+            plt.clf()
+
+    return
+
+
+
+
 def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.5640976472642336e-06):
     # eps_conv=31.453485691837958
     # V(r) = 4.0 * EPSILON * [(SIGMA / r) ^ 12 - (SIGMA / r) ^ 6]

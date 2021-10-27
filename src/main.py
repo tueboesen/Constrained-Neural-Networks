@@ -23,7 +23,8 @@ from src.network import network_simple
 from src.network_e3 import constrained_network
 from src.constraints import MomentumConstraints, PointChain, PointToPoint, EnergyMomentumConstraints, load_constraints
 from src.project_uplift import ProjectUpliftEQ, ProjectUplift
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network_eq, run_network_e3, atomic_masses, Distogram, LJ_potential
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network_eq, run_network_e3, \
+    atomic_masses, Distogram, LJ_potential, run_endstep
 
 
 def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None):
@@ -49,7 +50,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None):
     # device='cpu'
     # load training data
     if dataloader_train is None:
-        dataloader_train, dataloader_val, dataloader_test = load_data(c['data'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'])
+        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['use_endstep'])
 
     if c['network_type'] == 'EQ':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
@@ -168,7 +169,6 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None):
         aloss, alossr, alossv, alossD, alossDr, alossDv, MAEr, MAEv, P_mean, E_rel_diff = run_network_e3(model, dataloader_test, train=False, max_samples=999999, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], log=LOG, debug=c['debug'])
         LOG.info(f'Loss: {aloss:.2e}  LossD: {alossD:.2e}  Loss_r: {alossr:.2e}  Loss_v: {alossv:.2e}  P: {P_mean:.2e}  MAEr:{MAEr:.2e} MAEv:{MAEv:.2e} E_rel_diff{E_rel_diff:.2e}')
 
-    close_logger(LOG)
     fig = plt.figure(num=2)
     plt.clf()
     plt.plot(aresults['epoch'],aresults['loss_t'],label='training')
@@ -189,6 +189,14 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None):
     plt.legend()
     # plt.show()
     plt.savefig(f"{c['result_dir']}/lossD.png")
+
+
+    if c['use_endstep']:
+        model.load_state_dict(torch.load(model_name_best)) #TODO UNCLEAR THIS
+        run_endstep(model, dataloader_endstep, log=LOG,viz=vizdir)
+
+
+    close_logger(LOG)
     # aresults.plot(x='epoch',y='loss_v')
     # aresults.plot(kind='scatter', x='epoch', y='loss_t', color='red')
     # aresults.plot(kind='line', x='epoch', y='loss_t', color='red')
