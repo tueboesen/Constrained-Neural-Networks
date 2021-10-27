@@ -149,12 +149,12 @@ class constrained_network(torch.nn.Module):
             tmp = y.clone()
             y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
             y_old = tmp
-            raise NotImplementedError("Fix constraints")
-            if self.constraints is not None and self.constrain_all_layers is True:
+            # raise NotImplementedError("Fix constraints")
+            if self.constraints is not None and self.constrain_method == 'all_layers':
                 data = self.constraints({'y':y,'batch':batch,'z':node_attr})
                 y = data['y']
             x = self.PU.project(y)
-        if self.constraints is not None and self.constrain_all_layers is False:
+        if self.constraints is not None and self.constrain_method == 'end_layer':
             data = self.constraints({'x':x,'batch':batch,'z':node_attr})
             x = data['x']
         return x

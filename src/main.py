@@ -63,9 +63,9 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None):
         model = constrained_network(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, constrain_all_layers=cn['constrain_all_layers'], PU=PU, particles_pr_node=ds.particles_pr_node)
+                                    num_nodes=20, embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], constraints=constraints, constrain_method=cn['constrain_method'], PU=PU, particles_pr_node=3)
     elif c['network_type'] == 'mim':
-        model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], PU=PU, constraints=constraints)
+        model = network_simple(cn['node_dim_in'], cn['node_attr_dim_in'], cn['node_dim_latent'], cn['nlayers'], PU=PU, constraints=constraints,constrain_method=cn['constrain_method'])
     else:
         raise NotImplementedError("Network type is not implemented")
     model.to(device)

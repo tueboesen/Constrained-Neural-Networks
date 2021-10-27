@@ -27,19 +27,19 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 10
-    args.n_val = 10
-    args.batch_size = 10
+    args.n_train = 10000
+    args.n_val = 1000
+    args.batch_size = 15
     args.n_input_samples = 1
     args.nskip = 999
-    args.epochs_for_lr_adjustment = 50
+    args.epochs_for_lr_adjustment = 10000
     args.use_val = True
-    args.use_test = False
+    args.use_test = True
     args.debug = False
-    args.viz = True
-    args.lr = 1e-2
+    args.viz = False
+    args.lr = 1e-3
     args.seed = 123545
-    args.epochs = 3
+    args.epochs = 100
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
@@ -79,76 +79,72 @@ if __name__ == '__main__':
     dataloader_train=None
     dataloader_val=None
     dataloader_test=None
-    network_types = ['mim']
-    constrain_method = ['all_layers']
+    # network_types = ['EQ']
+    network_types = ['EQ','mim']
+    constraints = ['','triangle']
     # nskips = [9999]
     job = 0
-    seeds = [1234,1235,1236,1237,1238]
     res_his = []
     result_dir_base = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
         root='results',
         runner_name=c['basefolder'],
         date=datetime.now(),
     )
+    # seeds = [1234,1235]
     seeds = [1234,1235,1236,1237,1238]
     res_his = []
     for ii,seed in enumerate(seeds):
-
-        if args.network_type.lower() == 'eq':
-            args.network = {
-                'irreps_inout': o3.Irreps("6x1o"),
-                'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
-                # 'irreps_node_attr': o3.Irreps("1x0e"),
-                # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
-                'layers': 8,
-                'max_radius': 15,
-                'number_of_basis': 8,
-                'embed_dim': 8,
-                'max_atom_types': 20,
-                'radial_neurons': [48],
-                'num_neighbors': -1,
-                'constraints': 'triangle',
-                'constrain_all_layers': True,
-            }
-        elif args.network_type.lower() == 'mim':
-            args.network = {
-                'node_dim_in': 18,
-                'node_attr_dim_in': 1,
-                'node_dim_latent': 90,
-                'nlayers': 6,
-                'max_radius': 15,
-                'constraints': '',
-            }
-
         c['seed'] = seed
         dataloader_train = None
         dataloader_val = None
         dataloader_test = None
-        constrain_method = ['all_layers']
-        # constrain_method = ['reg']
-        constraints = ['triangle']
-        nskips = [9999]
         job = 0
-        c['network']['constrain_method'] = 'all_layers'
-        c['network']['constraints'] = ''
-        c['result_dir'] = "{:}/{:}_{:}".format(result_dir_base, job,ii)
-        results,dataloader_train,dataloader_val,dataloader_test = main(c,dataloader_train,dataloader_val,dataloader_test)
-        if ii==0:
-            res_his.append([])
-        res_his[job].append(results)
-
-        for nskip in nskips:
-            c['nskip'] = nskip
-            for constrain_methodi in constrain_method:
-                c['network']['constrain_method'] = constrain_methodi
-                for constraint in constraints:
-                    c['network']['constraints'] = constraint
-                    job += 1
-                    c['result_dir'] = "{:}/{:}_{:}".format(result_dir_base, job, ii)
-                    results,dataloader_train,dataloader_val,dataloader_test = main(c,dataloader_train,dataloader_val,dataloader_test)
-                    if ii==0:
-                        res_his.append([])
-                    res_his[job].append(results)
+        # c['network']['constrain_method'] = 'all_layers'
+        # c['network']['constraints'] = ''
+        for jj,network_type in enumerate(network_types):
+            c['network_type'] = network_type
+            if c['network_type'].lower() == 'eq':
+                c['loss'] = 'EQ'
+                c['network'] = {
+                    'irreps_inout': o3.Irreps("6x1o"),
+                    'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
+                    # 'irreps_node_attr': o3.Irreps("1x0e"),
+                    # 'irreps_edge_attr': o3.Irreps("{:}x1o".format(args.n_input_samples)),
+                    'layers': 6,
+                    'max_radius': 100,
+                    'number_of_basis': 8,
+                    'embed_dim': 8,
+                    'max_atom_types': 20,
+                    'radial_neurons': [48],
+                    'num_neighbors': -1,
+                    'constraints': 'triangle',
+                    'constrain_method': 'all_layers',
+                }
+                c['lr'] = 1e-2
+                c['batch_size'] = 25
+            elif c['network_type'].lower() == 'mim':
+                c['loss'] = 'distogram'
+                c['network'] = {
+                    'node_dim_in': 18,
+                    'node_attr_dim_in': 1,
+                    'node_dim_latent': 90,
+                    'nlayers': 6,
+                    'max_radius': 100,
+                    'constraints': 'triangle',
+                    'constrain_method': 'all_layers',
+                }
+                c['lr'] = 1e-3
+                c['batch_size'] = 25
+            else:
+                raise NotImplementedError("network type not recognized")
+            for kk,constraint in enumerate(constraints):
+                c['result_dir'] = "{:}/{:}_{:}_{:}".format(result_dir_base, network_type,constraint,ii)
+                c['network']['constraints'] = constraint
+                results,dataloader_train,dataloader_val,dataloader_test = main(c,dataloader_train,dataloader_val,dataloader_test)
+                if ii==0:
+                    res_his.append([])
+                res_his[job].append(results)
+                job += 1
 
     outputfile = "{:}/results_history.pickle".format(result_dir_base)
     with open(outputfile, "wb") as fp:  # Pickling
@@ -169,14 +165,16 @@ if __name__ == '__main__':
     print("next")
     x = np.arange(ne)
 
+    legends=['mim','mim_constraints']
     for kk,loss_type  in enumerate(loss_types):
         for ii in range(nl):
             pngfile = "{:}/training_semi_{:}_{:}.png".format(result_dir_base,loss_type,ii)
             fig, ax = plt.subplots()
-            ax.semilogy(x, res_mean[kk,ii], '-')
+            ax.semilogy(x, res_mean[kk,ii], '-',label=legends[kk])
             # ax.plot(x, res_mean[ii], '-')
             ax.fill_between(x, res_mean[kk,ii] - res_std[kk,ii], res_mean[kk,ii] + res_std[kk,ii], alpha=0.2)
             plt.ylim(1e-4,2)
+            ax.legend()
             plt.savefig(pngfile)
             plt.clf()
 
@@ -184,11 +182,11 @@ if __name__ == '__main__':
     for kk,loss_type  in enumerate(loss_types):
         fig, ax = plt.subplots()
         pngfile = "{:}/training_all_{:}.png".format(result_dir_base,loss_type)
-        legends = ['no constraint','constraints']
+        # legends = ['no constraint','constraints']
         for ii,legend in enumerate(legends):
             ax.semilogy(x, res_mean[kk,ii], '-',label=legend)
             # ax.plot(x, res_mean[ii], '-')
-            # ax.fill_between(x, res_mean[ii] - res_std[ii], res_mean[ii] + res_std[ii], alpha=0.2)
+            ax.fill_between(x, res_mean[kk,ii] - res_std[kk,ii], res_mean[kk,ii] + res_std[kk,ii], alpha=0.2)
         ax.legend()
         plt.ylim(1e-4,2)
 

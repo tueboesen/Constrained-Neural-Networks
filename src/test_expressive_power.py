@@ -39,7 +39,7 @@ if __name__ == '__main__':
     args.debug = False
     args.lr = 1e-3
     args.seed = 133548
-    args.epochs = 20
+    args.epochs = 30
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
@@ -64,7 +64,7 @@ if __name__ == '__main__':
         args.network = {
             'node_dim_in': 9,
             'node_attr_dim_in': 1,
-            'node_dim_latent': 60,
+            'node_dim_latent': 18,
             'nlayers': 3,
             'max_radius': 15,
             # 'constraints': 'chaintriangle',
@@ -79,7 +79,8 @@ if __name__ == '__main__':
         runner_name=c['basefolder'],
         date=datetime.now(),
     )
-    seeds = [1234,1235,1236,1237,1238]
+    # seeds = [1232,1235,1236,1237,1238]
+    seeds = [1238,1239,1240,1241,1242,1243]
     res_his = []
     for ii,seed in enumerate(seeds):
         c['seed'] = seed
@@ -88,7 +89,7 @@ if __name__ == '__main__':
         dataloader_test = None
         constrain_method = ['all_layers']
         # constrain_method = ['reg']
-        constraints = ['chain','triangle','chaintriangle']
+        constraints = ['chain']
         nskips = [9999]
         job = 0
         c['network']['constrain_method'] = 'all_layers'

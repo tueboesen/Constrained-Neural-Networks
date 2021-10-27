@@ -124,7 +124,7 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         z_vec = z.reshape(-1,z.shape[-1])
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
-        edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
+        edge_index = radius_graph(Rin_vec[:,:3], max_radius, batch, max_num_neighbors=120)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
 
@@ -134,11 +134,11 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         Rpred = output[:, 0:ndims]
         Vpred = output[:, ndims:]
 
-        loss_r = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
-        loss_v = torch.sum(torch.norm(Vpred - Vout_vec, p=2, dim=1)) / nb
+        loss_r = torch.sum(torch.norm(Rpred.reshape(-1,3) - Rout_vec.reshape(-1,3), p=2, dim=1)) / nb
+        loss_v = torch.sum(torch.norm(Vpred.reshape(-1,3) - Vout_vec.reshape(-1,3), p=2, dim=1)) / nb
         loss_abs = loss_r + loss_v
-        loss_r_ref = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
-        loss_v_ref = torch.sum(torch.norm(Vin.reshape(Vout_vec.shape) - Vout_vec, p=2, dim=1)) / nb
+        loss_r_ref = torch.sum(torch.norm(Rin.reshape(-1,3) - Rout_vec.reshape(-1,3), p=2, dim=1)) / nb
+        loss_v_ref = torch.sum(torch.norm(Vin.reshape(-1,3) - Vout_vec.reshape(-1,3), p=2, dim=1)) / nb
         loss_r_rel = loss_r / loss_r_ref
         loss_v_rel = loss_v / loss_v_ref
         loss_rel = (loss_r_rel + loss_v_rel)/2
@@ -162,12 +162,12 @@ def run_network_e3(model, dataloader, train, max_samples, optimizer, loss_fnc, b
         E_hist.append(torch.ones(5))
         P_hist.append(torch.ones(5))
 
-        dRPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
-        dRTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
-        dVPred = torch.norm(Vpred[edge_src] - Vpred[edge_dst],p=2,dim=1)
-        dVTrue = torch.norm(Vout_vec[edge_src] - Vout_vec[edge_dst],p=2,dim=1)
-        dRLast = torch.norm(Rin.reshape(Rout_vec.shape)[edge_src] - Rin.reshape(Rout_vec.shape)[edge_dst], p=2,dim=1)
-        dVLast = torch.norm(Vin.reshape(Vout_vec.shape)[edge_src] - Vin.reshape(Vout_vec.shape)[edge_dst], p=2,dim=1)
+        dRPred = torch.norm(Rpred[edge_src].reshape(-1,3) - Rpred[edge_dst].reshape(-1,3),p=2,dim=1)
+        dRTrue = torch.norm(Rout_vec[edge_src].reshape(-1,3) - Rout_vec[edge_dst].reshape(-1,3),p=2,dim=1)
+        dVPred = torch.norm(Vpred[edge_src].reshape(-1,3) - Vpred[edge_dst].reshape(-1,3),p=2,dim=1)
+        dVTrue = torch.norm(Vout_vec[edge_src].reshape(-1,3) - Vout_vec[edge_dst].reshape(-1,3),p=2,dim=1)
+        dRLast = torch.norm(Rin.reshape(Rout_vec.shape)[edge_src].reshape(-1,3) - Rin.reshape(Rout_vec.shape)[edge_dst].reshape(-1,3), p=2,dim=1)
+        dVLast = torch.norm(Vin.reshape(Vout_vec.shape)[edge_src].reshape(-1,3) - Vin.reshape(Vout_vec.shape)[edge_dst].reshape(-1,3), p=2,dim=1)
         lossD_r_ref = F.mse_loss(dRLast,dRTrue)/nb
         lossD_v_ref = F.mse_loss(dVLast,dVTrue)/nb
         # lossD_rel = lossD_r_rel + lossD_v_rel

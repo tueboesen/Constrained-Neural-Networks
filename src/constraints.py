@@ -58,37 +58,6 @@ def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rs
     return constraints
 
 
-def load_constraints_protein(ctype,PU,device,masses=None,R=None,V=None,z=None,rscale=1,vscale=1,energy_predictor=None):
-    dat = np.load('./../results/protein_stat.npz')
-    rnn = (torch.from_numpy(dat['dnn']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    rmin = (torch.from_numpy(dat['dabmin']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    rmax = (torch.from_numpy(dat['dabmax']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    r1min = (torch.from_numpy(dat['danmin']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    r1max = (torch.from_numpy(dat['danmax']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    r2min = (torch.from_numpy(dat['dbnmin']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    r2max = (torch.from_numpy(dat['dbnmax']) * 10).to(device=device,dtype=torch.get_default_dtype())
-    if ctype == 'chain':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True))
-    elif ctype == 'triangle':
-        constraints = torch.nn.Sequential(PointToPoint(PU.project,PU.uplift,rmin=rmin/rscale,rmax=rmax/rscale,pos_only=True),PointToSphereSphereIntersection(PU.project,PU.uplift,r1min=r1min/rscale,r1max=r1max/rscale,r2min=r2min/rscale,r2max=r2max/rscale,pos_only=True))
-    elif ctype == 'chaintriangle':
-        constraints = torch.nn.Sequential(PointChain(PU.project,PU.uplift,rnn, fragmentid=None,pos_only=True),PointToPoint(PU.project,PU.uplift,r=r/rscale,pos_only=True),PointToSphereSphereIntersection(PU.project,PU.uplift,r1=r1/rscale,r2=r2/rscale,pos_only=True))
-        # constraints2 = BindingConstraintsAB(d_ab=dist_abz.to(device), d_an=dist_anz.to(device), fragmentid=fragids)
-    elif ctype == 'P':
-        constraints = torch.nn.Sequential(MomentumConstraints(PU.project, PU.uplift, masses))
-    elif ctype == 'EP':
-        force_predictor = generate_FE_network(natoms=z.shape[1])
-        force_predictor.load_state_dict(torch.load(energy_predictor, map_location=torch.device('cpu')))
-        force_predictor.eval()
-        constraints = torch.nn.Sequential(EnergyMomentumConstraints(PU.project, PU.uplift,force_predictor, masses,rescale_r=rscale,rescale_v=vscale))
-        constraints[0].fix_reference_energy(R,V,z)
-    elif ctype == '':
-        constraints = None
-    else:
-        raise NotImplementedError("The constraint chosen has not been implemented.")
-    return constraints
-
-
 
 class PointToPoint(nn.Module):
     def __init__(self,project,uplift,r,pos_only=False, reg=False):
