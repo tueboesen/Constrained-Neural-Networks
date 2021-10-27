@@ -179,6 +179,7 @@ if __name__ == '__main__':
             plt.clf()
 
 
+
     for kk,loss_type  in enumerate(loss_types):
         fig, ax = plt.subplots()
         pngfile = "{:}/training_all_{:}.png".format(result_dir_base,loss_type)
