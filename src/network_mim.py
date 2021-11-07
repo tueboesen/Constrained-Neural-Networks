@@ -151,7 +151,8 @@ class PropagationBlock(nn.Module):
 
         d = xn.shape[-1]
         xn = xn_div[:,:d] + xn_ave[:,d:2*d] + xn_ave[:,2*d:3*d] + xn_ave[:,3*d:4*d] + xn_ave[:,4*d:]
-
+        if xn.isnan().any():
+            raise ValueError("NaN detected")
         return xn
 
 
@@ -204,15 +205,15 @@ class neural_network_mimetic(nn.Module):
             y_old = tmp
 
             if self.con_fnc is not None and self.con_type == 'high':
-                data = self.constraints({'y': y, 'batch': batch,'z':node_attr})
+                data = self.con_fnc({'y': y, 'batch': batch,'z':node_attr})
                 y = data['y']
             x = self.PU.project(y)
 
         if self.con_fnc is not None and self.con_type == 'low':
-            data = self.constraints({'x': x, 'batch': batch,'z':node_attr})
+            data = self.con_fnc({'x': x, 'batch': batch,'z':node_attr})
             x = data['x']
         if self.con_fnc is not None and self.con_type == 'reg':
-            data = self.constraints({'x': x, 'batch': batch, 'z': node_attr})
+            data = self.con_fnc({'x': x, 'batch': batch, 'z': node_attr})
             reg = data['c']
         else:
             reg = 0

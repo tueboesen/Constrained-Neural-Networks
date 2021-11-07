@@ -16,7 +16,7 @@ if __name__ == '__main__':
     args.nskip = 9999
     args.epochs_for_lr_adjustment = 10
     args.lr_adjustment = 0.8
-    args.use_val = True
+    args.use_val = False
     args.use_test = False
     args.perform_endstep_MD_propagation = False
     args.debug = False
@@ -31,7 +31,9 @@ if __name__ == '__main__':
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
     args.con = ['','chain','triangle','chaintriangle']
+    # args.con = ['triangle','chaintriangle']
     args.con_type = ['high', 'low','reg']
+    # args.con_type = ['low','reg']
     args.con_data = './../../../data/casp11/casp11_sel_cons.pt'
     if args.network_type.lower() == 'eq':
         args.network = {

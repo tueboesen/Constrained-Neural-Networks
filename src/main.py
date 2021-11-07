@@ -59,7 +59,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                     num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node)
     elif c['network_type'] == 'mim':
-        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=[c['con_type']])
+        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'])
     else:
         raise NotImplementedError("Network type is not implemented")
     model.to(device)

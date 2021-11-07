@@ -154,7 +154,7 @@ class PointToPoint(ConstraintTemplate):
         if self.r0.ndim==0:
             r0 = self.r0
         else:
-            r0 = self.r0[z]
+            r0 = (self.r0[z]).to(device=p1.device,dtype=p1.dtype)
         d = p2 - p1
         lam = d * (1 - (r0 / d.norm(dim=-1).unsqueeze(-1)))
         return lam
@@ -254,8 +254,8 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
             r1 = self.r1
             r2 = self.r2
         else:
-            r1 = self.r1[z]
-            r2 = self.r2[z]
+            r1 = (self.r1[z]).to(device=p1.device,dtype=p1.dtype)
+            r2 = (self.r2[z]).to(device=p1.device,dtype=p1.dtype)
         d = p2 - p1
         dn = d.norm(dim=-1)
         a = 1 / (2 * dn) * torch.sqrt(4 * dn ** 2 * r2 ** 2 - (dn ** 2 - r1 ** 2 + r2 ** 2)**2)
@@ -341,8 +341,8 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         p1 = r[:, :, 0:3]
         p2 = r[:, :, 3:6]
         p3 = r[:, :, 6:9]
-        r1 = self.r1[z2]
-        r2 = self.r2[z2]
+        r1 = (self.r1[z2]).to(device=x.device,dtype=x.dtype)
+        r2 = (self.r2[z2]).to(device=x.device,dtype=x.dtype)
 
         d23 = (p3 - p2).norm(dim=-1)
         d13 = (p3 - p1).norm(dim=-1)
@@ -394,10 +394,10 @@ class PointChain(ConstraintTemplate):
         return X
 
     def constraint(self,x,z):
-        if self.d.ndim==0:
-            d = self.d
+        if self.d0.ndim==0:
+            d = self.d0
         else:
-            d = self.d[z[:, :-1], z[:, 1:]]
+            d = (self.d0[z[:, :-1], z[:, 1:]]).to(device=x.device,dtype=x.dtype)
         e = torch.ones((3,1),device=x.device)
         dx = self.diff(x)
         c = (dx**2)@e - d**2

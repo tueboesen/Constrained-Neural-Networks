@@ -1,4 +1,5 @@
 import inspect
+import torch.nn.functional as F
 
 import torch
 from e3nn import o3
@@ -161,8 +162,10 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
         optimizer.zero_grad()
 
         # We need to define a best guess for the amino acid coordinates
-        coords_init = 0.001 * torch.ones_like(coords)
+        coords_init = 0.1*torch.ones_like(coords)
         coords_init[::2,::3] += 0.1
+        coords_init[:,3:] += 0.5
+        coords_init[:,6:] += 0.5
         coords_init = torch.cumsum(coords_init,dim=0)
 
         coords_pred, reg = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
