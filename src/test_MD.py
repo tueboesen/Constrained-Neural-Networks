@@ -1,12 +1,28 @@
 import pickle
 import argparse
 from datetime import datetime
-import os
+import os, sys
+import time
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import math
+import torch.autograd.profiler as profiler
 
+from torch.utils.data import DataLoader
 from e3nn import o3
+
+from preprocess.train_force_and_energy_predictor import generate_FE_network
+from src import log
+from src.log import log_all_parameters
+from src.main import main
+from src.main_protein import main_protein
+from src.network_e3 import constrained_network
+from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
@@ -23,7 +39,7 @@ if __name__ == '__main__':
     args.debug = False
     args.lr = 1e-3
     args.seed = 133548
-    args.epochs = 300
+    args.epochs = 100
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
@@ -63,8 +79,7 @@ if __name__ == '__main__':
         runner_name='run_protein_folding',
         date=datetime.now(),
     )
-    result_dir_base = 'D:/Dropbox/ComputationalGenetics/text/Poincare_MD/Only constraints/figures/protein_folding_constraint_types'
-
+    result_dir_base = 'D:/Dropbox/ComputationalGenetics/text/Poincare_MD/Only constraints/figures/MD simulation'
     seeds = [1234,1235,1236,1237,1238]
     # res_his = []
     # for ii,seed in enumerate(seeds):
@@ -108,12 +123,24 @@ if __name__ == '__main__':
     nl = len(res_his) #Number of different tries
     nr = len(res_his[0]) #Number of repeats
     ne = c['epochs']
-    res_numpy = np.zeros((nl,nr,ne))
+    loss_t = np.zeros((nl, nr, ne))
+    loss_v = np.zeros((nl, nr, ne))
+    lossD_t = np.zeros((nl, nr, ne))
+    lossD_v = np.zeros((nl, nr, ne))
     for ii,a  in enumerate(res_his):
         for jj,b in enumerate(a):
-            res_numpy[ii,jj,:] = b['loss_t']
-    res_std = res_numpy.std(axis=1)
-    res_mean = res_numpy.mean(axis=1)
+            loss_t[ii, jj, :] = b['loss_t']
+            loss_v[ii, jj, :] = b['loss_v']
+            lossD_t[ii,jj,:] = b['lossD_t']
+            lossD_v[ii,jj,:] = b['lossD_v']
+    loss_t_std = loss_t.std(axis=1)
+    loss_t_mean = loss_t.mean(axis=1)
+    loss_v_std = loss_v.std(axis=1)
+    loss_v_mean = loss_v.mean(axis=1)
+    lossD_t_std = lossD_t.std(axis=1)
+    lossD_t_mean = lossD_t.mean(axis=1)
+    lossD_v_std = lossD_v.std(axis=1)
+    lossD_v_mean = lossD_v.mean(axis=1)
     print("next")
     x = np.arange(ne)
     # for ii in range(nl):
@@ -126,29 +153,47 @@ if __name__ == '__main__':
     #     plt.savefig(pngfile)
     #     plt.clf()
 
-    linestyles = ['-','.','-.']
-    colors = ['black','darkred','red','indianred','darkgreen','green','lime','darkblue','blue','slateblue']
-
     fig, ax = plt.subplots()
-    pngfile = "{:}/training_all.png".format(result_dir_base)
-    legends = ['No constraints','Chain','Triangle','Chaintriangle','End chain','End triangle','End chaintriangle','Reg chain','Reg triangle','Reg chaintriangle']
+    pngfile = "{:}/loss_t.png".format(result_dir_base)
+    legends=['mim','mim_constraints','EQ','EQ_constraints']
     for ii,legend in enumerate(legends):
-        if ii > 0:
-            jj = np.mod(ii-1,3)
-        else:
-            jj = 0
-        linestyle = linestyles[jj]
-        color = colors[ii]
-        ax.semilogy(x, res_mean[ii], '-', color=color,label=legend)
-        # ax.plot(x, res_mean[ii], '-')
-        # ax.fill_between(x, res_mean[ii] - res_std[ii], res_mean[ii] + res_std[ii], alpha=0.2)
+        if legend == 'EQ' or legend == 'EQ_constraints':
+            ax.semilogy(x, loss_t_mean[ii], '-',label=legend)
     ax.legend()
-    plt.ylim(1e-3,1)
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-
+    plt.ylim(1e-4,10)
     plt.savefig(pngfile)
     plt.clf()
 
 
+    fig, ax = plt.subplots()
+    pngfile = "{:}/loss_v.png".format(result_dir_base)
+    legends=['mim','mim_constraints','EQ','EQ_constraints']
+    for ii,legend in enumerate(legends):
+        if legend == 'EQ' or legend == 'EQ_constraints':
+            ax.semilogy(x, loss_v_mean[ii], '-',label=legend)
+    ax.legend()
+    plt.ylim(1e-4,10)
+    plt.savefig(pngfile)
+    plt.clf()
+
+
+    fig, ax = plt.subplots()
+    pngfile = "{:}/lossD_t.png".format(result_dir_base)
+    legends=['mim','mim_constraints','EQ','EQ_constraints']
+    for ii,legend in enumerate(legends):
+        ax.semilogy(x, lossD_t_mean[ii], '-',label=legend)
+    ax.legend()
+    plt.ylim(1e-4,10)
+    plt.savefig(pngfile)
+    plt.clf()
+
+    fig, ax = plt.subplots()
+    pngfile = "{:}/lossD_v.png".format(result_dir_base)
+    legends=['mim','mim_constraints','EQ','EQ_constraints']
+    for ii,legend in enumerate(legends):
+        ax.semilogy(x, lossD_v_mean[ii], '-',label=legend)
+    ax.legend()
+    plt.ylim(1e-4,10)
+    plt.savefig(pngfile)
+    plt.clf()
 
