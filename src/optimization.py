@@ -14,7 +14,7 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
     if data_type == 'water':
         loss, lossD = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
     elif data_type == 'protein':
-        loss, lossD = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        loss, lossD = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
     return loss, lossD

@@ -159,9 +159,18 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None):
+    def __init__(self,node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None):
         super().__init__()
-#TODO fix this function so it has node_dim_in and attribute in again or figure out why they are not here
+        """
+        node_dimn_latent:   The dimension of the latent space
+        nlayers:            The number of propagationBlocks to include in the network 
+        PU:                 A handler to a projection uplifting class instance
+        nmax_atom_types:    Max number of particle types to handle, for proteins this should be the types of amino acids
+        atom_type_embed_dim: The out dimension of the embedding done to the atom_types
+        max_radius:         The maximum radius used when building the edges in the graph between the particles
+        con_fnc:            A handler to the constrain function wrapped in a nn.sequential.
+        con_type:           The type of constraints being used (high, low, reg)
+        """
         self.nlayers = nlayers
         self.PU = PU
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)

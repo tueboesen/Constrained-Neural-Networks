@@ -49,8 +49,7 @@ if __name__ == '__main__':
         }
     elif args.network_type.lower() == 'mim':
         args.network = {
-            'node_dim_in': 9,
-            'node_attr_dim_in': 1,
+           'node_dim_in': 9,
             'node_dim_latent': 120,
             'nlayers': 9,
             'max_radius': 15,
