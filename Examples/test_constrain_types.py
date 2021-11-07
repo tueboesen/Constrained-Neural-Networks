@@ -16,7 +16,7 @@ if __name__ == '__main__':
     args.nskip = 9999
     args.epochs_for_lr_adjustment = 10
     args.lr_adjustment = 0.8
-    args.use_val = False
+    args.use_val = True
     args.use_test = False
     args.perform_endstep_MD_propagation = False
     args.debug = False
