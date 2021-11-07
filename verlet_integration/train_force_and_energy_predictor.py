@@ -343,7 +343,7 @@ if __name__ == '__main__':
     use_mean_map = False
     # load training data
     # data = np.load('../../../data/MD/MD17/aspirin_dft.npz')
-    data = np.load('./../../../data/MD/argon/argon.npz')
+    data = np.load('../../../data/MD/argon/argon.npz')
     E = data['PE'] * 0.26254996403871417 #Converts the energy from [Hatree_energy units] to [atomic unit mass * Angstrom^2 / fs^2]
     Force = data['F']
     R = data['R']

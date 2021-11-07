@@ -1,19 +1,17 @@
+"""
+This preprocessing file plots the average change in distance and velocity over a range of nskips. This is helpful in order to get an idea about whether a prediction difference is statistically significant.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from src.utils import convert_snapshots_to_future_state_dataset, Distogram
 import torch
 
 folder = '/home/tue/data/MD/ethanol_heating/'
-name_ener = 'ethanol-1.ener'
-name_vel = 'ethanol-vel-1.xyz'
-name_pos = 'ethanol-pos-1.xyz'
-name_force = 'forces.xyz'
+name = 'ethanol.npz'
+filename = folder + name
 
-name_out = 'ethanol.npz'
-folder_out = folder
-filename_out = folder_out + name_out
-
-data = np.load(filename_out)
+data = np.load(filename)
 
 R = torch.from_numpy(data['R'])
 V = torch.from_numpy(data['V'])
@@ -38,24 +36,19 @@ for i in range(nskips.shape[0]):
 
     dR = torch.mean(torch.sum(torch.abs(DRin - DRout), dim=(1,2)))
     dV = torch.mean(torch.sum(torch.abs(DVin - DVout), dim=(1,2)))
-    # dV = torch.mean(torch.norm(Vin - Vout, p=2, dim=(1,2)))
-    # MAEr = torch.mean(torch.abs(Rin - Rout))
 
     dRhist.append(dR)
     dVhist.append(dV)
-    # MAErhist.append(MAEr)
 
 plt.plot(nskips,dRhist)
 plt.ylabel("position diff")
-plt.savefig("{:}{:}".format(folder_out,'position.png'))
+plt.savefig("{:}{:}".format(folder,'position.png'))
 plt.figure()
 plt.plot(nskips,dVhist)
 plt.ylabel("velocity diff")
-plt.savefig("{:}{:}".format(folder_out,'velocity.png'))
+plt.savefig("{:}{:}".format(folder,'velocity.png'))
 plt.figure()
 plt.plot(nskips,T[nskips])
 plt.ylabel("Temperature")
-plt.savefig("{:}{:}".format(folder_out,'temperature.png'))
-# plt.axi
+plt.savefig("{:}{:}".format(folder,'temperature.png'))
 plt.show()
-print("done")

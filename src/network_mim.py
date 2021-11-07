@@ -1,21 +1,19 @@
-import os, sys
+import math
 
 import e3nn.o3
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import math
-import matplotlib.pyplot as plt
-import torch.optim as optim
-from torch_cluster import radius_graph
 from torch_scatter import scatter
 
-from src.constraints import MomentumConstraints
 from src.utils import smooth_cutoff
 
 
 class Mixing(nn.Module):
+    """
+    A mixing function for non-equivariant networks, it has the options to use the bilinear operation, and for the bilinear operation it has the option to use the e3nn version or the standard pytorch version.
+    When this program was made the standard pytorch version had some serious runtime issues, and the e3nn bilinear operation was much faster.
+    """
     def __init__(self, dim_in1,dim_in2,dim_out,use_bilinear=True,use_e3nn=True):
         super(Mixing, self).__init__()
         self.use_bilinear = use_bilinear
@@ -38,6 +36,9 @@ class Mixing(nn.Module):
 
 
 class NodesToEdges(nn.Module):
+    """
+    A mimetic node to edges operation utilizing average and gradient operations
+    """
     def __init__(self, dim_in, dim_out):
         super().__init__()
         self.dim_in = dim_in
@@ -50,6 +51,9 @@ class NodesToEdges(nn.Module):
 
 
 class EdgesToNodes(nn.Module):
+    """
+    A mimetic edges to node operation utilizing divergence and averaging operations.
+    """
     def __init__(self, dim_in, dim_out, num_neighbours=20,use_e3nn=True):
         super().__init__()
         self.dim_in = dim_in
@@ -94,6 +98,9 @@ def tv_norm(X, eps=1e-3):
 
 
 class DoubleLayer(nn.Module):
+    """
+    A double layer building block used to generate our mimetic neural network
+    """
     def __init__(self,dim_x):
         super().__init__()
         self.dim_x = dim_x
@@ -114,6 +121,9 @@ class DoubleLayer(nn.Module):
 
 
 class PropagationBlock(nn.Module):
+    """
+    A propagation block (layer) used in our mimetic neural network.
+    """
     def __init__(self, xn_dim, xn_attr_dim):
         super().__init__()
 
@@ -145,20 +155,20 @@ class PropagationBlock(nn.Module):
         return xn
 
 
-class network_simple(nn.Module):
+class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,constraints=None,constrain_method=None):
+    def __init__(self, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None):
         super().__init__()
-
+#TODO fix this function so it has node_dim_in and attribute in again or figure out why they are not here
         self.nlayers = nlayers
         self.PU = PU
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
         self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
-        self.constraints = constraints
-        self.constrain_method = constrain_method
+        self.con_fnc = con_fnc
+        self.con_type = con_type
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -167,7 +177,6 @@ class network_simple(nn.Module):
         return
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst):
-
         self.PU.make_matrix_semi_unitary()
         node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
         y = self.PU.uplift(x)
@@ -185,60 +194,18 @@ class network_simple(nn.Module):
             y = 2*y - y_old - self.h[i]**2 * y_new
             y_old = tmp
 
-            if self.constraints is not None and self.constrain_method == 'all_layers':
+            if self.con_fnc is not None and self.con_type == 'high':
                 data = self.constraints({'y': y, 'batch': batch,'z':node_attr})
                 y = data['y']
             x = self.PU.project(y)
-        if self.constraints is not None and self.constrain_method == 'end_layer':
+
+        if self.con_fnc is not None and self.con_type == 'low':
             data = self.constraints({'x': x, 'batch': batch,'z':node_attr})
             x = data['x']
+        if self.con_fnc is not None and self.con_type == 'reg':
+            data = self.constraints({'x': x, 'batch': batch, 'z': node_attr})
+            reg = data['c']
+        else:
+            reg = 0
 
-        return x
-
-
-
-
-class nn_distance_constraints(nn.Module):
-    def __init__(self,distance):
-        super(nn_distance_constraints, self).__init__()
-        self.d = distance
-        return
-
-    def diff(self,x):
-        return x[:,1:] - x[:,:-1]
-
-    def diffT(self,dx):
-        x = dx[:,:-1] - dx[:,1:]
-        x0 = -dx[:,:0]
-        x1 = dx[:,-1:]
-        X = torch.cat([x0,x,x1],dim=1)
-        return X
-
-    def forward(self,x):
-        e = torch.ones(1,3,device=x.device)
-        dx = self.diff(x)
-        c = e @ (dx**2) - self.d**2
-        return c
-
-    def dConstraintT(self,c,x):
-        dx = self.diff(x)
-        e = torch.ones(3, 1, device=x.device)
-        C = (e @ c) * dx
-        C = self.diffT(C)
-        return 2 * C
-
-
-class momentum_constraints(nn.Module):
-    def __init__(self,m):
-        super(momentum_constraints, self).__init__()
-        self.m = m
-        return
-
-    def forward(self, v):
-        c = v @ self.m.T
-        return c
-
-    def dConstraintT(self, c, v):
-        e = torch.ones(1, 3, device=v.device)
-        C = (self.m.T * e) @ c
-        return C
+        return x, reg

@@ -1,160 +1,32 @@
+import inspect
+
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
 import torch.utils.data as data
-import math
-import torch.nn.functional as F
+from torch.utils.data import DataLoader
 from torch_cluster import radius_graph
 
 from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset
 
-#
-# class DatasetEndStepPropagation(data.Dataset):
-#     def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1):
-#         self.Rin = Rin
-#         self.Rout = Rout
-#         self.z = z
-#         self.Vin = Vin
-#         self.Vout = Vout
-#         self.Fin = Fin
-#         self.Fout = Fout
-#         self.KEin = KEin
-#         self.KEout = KEout
-#         self.PEin = PEin
-#         self.PEout = PEout
-#         self.m = m
-#         self.device = device
-#         self.rscale = rscale
-#         self.vscale = vscale
-#         self.particles_pr_node = Rin.shape[-1] // 3
-#         if Fin is None or Fout is None:
-#             self.useF = False
-#         else:
-#             self.useF = True
-#         if KEin is None or KEout is None:
-#             self.useKE = False
-#         else:
-#             self.useKE = True
-#         if PEin is None or PEout is None:
-#             self.usePE = False
-#         else:
-#             self.usePE = True
-#         return
-#
-#     def __getitem__(self, index):
-#         device = self.device
-#         Rin = self.Rin[index].to(device=device)
-#         Rout = self.Rout[index].to(device=device)
-#         z = self.z[:,None].to(device=device)
-#         Vin = self.Vin[index].to(device=device)
-#         Vout = self.Vout[index].to(device=device)
-#         if self.m is not None:
-#             m = self.m[:,None]
-#         else:
-#             m = 0
-#         if self.useF:
-#             Fin = self.Fin[index].to(device=device)
-#             Fout = self.Fout[index].to(device=device)
-#         else:
-#             Fin = 0
-#             Fout = 0
-#         if self.useKE:
-#             KEin = self.KEin[index].to(device=device)
-#             KEout = self.KEout[index].to(device=device)
-#         else:
-#             KEin = 0
-#             KEout = 0
-#         if self.usePE:
-#             PEin = self.PEin[index].to(device=device)
-#             PEout = self.PEout[index].to(device=device)
-#         else:
-#             PEin = 0
-#             PEout = 0
-#         return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout,m
-#
-#     def __len__(self):
-#         return len(self.Rin)
-#
-#     def __repr__(self):
-#         return self.__class__.__name__ + ' (' + ')'
-#
 
+def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
+    """
+    Wrapper function that handles the different supported data_types.
+    """
+    if data_type == 'water':
+        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep =load_MD_data(file, data_type, device, nskip, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle, use_endstep=use_endstep)
+    elif data_type == 'protein':
+        dataloader_train, dataloader_val, dataloader_test = load_protein_data(file, data_type, device, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle)
+        dataloader_endstep = None
+    else:
+        NotImplementedError("The data_type={:} has not been implemented in function {:}".format(data_type, inspect.currentframe().f_code.co_name))
+    return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
 
-
-class DatasetFutureState(data.Dataset):
-    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1):
-        self.Rin = Rin
-        self.Rout = Rout
-        self.z = z
-        self.Vin = Vin
-        self.Vout = Vout
-        self.Fin = Fin
-        self.Fout = Fout
-        self.KEin = KEin
-        self.KEout = KEout
-        self.PEin = PEin
-        self.PEout = PEout
-        self.m = m
-        self.device = device
-        self.rscale = rscale
-        self.vscale = vscale
-        self.nskip = nskip
-        self.particles_pr_node = Rin.shape[-1] // 3
-        if Fin is None or Fout is None:
-            self.useF = False
-        else:
-            self.useF = True
-        if KEin is None or KEout is None:
-            self.useKE = False
-        else:
-            self.useKE = True
-        if PEin is None or PEout is None:
-            self.usePE = False
-        else:
-            self.usePE = True
-        return
-
-    def __getitem__(self, index):
-        device = self.device
-        Rin = self.Rin[index].to(device=device)
-        Rout = self.Rout[index].to(device=device)
-        z = self.z[:,None].to(device=device)
-        Vin = self.Vin[index].to(device=device)
-        Vout = self.Vout[index].to(device=device)
-        if self.m is not None:
-            m = self.m[:,None]
-        else:
-            m = 0
-        if self.useF:
-            Fin = self.Fin[index].to(device=device)
-            Fout = self.Fout[index].to(device=device)
-        else:
-            Fin = 0
-            Fout = 0
-        if self.useKE:
-            KEin = self.KEin[index].to(device=device)
-            KEout = self.KEout[index].to(device=device)
-        else:
-            KEin = 0
-            KEout = 0
-        if self.usePE:
-            PEin = self.PEin[index].to(device=device)
-            PEout = self.PEout[index].to(device=device)
-        else:
-            PEin = 0
-            PEout = 0
-        return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout,m
-
-    def __len__(self):
-        return len(self.Rin)
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' + ')'
-
-
-def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
+def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
+    """
+    a function for loading molecular dynamics data
+    """
     data = np.load(file)
-
     if 'R' in data.files:
         R = torch.from_numpy(data['R']).to(device=device,dtype=torch.get_default_dtype())
     else:
@@ -186,32 +58,6 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuff
     else:
         PE = None
     masses = atomic_masses(z)
-
-    #Analyse the system for creating constraints
-    # n_particles = R.shape[-1]//3
-    # if particles_pr_node != n_particles:
-    #
-    # Ro = R[:,0::3,:]
-    # Rh1 = R[:,1::3,:]
-    # Rh2 = R[:,2::3,:]
-    #
-    # Vo = V[:,0::3,:]
-    # Vh1 = V[:,1::3,:]
-    # Vh2 = V[:,2::3,:]
-    #
-    # Roh1 = Ro - Rh1
-    # Roh2 = Ro - Rh2
-    # Rh1h2 = Rh1 - Rh2
-    # doh1 = Roh1.norm(dim=-1)
-    # doh2 = Roh2.norm(dim=-1)
-    # dh1h2 = Rh1h2.norm(dim=-1)
-    #
-    # doh1_mean = doh1.mean()
-    # doh2_mean = doh2.mean()
-    # dh1h2_mean = dh1h2.mean()
-    #
-    # doh = 0.9608
-    # dhh = 1.5118
 
     z = z[1::3]
 
@@ -300,39 +146,154 @@ def load_data(file,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuff
     KEout = None
     PEin = None
     PEout = None
-    # Fin_train = None
-    # Fout_train = None
-    # KEin_train = None
-    # KEout_train = None
-    # PEin_train = None
-    # PEout_train = None
 
-    dataset_train = DatasetFutureState(Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses,device=device, rscale=Rscale, vscale=Vscale)
+    dataset_train = DatasetFutureState(data_type,Rin_train, Rout_train, z, Vin_train, Vout_train, Fin_train, Fout_train, KEin_train, KEout_train, PEin_train, PEout_train, masses,device=device, rscale=Rscale, vscale=Vscale)
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
     if use_val:
-        dataset_val = DatasetFutureState(Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
+        dataset_val = DatasetFutureState(data_type,Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
         dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=False)
     else:
         dataloader_val = None
 
 
     if use_test:
-        dataset_test = DatasetFutureState(Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device, rscale=Rscale, vscale=Vscale)
+        dataset_test = DatasetFutureState(data_type,Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device, rscale=Rscale, vscale=Vscale)
         dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False)
     else:
         dataloader_test = None
 
     if use_endstep:
-        dataset_endstep = DatasetFutureState(Rin_endstep, Rout_endstep, z, Vin_endstep, Vout_endstep, m=masses,device=device, rscale=Rscale, vscale=Vscale,nskip=nskip)
+        dataset_endstep = DatasetFutureState(data_type,Rin_endstep, Rout_endstep, z, Vin_endstep, Vout_endstep, m=masses,device=device, rscale=Rscale, vscale=Vscale,nskip=nskip)
         dataloader_endstep = DataLoader(dataset_endstep, batch_size=1, shuffle=False, drop_last=False)
 
 
     return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
 
+def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch_size, shuffle=False):
+    """
+    function for loading protein data
+
+    """
+    data = np.load(file,allow_pickle=True)
+
+    seq = data['seq']
+    rCa = data['rCa']
+    rCb = data['rCb']
+    rN = data['rN']
+    ndata = len(seq)
+    print('Number of datapoints={:}'.format(ndata))
+    ndata_rand = 0 + np.arange(ndata)
+    if shuffle:
+        np.random.shuffle(ndata_rand)
+    train_idx = ndata_rand[:n_train]
+    val_idx = ndata_rand[n_train:n_train + n_val]
+    test_idx = ndata_rand[n_train + n_val:]
+
+
+
+    collator = GraphCollate()
+    dataset_train = Dataset_protein(data_type, seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],device=device)
+    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
+
+    if use_val:
+        dataset_val = Dataset_protein(data_type, seq[val_idx], rCa[val_idx], rCb[val_idx], rN[val_idx], device=device)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collator)
+    else:
+        dataloader_val = None
+
+    if use_test:
+        dataset_test = Dataset_protein(data_type, seq[test_idx], rCa[test_idx], rCb[test_idx], rN[test_idx], device=device)
+        dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collator)
+    else:
+        dataloader_test = None
+
+    return dataloader_train, dataloader_val, dataloader_test
+
+
+
+
+
+class DatasetFutureState(data.Dataset):
+    """
+    A dataset type for future state predictions of molecular dynamics data
+    """
+    def __init__(self, data_type, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1, pos_only=False):
+        self.Rin = Rin
+        self.Rout = Rout
+        self.z = z
+        self.Vin = Vin
+        self.Vout = Vout
+        self.Fin = Fin
+        self.Fout = Fout
+        self.KEin = KEin
+        self.KEout = KEout
+        self.PEin = PEin
+        self.PEout = PEout
+        self.m = m
+        self.device = device
+        self.rscale = rscale
+        self.vscale = vscale
+        self.nskip = nskip
+        self.particles_pr_node = Rin.shape[-1] // 3
+        self.data_type = data_type
+        self.pos_only = pos_only
+        if Fin is None or Fout is None:
+            self.useF = False
+        else:
+            self.useF = True
+        if KEin is None or KEout is None:
+            self.useKE = False
+        else:
+            self.useKE = True
+        if PEin is None or PEout is None:
+            self.usePE = False
+        else:
+            self.usePE = True
+        return
+
+    def __getitem__(self, index):
+        device = self.device
+        Rin = self.Rin[index].to(device=device)
+        Rout = self.Rout[index].to(device=device)
+        z = self.z[:,None].to(device=device)
+        Vin = self.Vin[index].to(device=device)
+        Vout = self.Vout[index].to(device=device)
+        if self.m is not None:
+            m = self.m[:,None]
+        else:
+            m = 0
+        if self.useF:
+            Fin = self.Fin[index].to(device=device)
+            Fout = self.Fout[index].to(device=device)
+        else:
+            Fin = 0
+            Fout = 0
+        if self.useKE:
+            KEin = self.KEin[index].to(device=device)
+            KEout = self.KEout[index].to(device=device)
+        else:
+            KEin = 0
+            KEout = 0
+        if self.usePE:
+            PEin = self.PEin[index].to(device=device)
+            PEout = self.PEout[index].to(device=device)
+        else:
+            PEin = 0
+            PEout = 0
+        return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout,m
+
+    def __len__(self):
+        return len(self.Rin)
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' + ')'
+
+
 
 
 class GraphCollate:
     """
+    A collating function for proteins, which enables the possibility of batchsizes larger than 1.
     """
     def __init__(self):
         return
@@ -372,49 +333,13 @@ class GraphCollate:
         Mdst = M[edge_index_all[1]]
         MM = Msrc * Mdst
         edge_index_all = [edge_index_all[0][MM], edge_index_all[1][MM]]
-
-
-        # edge_src = edge_index[0]
-        # edge_dst = edge_index[1]
-
-        # # rCa_init = torch.zeros_like(rCa)
-        # # rCa_init[:,0] = torch.arange(rCa.shape[0])
-        # # coords_init = torch.cat([rCa_init,rCa_init,rCa_init],dim=-1)
-        #
-        #
-        #
-        #
-        # n_nodes = torch.tensor([cc.shape[0] for cc in coords], device=seq.device)
-        # n_edges = torch.tensor([len(cc) for cc in Is], device=seq.device)
-        #
-        #
-        # pp = torch.cumsum(n_nodes,dim=0)
-        # index_shift = torch.zeros((nb),dtype=torch.int64, device=seq.device)
-        # index_shift[1:] = pp[:-1]
-        #
-        # I = torch.cat(Is,dim=0)
-        # index_shift_vec = index_shift.repeat_interleave(n_edges)
-        # Ishift = I + index_shift_vec
-        #
-        # J = torch.cat(Js,dim=0)
-        # Jshift = J + index_shift_vec
-        #
-        # V = torch.cat(Vs,dim=0)
-        #
-        # I_all = []
-        # J_all = []
-        # for maski, n_node,i_shift in zip(masks,n_nodes,index_shift):
-        #     ii, jj = compute_all_connections(n_node, mask=maski.to(dtype=torch.bool), device=seq.device)
-        #     I_all.append(ii+i_shift)
-        #     J_all.append(jj+i_shift)
-        #
-        # I_all = torch.cat(I_all)
-        # J_all = torch.cat(J_all)
-
         return seq,batch, coord, M, edge_index,edge_index_all
 
 
 def compute_all_connections(n,mask=None, include_self_connections=False, device='cpu'):
+    """
+    A simple function that computes all possible connections between particles, essentially a full edge graph
+    """
     tmp = torch.arange(n, device=device)
     if mask is not None:
         tmp = tmp[mask]
@@ -430,14 +355,21 @@ def compute_all_connections(n,mask=None, include_self_connections=False, device=
 
 
 class Dataset_protein(data.Dataset):
-    def __init__(self, seq, rCa,rCb,rN, device):
-        self.scale = 1e1
+    """
+    Dataset for proteins
+    """
+    def __init__(self, data_type,seq, rCa,rCb,rN, device, pos_only=True):
+        self.scale = 1e1 #My data is saved in nanometers but we want it in Angstrom  #TODO Switch to logunits
+
         self.seq = [torch.from_numpy(seqi).to(device=device) for seqi in seq]
-        # self.seq = torch.from_numpy(seq).to(device=device)
         self.rCa = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCa]
         self.rCb = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCb]
         self.rN = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rN]
         self.device = device
+        self.rscale = 1 #The constraints are in Angstrom which is also what we have scaled to data to be in, so rscale should be unity.
+        self.vscale = 1 #This is not used for proteins at all, since there are no velocity component
+        self.data_type = data_type
+        self.pos_only = pos_only
         return
 
     def __getitem__(self, index):
@@ -462,78 +394,3 @@ class Dataset_protein(data.Dataset):
 
     def __repr__(self):
         return self.__class__.__name__ + ' (' + ')'
-
-
-
-def compute_spherical_coords_init(n,nn_dist):
-    dist = n*nn_dist
-    radius = dist/math.pi
-    radians = torch.arange(n) * (math.pi / n)
-    x = radius * torch.cos(radians)
-    y = radius * torch.sin(radians)
-    z = x*0
-    coords_init = torch.cat([x[:,None],y[:,None],z[:,None]],dim=1)
-    return coords_init.to(dtype=torch.get_default_dtype())
-
-
-def load_data_protein(path,device,n_train,n_val,use_val,use_test,batch_size, shuffle=False):
-
-    # load training data
-    # Aind = torch.load(path + '/AminoAcidIdx.pt')
-    # Yobs = torch.load(path + '/RCalpha.pt')
-    # MSK = torch.load(path + '/Masks.pt')
-    # S = torch.load(path + '/PSSM.pt')
-
-    # Aind = torch.load(path + '/AminoAcidIdxTesting.pt')
-    # Yobs = torch.load(path + '/RCalphaTesting.pt')
-    # MSK = torch.load(path + '/MasksTesting.pt')
-    # S = torch.load(path + '/PSSMTesting.pt')
-    #
-    # # load validation data
-    # if use_val:
-    #     AindVal = torch.load(path + '/AminoAcidIdxVal.pt')
-    #     YobsVal = torch.load(path + '/RCalphaVal.pt')
-    #     MSKVal = torch.load(path + '/MasksVal.pt')
-    #     SVal = torch.load(path + '/PSSMVal.pt')
-    #
-    # # load Testing data
-    # if use_test:
-    #     AindTest = torch.load(path + '/AminoAcidIdxTesting.pt')
-    #     YobsTest = torch.load(path + '/RCalphaTesting.pt')
-    #     MSKTest = torch.load(path + '/MasksTesting.pt')
-    #     STest = torch.load(path + '/PSSMTesting.pt')
-
-    data = np.load(path + '/casp11_sel.npz',allow_pickle=True)
-
-    seq = data['seq']
-    rCa = data['rCa']
-    rCb = data['rCb']
-    rN = data['rN']
-    ndata = len(seq)
-    print('Number of datapoints={:}'.format(ndata))
-    ndata_rand = 0 + np.arange(ndata)
-    if shuffle:
-        np.random.shuffle(ndata_rand)
-    train_idx = ndata_rand[:n_train]
-    val_idx = ndata_rand[n_train:n_train + n_val]
-    test_idx = ndata_rand[n_train + n_val:]
-
-
-
-    collator = GraphCollate()
-    dataset_train = Dataset_protein(seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],device=device)
-    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
-
-    if use_val:
-        dataset_val = Dataset_protein(seq[val_idx], rCa[val_idx], rCb[val_idx], rN[val_idx], device=device)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collator)
-    else:
-        dataloader_val = None
-
-    if use_test:
-        dataset_test = Dataset_protein(seq[test_idx], rCa[test_idx], rCb[test_idx], rN[test_idx], device=device)
-        dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collator)
-    else:
-        dataloader_test = None
-
-    return dataloader_train, dataloader_val, dataloader_test

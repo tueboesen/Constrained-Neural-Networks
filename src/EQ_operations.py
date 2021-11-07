@@ -1,27 +1,16 @@
-"""model with self-interactions and gates
-Exact equivariance to :math:`E(3)`
-version of february 2021
-"""
-import math
-from typing import Dict, Union
-import numpy as np
 import torch
-from torch_geometric.data import Data
-from torch_cluster import radius_graph
+import torch.nn.functional as F
+from e3nn import o3
+from e3nn.nn import FullyConnectedNet
+from e3nn.o3 import FullyConnectedTensorProduct, TensorProduct
+from e3nn.util.jit import compile_mode
 from torch_scatter import scatter
 
-import e3nn
-from e3nn import o3
-from e3nn.math import soft_one_hot_linspace
-from e3nn.nn import FullyConnectedNet, Gate, ExtractIr, Activation
-from e3nn.o3 import TensorProduct, FullyConnectedTensorProduct
-from e3nn.util.jit import compile_mode
-from torch.autograd import grad
-import torch.nn.functional as F
-
-from src.utils import smooth_cutoff
 
 def tp_path_exists(irreps_in1, irreps_in2, ir_out):
+    """
+    Computes whether a path between irreducible representations exists
+    """
     irreps_in1 = o3.Irreps(irreps_in1).simplify()
     irreps_in2 = o3.Irreps(irreps_in2).simplify()
     ir_out = o3.Irrep(ir_out)
@@ -31,15 +20,6 @@ def tp_path_exists(irreps_in1, irreps_in2, ir_out):
             if ir_out in ir1 * ir2:
                 return True
     return False
-
-
-import torch
-from e3nn import o3
-from e3nn.nn import FullyConnectedNet
-from e3nn.o3 import FullyConnectedTensorProduct, TensorProduct
-from e3nn.util.jit import compile_mode
-from torch_scatter import scatter
-
 
 @compile_mode('script')
 class Convolution(torch.nn.Module):
@@ -130,13 +110,19 @@ class Convolution(torch.nn.Module):
 
 
 class Identity(torch.nn.Module):
-        def __init__(self):
-            super().__init__()
-            return
-        def forward(self, input):
-            return input
+    """
+    An identity class that can be inserted and does nothing.
+    """
+    def __init__(self):
+        super().__init__()
+        return
+    def forward(self, input):
+        return input
 
 class SelfInteraction(torch.nn.Module):
+    """
+    A self-interaction operation which mixes the node information internally among the different tensor representations.
+    """
     def __init__(self, irreps_in,irreps_out):
         super().__init__()
         self.irreps_in = irreps_in
@@ -191,185 +177,3 @@ class SelfInteraction(torch.nn.Module):
 
 if __name__ == '__main__':
     pass
-    # import e3nn.o3
-#     # from e3nn.util.test import equivariance_error
-#     # from e3nn.util.test import assert_equivariant
-#     # # torch.set_default_dtype(torch.float64)
-#     # torch.set_default_dtype(torch.float32)
-#     #
-#     # irreps_in = o3.Irreps("2x1o")
-#     # irreps_out = o3.Irreps("20x0o+20x0e+10x1o+5x1e")
-#     #
-#     # PU = ProjectUplift(irreps_in,irreps_out)
-#     # PU.make_matrix_semi_unitary()
-#     # assert_equivariant(
-#     #     PU.uplift,
-#     #     irreps_in=[irreps_in],
-#     #     irreps_out=[irreps_out]
-#     # )
-#     # assert_equivariant(
-#     #     PU.project,
-#     #     irreps_in=[irreps_out],
-#     #     irreps_out=[irreps_in]
-#     # )
-#     #
-#     # SI = SelfInteraction(irreps_in,irreps_out)
-#     # assert_equivariant(
-#     #     SI,
-#     #     irreps_in=[irreps_in],
-#     #     irreps_out=[irreps_out]
-#     # )
-#     # n = 100
-#     # irreps_node = irreps_out
-#     # irreps_node_attr = o3.Irreps("8x0e")
-#     # irreps_edge_attr = o3.Irreps("1x1o")
-#     # irreps_conv_out = o3.Irreps("20x0o+35x0e+10x1o+5x1e")
-#     # radial_neurons = [8, 16]
-#     # num_neighbors = n
-#     # Conv = Convolution(
-#     #     irreps_node,
-#     #     irreps_node_attr,
-#     #     irreps_edge_attr,
-#     #     irreps_conv_out,
-#     #     radial_neurons,
-#     #     num_neighbors
-#     # )
-#     #
-#     # # n = 4
-#     # node_input = irreps_node.randn(n,-1)
-#     # node_attr = irreps_node_attr.randn(n,-1)
-#     # edge_src = torch.arange(n).repeat_interleave(n)
-#     # edge_dst = torch.arange(n).repeat(n)
-#     # edge_attr = irreps_edge_attr.randn(edge_dst.shape[0],-1)
-#     # edge_features = irreps_node_attr.randn(edge_dst.shape[0],-1)
-#     # #
-#     # out = Conv(node_input, node_attr, edge_src, edge_dst, edge_attr, edge_features)
-#     # rot = o3.rand_matrix()
-#     # Dnode_input = irreps_node.D_from_matrix(rot)
-#     # Dnode_attr = irreps_node_attr.D_from_matrix(rot)
-#     # Dedge_attr = irreps_edge_attr.D_from_matrix(rot)
-#     # Dedge_features = irreps_node_attr.D_from_matrix(rot)
-#     # Dout = irreps_conv_out.D_from_matrix(rot)
-#     # #
-#     # node_input_rot = node_input@Dnode_input
-#     # node_attr_rot = node_attr@Dnode_attr
-#     # edge_attr_rot = edge_attr@Dedge_attr
-#     # edge_features_rot = edge_features@Dedge_features
-#     # #
-#     # out_pre_rot = Conv(node_input_rot, node_attr_rot, edge_src, edge_dst, edge_attr_rot, edge_features_rot)
-#     # out_rot = out @ Dout
-#     # assert torch.allclose(out_pre_rot, out_rot, rtol=1e-4, atol=1e-4)
-#     #
-#     # irreps_scalars = o3.Irreps("20x0o+20x0e")
-#     # irreps_gates = o3.Irreps("10x0e+5x0e")
-#     # irreps_gated = o3.Irreps("10x1o+5x1e")
-#     # act = [torch.tanh, torch.nn.functional.silu]
-#     # act_gates = [torch.sigmoid, torch.sigmoid]
-#     # gate = Gate(
-#     #     irreps_scalars, act,  # scalar
-#     #     irreps_gates, act_gates,  # gates (scalars)
-#     #     irreps_gated  # gated tensors
-#     # )
-#     # # Now lets test a small network that does both uplift conv and projection
-#     # SI2 = SelfInteraction(irreps_out, irreps_out)
-#     #
-#     # masses = torch.ones(n)
-#     # con = MomentumConstraints(masses, project=PU.project, uplift=PU.uplift)
-#     #
-#     # def f(x,edge_src,edge_dst,con,edge_feature_ref,edge_attr_ref):
-#     #     max_radius = 2
-#     #     number_of_basis = 8
-#     #     edge_vec = x[:,-3:][edge_src] - x[:,-3:][edge_dst]
-#     #     edge_sh = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec, True, normalization='component')
-#     #     edge_length = edge_vec.norm(dim=1)
-#     #     edge_features = soft_one_hot_linspace(
-#     #         x=edge_length,
-#     #         start=0.0,
-#     #         end=max_radius,
-#     #         number=number_of_basis,
-#     #         basis='bessel',
-#     #         cutoff=False
-#     #     ).mul(number_of_basis**0.5)
-#     #     edge_attr = smooth_cutoff(edge_length / max_radius)[:, None] * edge_sh
-#     #
-#     #     y = PU.uplift(x)
-#     #     for i in range(5):
-#     #         y_new = Conv(y.clone(), node_attr, edge_src, edge_dst, edge_attr, edge_features)
-#     #         y_new = gate(y_new)
-#     #         y = y + 0.1 * y_new
-#     #         y = con(y,torch.zeros(n,dtype=torch.int64))
-#     #     xout = PU.project(y)
-#     #     return xout
-#     #
-#     # x = irreps_in.randn(n,-1)
-#     # xmean = x.pow(2).mean()
-#     # # x = x / torch.sqrt(xmean)
-#     #
-#     # Dx = irreps_in.D_from_matrix(rot)
-#     # Dedge_attr = irreps_edge_attr.D_from_matrix(rot)
-#     # max_radius = 2
-#     # batch = torch.zeros(n,dtype=torch.int64)
-#     # edge_index = radius_graph(x[:,-3:], max_radius, batch)
-#     # edge_src = edge_index[0]
-#     # edge_dst = edge_index[1]
-#     #
-#     # max_radius = 2
-#     # number_of_basis = 8
-#     # edge_vec = x[:, -3:][edge_src] - x[:, -3:][edge_dst]
-#     # edge_sh = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec, True, normalization='component')
-#     # edge_length = edge_vec.norm(dim=1)
-#     # edge_features = soft_one_hot_linspace(
-#     #     x=edge_length,
-#     #     start=0.0,
-#     #     end=max_radius,
-#     #     number=number_of_basis,
-#     #     basis='bessel',
-#     #     cutoff=False
-#     # ).mul(number_of_basis ** 0.5)
-#     # edge_attr = smooth_cutoff(edge_length / max_radius)[:, None] * edge_sh
-#     #
-#     # xout = f(x,edge_src,edge_dst,con,edge_features,edge_attr)
-#     #
-#     # ne = edge_dst.shape[0]
-#     # nes = torch.randperm(ne)
-#     #
-#     # edge_src_per = edge_src[nes]
-#     # edge_dst_per = edge_dst[nes]
-#     # edge_attr_per = edge_attr[nes]
-#     # edge_features_per = edge_features[nes]
-#     #
-#     # xout_per = f(x, edge_src_per, edge_dst_per, con, edge_features_per,edge_attr_per)
-#     #
-#     # assert torch.allclose(xout, xout_per, rtol=1e-4, atol=1e-4)
-#     #
-#     # xout_rot = xout @ Dx
-#     #
-#     # x_rot = x @ Dx
-#     # edge_index_rot = radius_graph(x_rot[:,-3:], max_radius, batch)
-#     # edge_src_rot = edge_index_rot[0]
-#     # edge_dst_rot = edge_index_rot[1]
-#     #
-#     # a = torch.cat([edge_dst[:,None],edge_src[:,None]],dim=1)
-#     # a2 = torch.cat([edge_dst_rot[:, None], edge_src_rot[:, None]], dim=1)
-#     #
-#     # an = a.numpy()
-#     # a2n = a2.numpy()
-#     # ind = np.lexsort((an[:, 1], an[:, 0]))
-#     # an_sorted = an[ind]
-#     # ind = np.lexsort((a2n[:, 1], a2n[:, 0]))
-#     # a2n_sorted = a2n[ind]
-#     #
-#     # edge_attr_rot = edge_attr @ Dedge_attr
-#     # edge_features_rot = edge_features
-#     #
-#     # xout_rot_pre = f(x_rot,edge_src_per,edge_dst_per,con,edge_features_rot,edge_attr_rot)
-#     # print("torch.get_default_dtype()={:} norm_eq_error={:}".format(torch.get_default_dtype(),(xout_rot_pre-xout_rot).norm()))
-#     # assert torch.allclose(xout_rot_pre, xout_rot, rtol=1e-4, atol=1e-4)
-#     #
-#     # print("done")
-#     # # equivariance_error(
-#     # #     Conv,
-#     # #     args_in=
-#     # #     irreps_in=[irreps_node, irreps_node_attr, irreps_edge_attr],
-#     # #     irreps_out=[irreps_out]
-#     # # )

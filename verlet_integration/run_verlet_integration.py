@@ -17,7 +17,7 @@ from e3nn.util.jit import compile_mode
 from torch.autograd import grad
 import torch.nn.functional as F
 
-from preprocess.train_force_and_energy_predictor import generate_FE_network
+from verlet_integration.train_force_and_energy_predictor import generate_FE_network
 from src.utils import atomic_masses
 
 

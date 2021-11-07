@@ -28,6 +28,9 @@ def setup_custom_logger(name,logfile_loc,debug):
     return logger
 
 def log_all_parameters(LOG,args):
+    """
+    Logs all parameters in the dictionary args
+    """
     LOG.info('---------Listing all parameters-------')
     # state = {k: v for k, v in args._get_kwargs()}
     # for key, value in state.items():

@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from src.constraints import load_constraints
 from src.dataloader import load_data
-from src.network import network_simple
+from src.network_mim import network_simple
 from src.network_e3 import constrained_network
 from src.project_uplift import ProjectUpliftEQ, ProjectUplift
 from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset

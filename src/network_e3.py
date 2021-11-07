@@ -4,30 +4,19 @@ version of february 2021
 """
 import torch
 import torch.nn
-import torch.nn as nn
+import torch.nn.functional as F
 from e3nn import o3
 from e3nn.math import soft_one_hot_linspace
-from e3nn.nn import FullyConnectedNet, Gate, ExtractIr, Activation, Extract
-import torch.nn.functional as F
-from torch_scatter import scatter
+from e3nn.nn import Gate
 
-from src.EQ_operations import SelfInteraction, Convolution
-from src.constraints import MomentumConstraints
+from src.EQ_operations import SelfInteraction, Convolution, tp_path_exists
 from src.utils import smooth_cutoff
 
 
-def tp_path_exists(irreps_in1, irreps_in2, ir_out):
-    irreps_in1 = o3.Irreps(irreps_in1).simplify()
-    irreps_in2 = o3.Irreps(irreps_in2).simplify()
-    ir_out = o3.Irrep(ir_out)
-
-    for _, ir1 in irreps_in1:
-        for _, ir2 in irreps_in2:
-            if ir_out in ir1 * ir2:
-                return True
-    return False
-
-class constrained_network(torch.nn.Module):
+class neural_network_equivariant(torch.nn.Module):
+    """
+    An equivariant neural network built in e3nn inspired by their MD simulating neural network paper (the network has not been published at this time)
+    """
     def __init__(
         self,
         irreps_inout,
@@ -40,8 +29,8 @@ class constrained_network(torch.nn.Module):
         num_nodes,
         embed_dim,
         max_atom_types,
-        constraints=None,
-        constrain_method=None,
+        con_fnc=None,
+        con_type=None,
         PU=None,
         particles_pr_node = 1,
     ) -> None:
@@ -54,8 +43,8 @@ class constrained_network(torch.nn.Module):
         self.irreps_hidden = o3.Irreps(irreps_hidden)
         self.irreps_out = o3.Irreps(irreps_inout)
         self.irreps_edge_attr = o3.Irreps(irreps_inout)
-        self.constraints = constraints
-        self.constrain_method = constrain_method
+        self.con_fnc = con_fnc
+        self.con_type = con_type
         self.PU = PU
         self.particles_pr_nodes = particles_pr_node
         if self.num_neighbors < 0:
@@ -149,12 +138,17 @@ class constrained_network(torch.nn.Module):
             tmp = y.clone()
             y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
             y_old = tmp
-            raise NotImplementedError("Fix constraints")
-            if self.constraints is not None and self.constrain_all_layers is True:
+            if self.con_fnc is not None and self.con_type == 'high':
                 data = self.constraints({'y':y,'batch':batch,'z':node_attr})
                 y = data['y']
             x = self.PU.project(y)
-        if self.constraints is not None and self.constrain_all_layers is False:
+        if self.con_fnc is not None and self.con_type == 'low':
             data = self.constraints({'x':x,'batch':batch,'z':node_attr})
             x = data['x']
-        return x
+        if self.con_fnc is not None and self.con_type == 'reg':
+            data = self.constraints({'x':x,'batch':batch,'z':node_attr})
+            reg = data['c']
+        else:
+            reg = 0
+
+        return x,reg

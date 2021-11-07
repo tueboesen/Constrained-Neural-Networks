@@ -1,3 +1,6 @@
+"""
+This preprocessing file converts cp2k outputs to numpy files.
+"""
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -94,22 +97,6 @@ if __name__ == '__main__':
     # force = read_xyz_force(filename_force, pos.shape[1])
 
     m = atomic_masses(torch.from_numpy(atomic_numbers)).numpy()
-
-    # CoM = np.sum(pos * m[None,:,None],axis=1,keepdims=True)/np.sum(m)
-    # print("MAE CoM={:}".format(np.abs(CoM).mean()))
-    #
-    # pos_fixed = pos - CoM
-    # CoM2 = np.sum(pos_fixed * m[None,:,None],axis=1,keepdims=True)/np.sum(m)
-    # print("After fixing MAE CoM2={:}".format(np.abs(CoM2).mean()))
-
-    #Now that Center of Mass is fixed to origo, let's rotate the coordinate system such that the first carbon atom always have y and z component 0 and such that the second carbon atom always have .
-
-
-    #Lets look at angular momentum
-    # L = np.cross(pos_fixed, m[None,:,None] * vel)
-    # Lsum = np.sum(L,axis=1)
-
-    #Now ensure that we are saving the same number of steps for each variable (they might have different number of data stored since we ran it while the simulation was still running)
 
     ndata = np.min([pos.shape[0], force.shape[0], vel.shape[0], temp.shape[0], KE.shape[0], PE.shape[0]])
 

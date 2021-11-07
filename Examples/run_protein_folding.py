@@ -1,45 +1,31 @@
 import pickle
 import argparse
 from datetime import datetime
-import os, sys
-import time
+import os
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import math
-import torch.autograd.profiler as profiler
 
-from torch.utils.data import DataLoader
 from e3nn import o3
 
-from preprocess.train_force_and_energy_predictor import generate_FE_network
-from src import log
-from src.log import log_all_parameters
-from src.main import main
 from src.main_protein import main_protein
-from src.network_e3 import constrained_network
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 39589
-    args.n_val = 0
+    args.n_train = 10000
+    args.n_val = 10
     args.batch_size = 1
     args.n_input_samples = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 2
+    args.epochs_for_lr_adjustment = 1
     args.use_val = False
     args.use_test = False
     args.debug = False
     args.lr = 1e-3
     args.seed = 133548
-    args.epochs = 20
+    args.epochs = 10
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
@@ -65,7 +51,7 @@ if __name__ == '__main__':
             'node_dim_in': 9,
             'node_attr_dim_in': 1,
             'node_dim_latent': 60,
-            'nlayers': 3,
+            'nlayers': 1,
             'max_radius': 15,
             # 'constraints': 'chaintriangle',
         }
@@ -86,7 +72,7 @@ if __name__ == '__main__':
         dataloader_train = None
         dataloader_val = None
         dataloader_test = None
-        constrain_method = ['all_layers']
+        constrain_method = ['all_layers','end_layer','reg']
         # constrain_method = ['reg']
         constraints = ['chain','triangle','chaintriangle']
         nskips = [9999]

@@ -16,7 +16,7 @@ import torch.autograd.profiler as profiler
 from torch.utils.data import DataLoader
 from e3nn import o3
 
-from preprocess.train_force_and_energy_predictor import generate_FE_network
+from verlet_integration.train_force_and_energy_predictor import generate_FE_network
 from src import log
 from src.log import log_all_parameters
 from src.main import main
@@ -42,7 +42,8 @@ if __name__ == '__main__':
     args.seed = 123545
     args.epochs = 3
     args.network_type = 'mim'
-    args.loss = 'distogram'
+    args.loss = 'mim'
+    args.data_type = 'water'
     args.train_idx = None
     args.PE_predictor = './../pretrained_networks/force_energy_model.pt'
     # args.data = './../../../data/MD/argon/argon.npz'
@@ -60,28 +61,10 @@ if __name__ == '__main__':
         date=datetime.now(),
     )
 
-    # data = np.load(c['data'])
-    # R = torch.from_numpy(data['R'])
-    # Rin, Rout = convert_snapshots_to_future_state_dataset(c['nskip'], R)
-    # ndata_rand = 0 + np.arange(Rin.shape[0])
-    # np.random.shuffle(ndata_rand)
-    # train_idx = ndata_rand[:c['n_train']]
-    # val_idx = ndata_rand[c['n_train']:c['n_train'] + c['n_val']]
-    # test_idx = ndata_rand[c['n_train'] + c['n_val']:]
-    #
-    # c['train_idx'] = train_idx
-    # c['val_idx'] = val_idx
-    # c['test_idx'] = test_idx
-    # splitting_indices = {'train_idx': train_idx, 'val_idx': val_idx, 'test_idx': test_idx}
-    # os.makedirs(result_dir_base)
-    # np.savez("{:}/splitting_indices".format(result_dir_base), **splitting_indices)
-
-
     dataloader_train=None
     dataloader_val=None
     dataloader_test=None
     network_types = ['mim']
-    constrain_method = ['all_layers']
     # nskips = [9999]
     job = 0
     seeds = [1234,1235,1236,1237,1238]
@@ -94,7 +77,6 @@ if __name__ == '__main__':
     seeds = [1234,1235,1236,1237,1238]
     res_his = []
     for ii,seed in enumerate(seeds):
-
         if args.network_type.lower() == 'eq':
             args.network = {
                 'irreps_inout': o3.Irreps("6x1o"),
@@ -108,8 +90,6 @@ if __name__ == '__main__':
                 'max_atom_types': 20,
                 'radial_neurons': [48],
                 'num_neighbors': -1,
-                'constraints': 'triangle',
-                'constrain_all_layers': True,
             }
         elif args.network_type.lower() == 'mim':
             args.network = {
@@ -118,30 +98,32 @@ if __name__ == '__main__':
                 'node_dim_latent': 90,
                 'nlayers': 6,
                 'max_radius': 15,
-                'constraints': '',
             }
 
         c['seed'] = seed
         dataloader_train = None
         dataloader_val = None
         dataloader_test = None
-        constrain_method = ['all_layers']
+        dataloader_endstep = None
+        constrain_types = ['high']
+        # constrain_method = ['all_layers']
         # constrain_method = ['reg']
         constraints = ['triangle']
         nskips = [9999]
         job = 0
-        c['network']['constrain_method'] = 'all_layers'
-        c['network']['constraints'] = ''
+        c['network']['constraints'] = 'triangle'
+        c['network']['constraint_type'] = 'high'  # high, low, reg
+        c['network']['constraint_data'] = ''  # high, low, reg
         c['result_dir'] = "{:}/{:}_{:}".format(result_dir_base, job,ii)
-        results,dataloader_train,dataloader_val,dataloader_test = main(c,dataloader_train,dataloader_val,dataloader_test)
+        results,dataloader_train,dataloader_val,dataloader_test, dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
         if ii==0:
             res_his.append([])
         res_his[job].append(results)
 
         for nskip in nskips:
             c['nskip'] = nskip
-            for constrain_methodi in constrain_method:
-                c['network']['constrain_method'] = constrain_methodi
+            for constrain_typei in constrain_types:
+                c['network']['constrain_type'] = constrain_typei
                 for constraint in constraints:
                     c['network']['constraints'] = constraint
                     job += 1

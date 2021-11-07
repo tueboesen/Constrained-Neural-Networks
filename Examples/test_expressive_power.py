@@ -1,49 +1,39 @@
 import pickle
 import argparse
 from datetime import datetime
-import os, sys
-import time
+import os
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import math
-import torch.autograd.profiler as profiler
 
-from torch.utils.data import DataLoader
 from e3nn import o3
 
-from preprocess.train_force_and_energy_predictor import generate_FE_network
-from src import log
-from src.log import log_all_parameters
 from src.main import main
 from src.main_protein import main_protein
-from src.network_e3 import constrained_network
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 10000
-    args.n_val = 10
+    args.n_train = 39589
+    args.n_val = 0
     args.batch_size = 1
     args.n_input_samples = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 1
+    args.epochs_for_lr_adjustment = 2
     args.use_val = False
     args.use_test = False
+    args.use_endstep = False
     args.debug = False
+    args.viz = False
     args.lr = 1e-3
     args.seed = 133548
-    args.epochs = 10
+    args.epochs = 20
     args.network_type = 'mim'
     args.loss = 'distogram'
     args.train_idx = None
-    args.data = './../../../data/casp11/'
+    args.data = './../../../data/casp11/casp11_sel.npz'
+    args.data_type = 'protein'
 
     if args.network_type.lower() == 'eq':
         args.network = {
@@ -58,16 +48,14 @@ if __name__ == '__main__':
             'max_atom_types': 20,
             'radial_neurons': [48],
             'num_neighbors': -1,
-            'constraints': '',
         }
     elif args.network_type.lower() == 'mim':
         args.network = {
             'node_dim_in': 9,
             'node_attr_dim_in': 1,
             'node_dim_latent': 60,
-            'nlayers': 1,
+            'nlayers': 3,
             'max_radius': 15,
-            # 'constraints': 'chaintriangle',
         }
 
 
@@ -86,15 +74,18 @@ if __name__ == '__main__':
         dataloader_train = None
         dataloader_val = None
         dataloader_test = None
-        constrain_method = ['all_layers','end_layer','reg']
-        # constrain_method = ['reg']
+        dataloader_endstep = None
+        constrain_method = ['all_layers'] #['all_layers','reg','end']
         constraints = ['chain','triangle','chaintriangle']
         nskips = [9999]
         job = 0
-        c['network']['constrain_method'] = 'all_layers'
-        c['network']['constraints'] = ''
+        c['network']['constraints'] = 'chain'
+        c['network']['constraint_type'] = 'high'  # high, low, reg
+        c['network']['constraint_data'] = './../../../data/casp11/casp11_sel_constraints.pt'
+        # c['network']['constrain_method'] = 'all_layers'
+        # c['network']['constraints'] = ''
         c['result_dir'] = "{:}/{:}_{:}".format(result_dir_base, job,ii)
-        results,dataloader_train,dataloader_val,dataloader_test = main_protein(c,dataloader_train,dataloader_val,dataloader_test)
+        results,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
         if ii==0:
             res_his.append([])
         res_his[job].append(results)
@@ -111,6 +102,7 @@ if __name__ == '__main__':
                     if ii==0:
                         res_his.append([])
                     res_his[job].append(results)
+
 
     outputfile = "{:}/results_history.pickle".format(result_dir_base)
     with open(outputfile, "wb") as fp:  # Pickling
@@ -134,7 +126,3 @@ if __name__ == '__main__':
         ax.fill_between(x, res_mean[ii] - res_std[ii], res_mean[ii] + res_std[ii], alpha=0.2)
         plt.savefig(pngfile)
         plt.clf()
-
-
-    # with open(outputfile, "rb") as fp:   # Unpickling
-    #     b = pickle.load(fp)
