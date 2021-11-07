@@ -180,6 +180,7 @@ def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch
     rCa = data['rCa']
     rCb = data['rCb']
     rN = data['rN']
+    log_units = data['log_units']
     ndata = len(seq)
     print('Number of datapoints={:}'.format(ndata))
     ndata_rand = 0 + np.arange(ndata)
@@ -192,7 +193,7 @@ def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch
 
 
     collator = GraphCollate()
-    dataset_train = Dataset_protein(data_type, seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],device=device)
+    dataset_train = Dataset_protein(data_type, seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],device,log_units)
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
 
     if use_val:
@@ -357,10 +358,21 @@ def compute_all_connections(n,mask=None, include_self_connections=False, device=
 class Dataset_protein(data.Dataset):
     """
     Dataset for proteins
-    """
-    def __init__(self, data_type,seq, rCa,rCb,rN, device, pos_only=True):
-        self.scale = 1e1 #My data is saved in nanometers but we want it in Angstrom  #TODO Switch to logunits
 
+    data_type:      The type of data, for now it is just proteins
+    seq:            The amino sequence in numerical form (typically 0-19 are used for the most common amino acids.)
+    rCa:            The 3D coordinates of Carbon alpha atom in each amino acid
+    rCb:            The 3D coordinates of the carbon beta atom in each amino acid
+    rN:             The 3D coordinates of teh Nitrogen atom in each amino acid
+    device:         Device the data should be stored on
+    log_units:      The logarithmic unit type of the 3D coordinates rCa,rCb,rN is in. (nanometers = -9, Angstrom= -10, m=0)
+    pos_only:       Whether we only store positions or also velocities (for proteins this should always be true)
+    internal_log_units: The logarithmic unit type we wish to do the calculations in (this is the unit type the constraints for instance are given in)
+    """
+    def __init__(self, data_type,seq, rCa,rCb,rN, device, log_units, pos_only=True,internal_log_units=-10):
+        self.log_units = log_units
+        self.internal_log_units = internal_log_units
+        self.scale = 10**(log_units-internal_log_units)
         self.seq = [torch.from_numpy(seqi).to(device=device) for seqi in seq]
         self.rCa = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCa]
         self.rCb = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCb]

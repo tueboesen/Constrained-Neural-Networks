@@ -30,10 +30,10 @@ if __name__ == '__main__':
     # args.train_idx = None
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
-    args.con = ['','chain','triangle','chaintriangle']
+    args.con = ['chain','triangle','chaintriangle']
     # args.con = ['triangle','chaintriangle']
-    args.con_type = ['high', 'low','reg']
-    # args.con_type = ['low','reg']
+    # args.con_type = ['high', 'low','reg']
+    args.con_type = ['reg']
     args.con_data = './../../../data/casp11/casp11_sel_cons.pt'
     if args.network_type.lower() == 'eq':
         args.network = {

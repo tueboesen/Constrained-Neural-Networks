@@ -133,7 +133,8 @@ class PointToPoint(ConstraintTemplate):
     project and uplift are functions that performs a projection and uplifting operations, they are only needed for high dimensional constraining, and can otherwise be omitted.
     pos_only can be used if the data only contains positions rather than positions and velocities.
 
-    y/x is expected to be ordered as: TODO insert here
+    y is the high dimensional variable, ordered as [nparticles,latent_dim]
+    x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
     def __init__(self,r0,con_type,project=None,uplift=None,pos_only=False,debug=False):
@@ -220,7 +221,7 @@ class PointToPoint(ConstraintTemplate):
         r = x.view(1, -1, 9)
         z2 = z.view(1, -1, 1)
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6], z2)
-        c_new = torch.sum(lam_p2 ** 2)
+        c_new = torch.sum(lam_p2 ** 2)/100
         return {'x': x, 'z': z, 'c': c + c_new}
 
 class PointToSphereSphereIntersection(ConstraintTemplate):
@@ -231,7 +232,8 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
     project and uplift are functions that performs a projection and uplifting operations, they are only needed for high dimensional constraining, and can otherwise be omitted.
     pos_only can be used if the data only contains positions rather than positions and velocities.
 
-    y/x is expected to be ordered as: TODO insert here
+    y is the high dimensional variable, ordered as [nparticles,latent_dim]
+    x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
     def __init__(self,r1,r2,con_type,project=None,uplift=None,pos_only=False,debug=False):
@@ -349,7 +351,7 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
 
         c23 = torch.sum((d23 - r2) ** 2)
         c13 = torch.sum((d13 - r1) ** 2)
-        c_new = c23 + c13
+        c_new = (c23 + c13)/100
         return {'x': x, 'z': z, 'c': c + c_new}
 
 
@@ -364,7 +366,8 @@ class PointChain(ConstraintTemplate):
 
     niter and converged_acc are used to determine how many iterations are used to try to enforce the constraint, n_iter is the maxmimum number of iterations to use, while converged_acc is the accuracy at which it will stop iterating.
 
-    y/x is expected to be ordered as: TODO insert here
+    y is the high dimensional variable, ordered as [nparticles,latent_dim]
+    x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
     def __init__(self,d0,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9):
@@ -568,7 +571,7 @@ class PointChain(ConstraintTemplate):
         z2 = z.view(1, -1, 1)
         r = x[:, :3].view(1, -1, 3)
         cc = self.constraint(r, z2)
-        c_new = torch.sum(torch.abs(cc))
+        c_new = torch.sum(torch.abs(cc))/100
         return {'x': x, 'z': z, 'c': c + c_new}
 
 
