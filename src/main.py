@@ -40,7 +40,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
 
     # load training data
     if dataloader_train is None:
-        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['use_endstep'])
+        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'])
 
     if c['network_type'] == 'EQ':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
