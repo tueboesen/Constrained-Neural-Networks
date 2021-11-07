@@ -51,7 +51,7 @@ if __name__ == '__main__':
         args.network = {
            'node_dim_in': 9,
             'node_dim_latent': 120,
-            'nlayers': 9,
+            'nlayers': 3,
             'max_radius': 15,
         }
     args.basefolder = os.path.basename(__file__).split(".")[0]
