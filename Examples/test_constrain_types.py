@@ -1,17 +1,10 @@
-import pickle
 import argparse
-from datetime import datetime
 import os
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
 
+import torch
 from e3nn import o3
 
 from src.batch_jobs import job_planner, job_runner
-from src.main import main
-from src.main_protein import main_protein
-from src.vizualization import plot_training_and_validation_accumulated
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
@@ -20,9 +13,8 @@ if __name__ == '__main__':
     args.n_train = 10
     args.n_val = 0
     args.batch_size = 1
-    args.n_input_samples = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 300
+    args.epochs_for_lr_adjustment = 50
     args.lr_adjustment = 0.8
     args.use_val = False
     args.use_test = False
@@ -30,12 +22,12 @@ if __name__ == '__main__':
     args.debug = False
     args.viz = False
     args.lr = 1e-3
-    args.seed = [1,2,3,4,5]
+    args.seed = [1234,1235,1236,1237,1238]
     args.use_same_data = True
     args.epochs = 300
     args.network_type = 'mim'
     args.loss = 'mim'
-    args.train_idx = None
+    # args.train_idx = None
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
     args.con = ['','chain','triangle','chaintriangle']
@@ -59,8 +51,8 @@ if __name__ == '__main__':
         args.network = {
             'node_dim_in': 9,
             'node_attr_dim_in': 1,
-            'node_dim_latent': 60,
-            'nlayers': 3,
+            'node_dim_latent': 120,
+            'nlayers': 9,
             'max_radius': 15,
         }
     args.basefolder = os.path.basename(__file__).split(".")[0]
