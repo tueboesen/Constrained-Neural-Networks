@@ -131,7 +131,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     return aloss, alossD#, aMAEr, aMAEv
 
 
-def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, batch_size=1):
+def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, batch_size=1, debug=False):
     """
     A function designed to optimize or test a model on protein predictions data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -182,6 +182,18 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
         if train:
             loss.backward()
             optimizer.step()
+            if debug:
+                weights = optimizer.param_groups[0]['params']
+                weights_flat = [torch.flatten(weight) for weight in weights]
+                weights_1d = torch.cat(weights_flat)
+                assert not torch.isnan(weights_1d).any()
+                assert not torch.isinf(weights_1d).any()
+
+                grad_flat = [torch.flatten(weight.grad) for weight in weights]
+                grad_1d = torch.cat(grad_flat)
+                assert not torch.isnan(grad_1d).any()
+                assert not torch.isinf(grad_1d).any()
+
         aloss += loss_rel.detach()
         alossD += lossD_rel.detach()
 
