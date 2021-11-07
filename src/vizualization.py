@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-def plot_training_and_validation_accumulated(results,legends,results_dir):
+def plot_training_and_validation_accumulated(results,legends,results_dir,semilogy=False):
     """
     plots the training and validation data as it accumulates over several jobs in a big run.
     Expects the results to be a numpy variable, with shape (ntypes,nreps,nlosses,nepochs)
@@ -12,7 +12,11 @@ def plot_training_and_validation_accumulated(results,legends,results_dir):
     njobs, nrep, nlosses, nepochs = results.shape
     x = np.arange(nepochs)
     M = np.sum(results,axis=3) > 0
-    pngfile = "{:}/Loss.png".format(results_dir)
+    if semilogy:
+        pngfile = "{:}/Loss_{:}.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss.png".format(results_dir)
+
     fig, ax = plt.subplots()
     for ii in range(njobs):
 
@@ -20,14 +24,20 @@ def plot_training_and_validation_accumulated(results,legends,results_dir):
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
-            h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-training")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
             ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
         idx = 1
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
-            h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-validation")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-validation")
             ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
@@ -35,7 +45,10 @@ def plot_training_and_validation_accumulated(results,legends,results_dir):
     plt.savefig(pngfile)
     plt.clf()
 
-    pngfile = "{:}/LossD.png".format(results_dir)
+    if semilogy:
+        pngfile = "{:}/LossD_{:}.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/LossD.png".format(results_dir)
     fig, ax = plt.subplots()
     for ii in range(njobs):
 
@@ -43,14 +56,20 @@ def plot_training_and_validation_accumulated(results,legends,results_dir):
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
-            h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-training")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
             ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
         idx = 3
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
-            h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-validation")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-validation")
             ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
         plt.xlabel('Epochs')
         plt.ylabel('LossD')

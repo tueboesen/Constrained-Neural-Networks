@@ -85,5 +85,6 @@ def job_runner(cs,legends, results):
         file = f"{c['result_dir_base']:}/results"
         np.save(file,results)
         plot_training_and_validation_accumulated(results, legends, c['result_dir_base'])
+        plot_training_and_validation_accumulated(results, legends, c['result_dir_base'],semilogy=True)
 
     return

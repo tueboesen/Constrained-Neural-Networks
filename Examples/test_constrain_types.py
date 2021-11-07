@@ -24,7 +24,7 @@ if __name__ == '__main__':
     args.lr = 1e-3
     args.seed = [1234,1235,1236,1237,1238]
     args.use_same_data = True
-    args.epochs = 300
+    args.epochs = 3
     args.network_type = 'mim'
     args.loss = 'mim'
     # args.train_idx = None
