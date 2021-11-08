@@ -1,21 +1,19 @@
 """
 This file is used to compute the average binding distance between neighbouring amino acids, and internally in each amino acid.
-As input it takes a folder with .npz files.
+As input it takes a single .npz file.
 """
 
-import torch
-import numpy as np
-import glob
 import time
+
+import numpy as np
+import torch
 
 if __name__ == '__main__':
     npzfile = './../../../data/casp11/casp11_sel.npz'
 
-    output_file = './../../../data/casp11/protein_stat.npz'
-    output_file_torch = './../../../data/casp11/protein_stat.pt'
+    output_file = './../../../data/casp11/casp11_sel_cons.npz'
+    output_file_torch = './../../../data/casp11/casp11_sel_cons.pt'
 
-    # search_command = folder + "*.npz"
-    # npzfiles = [f for f in glob.glob(search_command)]
 
     dict_AA = {'ALA': 0, 'ARG': 1, 'ASN': 2, 'ASP': 3, 'CYS': 4, 'GLN': 5, 'GLU': 6, 'GLY': 7, 'HSD': 8, 'HSE': 9, 'ILE': 10, 'LEU': 11, 'LYS': 12, 'MET': 13, 'PHE': 14, 'PRO': 15, 'SER': 16, 'THR': 17, 'TRP': 18, 'TYR': 19, 'VAL': 20}
     # dict_AA_short = {'A':0, 'C':4, 'D':3, 'E':6, 'F':14, 'G':7, 'H':8, 'I':10, 'K':12, 'L':11, 'M':13, 'N':2, 'P':15,'Q':5, 'R':1, 'S':16, 'T':17, 'V':20, 'W':18, 'Y':19, '-'} #Note that H should cover both 8 and 9, we will just have to copy info from one to the other afterwards.
@@ -44,13 +42,6 @@ if __name__ == '__main__':
     for i,(seq,rCa,rCb,rN) in enumerate(zip(seqs,rCas,rCbs,rNs)):
         if (i+1) % 100==0:
             print(f"{i}, time={time.time() - t0:2.2f}s")
-        # data = np.load(npzfile)
-        # rCa = data['rCa']
-        # rCb = data['rCb']
-        # rN = data['rN']
-        # AA_list = data['AA_LIST']
-        # seq = data['seq']
-        # First we ensure that none of the positions in the protein are zero (this means that the amino acid was not mapped)
         M1 = rCa != 0
         M1 = np.min(M1,axis=1)
         M2 = rCb != 0

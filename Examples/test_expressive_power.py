@@ -2,9 +2,9 @@ import argparse
 import os
 
 import torch
-from e3nn import o3
 
 from src.batch_jobs import job_planner, job_runner
+
 """
 This is an example designed to test whether inherently constrained neural networks have a higher expressive power than non-constrained networks.
 This is tested by using a very small network on a very large dataset, and seeing how well the network can fit the entire dataset.

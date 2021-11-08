@@ -1,18 +1,15 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-from glob import glob
-import os
 import numpy as np
+from src.vizualization import plot_training_and_validation_accumulated_custom
 
-# glob("/path/to/directory/*/")
-#
-# npzfiles = [f for f in glob.glob(search_command)]
-from src.vizualization import plot_training_and_validation_accumulated, plot_training_and_validation_accumulated_custom
+"""
+A simple file to load data from an already finished run, and plot it with custom plotting options.
+ 
+"""
 
 folders = ['E:/Dropbox/ComputationalGenetics/text/Constrained neural networks/data/2021-11-07_16_37_38/','E:/Dropbox/ComputationalGenetics/text/Constrained neural networks/data/2021-11-07_16_37_38/']
-results=[]
 output_dir = 'E:/Dropbox/ComputationalGenetics/text/Constrained neural networks/data/'
 
+results=[]
 for folder in folders:
     result_file = f"{folder:}results.npy"
     result = np.load(result_file, allow_pickle=True)

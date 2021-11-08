@@ -2,7 +2,6 @@ import argparse
 import os
 
 import torch
-from e3nn import o3
 
 from src.batch_jobs import job_planner, job_runner
 
@@ -36,13 +35,10 @@ if __name__ == '__main__':
     args.epochs = 300
     args.network_type = ['mim']
     args.loss = ''
-    # args.train_idx = None
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
-    args.con = ['','chain','triangle','chaintriangle']
-    # args.con = ['triangle','chaintriangle']
-    args.con_type = ['high', 'low','reg']
-    # args.con_type = ['reg']
+    args.con = ['', 'chain', 'triangle', 'chaintriangle']
+    args.con_type = ['high', 'low', 'reg']
     args.con_data = './../../../data/casp11/casp11_sel_cons.pt'
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
