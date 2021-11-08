@@ -210,6 +210,8 @@ class neural_network_mimetic(nn.Module):
             y_old = tmp
 
             if self.con_fnc is not None and self.con_type == 'high':
+                if y.isnan().any():
+                    raise ValueError("NaN detected")
                 data = self.con_fnc({'y': y, 'batch': batch,'z':node_attr})
                 y = data['y']
                 if y.isnan().any():

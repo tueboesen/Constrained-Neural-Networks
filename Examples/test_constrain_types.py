@@ -22,7 +22,7 @@ if __name__ == '__main__':
     args.debug = False
     args.viz = False
     args.lr = 1e-3
-    args.seed = [1234,1235,1236,1237,1238]
+    args.seed = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
     args.use_same_data = True
     args.epochs = 300
     args.network_type = 'mim'
@@ -30,10 +30,10 @@ if __name__ == '__main__':
     # args.train_idx = None
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
-    args.con = ['chain','triangle','chaintriangle']
+    args.con = ['','chain','triangle','chaintriangle']
     # args.con = ['triangle','chaintriangle']
-    # args.con_type = ['high', 'low','reg']
-    args.con_type = ['reg']
+    args.con_type = ['high', 'low','reg']
+    # args.con_type = ['reg']
     args.con_data = './../../../data/casp11/casp11_sel_cons.pt'
     if args.network_type.lower() == 'eq':
         args.network = {

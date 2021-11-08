@@ -252,6 +252,7 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         return
 
     def constraint(self,p1,p2,p3,z):
+        eps = 1e-19
         if self.r1.ndim == 0:
             r1 = self.r1
             r2 = self.r2
@@ -262,14 +263,16 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         dn = d.norm(dim=-1)
         a = 1 / (2 * dn) * torch.sqrt(4 * dn ** 2 * r2 ** 2 - (dn ** 2 - r1 ** 2 + r2 ** 2)**2)
 
+
         cn = (dn ** 2 - r2 ** 2 + r1 ** 2) / (2 * dn)
         c = cn[:,:,None] / dn[:,:,None] * d + p1
         n = d / dn.unsqueeze(-1)
 
         q = p3 - c - (torch.sum(n*(p3 - c),dim=-1,keepdim=True) * n)
-        K = c + a.unsqueeze(-1) * q / q.norm(dim=-1).unsqueeze(-1)
+        K = c + a.unsqueeze(-1) * q / (q.norm(dim=-1).unsqueeze(-1)+eps)
 
         lam_p3 = -(K - p3)
+        assert not lam_p3.isnan().any()
         return lam_p3
 
     def constrain_low_dimension(self,data):
@@ -301,6 +304,8 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         y = data['y']
         z = data['z']
         batch = data['batch']
+        if self.debug:
+            assert not y.isnan().any()
         # for j in range(n):
         x = self.project(y)
         if self.pos_only:
@@ -313,6 +318,8 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         r = x[:, 0:ndim].view(nb, -1, ndim)
         z2 = z.view(nb,-1)
         # v = x[:, ndim:].view(nb, -1, ndim)
+        if self.debug:
+            assert not r.isnan().any()
 
         lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9],z2)
         lam_x[:,6:9] = lam_p3.view(-1,3)
@@ -320,7 +327,6 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
             lam_y = self.uplift(lam_x.view(-1, ndim))
         else:
             lam_y = self.uplift(lam_x.view(-1, 2 * ndim))
-        y = y - lam_y
         if self.debug:
             x = self.project(y)
             r = x[:, 0:ndim].view(nb, -1, ndim)
@@ -329,6 +335,10 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
             cnorm = torch.mean(torch.sum(lam_p3 ** 2, dim=-1))
             cnorm_after = torch.mean(torch.sum(lam_p3_after ** 2, dim=-1))
             print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
+            assert not cnorm.isnan().any()
+            assert not cnorm_after.isnan().any()
+
+        y = y - lam_y
         return {'y':y,'batch':batch, 'z':z}
 
     def constrain_regularization(self, data):
