@@ -6,6 +6,15 @@ from e3nn import o3
 
 from src.batch_jobs import job_planner, job_runner
 
+"""
+This example tests the three different types of constraints: 
+    "high" - which are constraints in high dimensional space, done in every layer of a neural network
+    "low" - which are constraints in low dimensional space (the output space), done at the end of the neural network
+    "reg" - which are constraints through regularization, which is done at the end of the neural network and then applied as a regularization term to the loss function
+    
+    The constraint types are tested on the problem of protein folding. 
+"""
+
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')

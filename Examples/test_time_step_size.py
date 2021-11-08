@@ -1,27 +1,14 @@
 import argparse
+import os
 import pickle
 from datetime import datetime
-import os, sys
-import time
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import math
-import torch.autograd.profiler as profiler
 
-from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from e3nn import o3
 
-from verlet_integration.train_force_and_energy_predictor import generate_FE_network
-from src import log
-from src.log import log_all_parameters
 from src.main import main
-from src.network_e3 import constrained_network
-from src.utils import fix_seed, convert_snapshots_to_future_state_dataset, run_network, run_network_eq, run_network_e3, atomic_masses
 
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)

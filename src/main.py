@@ -42,9 +42,9 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     if dataloader_train is None:
         dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'])
 
-    if c['network_type'] == 'EQ':
+    if c['network_type'].lower() == 'eq':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
-    elif c['network_type'] == 'mim':
+    elif c['network_type'].lower() == 'mim':
         PU = ProjectUplift(cn['node_dim_in'], cn['node_dim_latent'])
 
     cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'])
@@ -53,7 +53,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     #PU, masses=ds.m, R=ds.Rin, V=ds.Vin, z=ds.z, rscale=ds.rscale, vscale=ds.vscale, energy_predictor=c['PE_predictor']
     con_fnc = load_constraints(c['con'], c['con_type'], project_fnc=PU.project, uplift_fnc=PU.uplift, debug=c['debug'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,pos_only=ds.pos_only)
 
-    if c['network_type'] == 'EQ':
+    if c['network_type'].lower() == 'eq':
         model = neural_network_equivariant(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],

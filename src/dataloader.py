@@ -165,6 +165,8 @@ def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batc
     if use_endstep:
         dataset_endstep = DatasetFutureState(data_type,Rin_endstep, Rout_endstep, z, Vin_endstep, Vout_endstep, m=masses,device=device, rscale=Rscale, vscale=Vscale,nskip=nskip)
         dataloader_endstep = DataLoader(dataset_endstep, batch_size=1, shuffle=False, drop_last=False)
+    else:
+        dataloader_endstep = None
 
 
     return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
@@ -184,6 +186,8 @@ def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch
     ndata = len(seq)
     print('Number of datapoints={:}'.format(ndata))
     ndata_rand = 0 + np.arange(ndata)
+    if n_train < 0:
+        n_train = ndata
     if shuffle:
         np.random.shuffle(ndata_rand)
     train_idx = ndata_rand[:n_train]

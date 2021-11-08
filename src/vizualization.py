@@ -78,6 +78,81 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
     plt.clf()
     return
 
+
+def plot_training_and_validation_accumulated_custom(results,legends,results_dir,colors,semilogy=False):
+    """
+    This is a more customizable version of the above function, designed for printing specific figures for papers or similar things.
+    """
+    njobs, nrep, nlosses, nepochs = results.shape
+    x = np.arange(nepochs)
+    M = np.sum(results,axis=3) > 0
+    if semilogy:
+        pngfile = "{:}/Loss_{:}.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss.png".format(results_dir)
+
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
+
+        idx = 0
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+            ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 1
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+    plt.savefig(pngfile)
+    plt.clf()
+
+    if semilogy:
+        pngfile = "{:}/LossD_{:}.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/LossD.png".format(results_dir)
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
+
+        idx = 2
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 3
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+        plt.xlabel('Epochs')
+        plt.ylabel('LossD')
+        plt.legend()
+    plt.savefig(pngfile)
+    plt.clf()
+    return
+
+
 def plot_training_and_validation(results,result_dir):
     """
     Plots the training and validation results of a single run.
