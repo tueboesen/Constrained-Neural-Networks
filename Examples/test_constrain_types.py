@@ -44,25 +44,6 @@ if __name__ == '__main__':
     args.con_type = ['high', 'low','reg']
     # args.con_type = ['reg']
     args.con_data = './../../../data/casp11/casp11_sel_cons.pt'
-    if args.network_type.lower() == 'eq':
-        args.network = {
-            'irreps_inout': o3.Irreps("6x1o"),
-            'irreps_hidden': o3.Irreps("30x0o+30x0e+20x1o+20x1e"),
-            'layers': 8,
-            'max_radius': 15,
-            'number_of_basis': 8,
-            'embed_dim': 2,
-            'max_atom_types': 20,
-            'radial_neurons': [48],
-            'num_neighbors': -1,
-        }
-    elif args.network_type.lower() == 'mim':
-        args.network = {
-           'node_dim_in': 9,
-            'node_dim_latent': 120,
-            'nlayers': 3,
-            'max_radius': 15,
-        }
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
 
