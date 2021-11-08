@@ -20,10 +20,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.n_train = 10
-    args.n_val = 10
+    args.n_val = 0
     args.batch_size = 1
     args.nskip = 9999
-    args.epochs_for_lr_adjustment = 10
+    args.epochs_for_lr_adjustment = 20
     args.lr_adjustment = 0.8
     args.use_val = False
     args.use_test = False
@@ -34,8 +34,8 @@ if __name__ == '__main__':
     args.seed = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
     args.use_same_data = True
     args.epochs = 300
-    args.network_type = 'mim'
-    args.loss = 'mim'
+    args.network_type = ['mim']
+    args.loss = ''
     # args.train_idx = None
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
