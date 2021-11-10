@@ -1,6 +1,5 @@
-"""model with self-interactions and gates
-Exact equivariance to :math:`E(3)`
-version of february 2021
+"""
+A simple script for setting up and training a MD force predicting neural network, the network is from e3nn.
 """
 import math
 import os

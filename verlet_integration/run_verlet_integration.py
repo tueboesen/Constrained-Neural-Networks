@@ -1,27 +1,18 @@
-import math
-import os
-import time
-from typing import Dict, Union
+"""
+This file performs verlet integration.
+It is meant to run a verlet integration MD simulation using a pretrained neural network, and compare it to actual MD simulation data from a cp2k simulation.
+The pre-trained neural network predicts the forces and then the forces are propagated forward in time using the verlet integrator, just like in cp2k.
+"""
+
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torch_geometric.data import Data
-from torch_cluster import radius_graph
-from torch_scatter import scatter
-
-from e3nn import o3
-from e3nn.math import soft_one_hot_linspace
-from e3nn.nn import FullyConnectedNet, Gate, ExtractIr, Activation
-from e3nn.o3 import TensorProduct, FullyConnectedTensorProduct
-from e3nn.util.jit import compile_mode
 from torch.autograd import grad
-import torch.nn.functional as F
 
-from verlet_integration.train_force_and_energy_predictor import generate_FE_network
 from src.utils import atomic_masses
+from verlet_integration.train_force_and_energy_predictor import generate_FE_network
 
 
-class VelocityVerletIntegrator(torch.nn.Module):
+class VelocityVerletIntegrator_simple(torch.nn.Module):
     def __init__(self,dt,force_predictor):
         super().__init__()
         self.dt = dt
@@ -142,10 +133,8 @@ if __name__ == '__main__':
     VVI = VelocityVerletIntegrator(dt,force_predictor,z)
 
     for i in range(nsteps):
-
         r,v,a = VVI(r,v,m[:,None],a=a)
         # r,v,a = VVI(r,v,m[:,None],a=a,F0=Ft[i],F1=Ft[i+1])
-
         dr = torch.mean(torch.norm(Rt[i+1] - r,p=2,dim=1))
         dv = torch.mean(torch.norm(Vt[i+1] - v,p=2,dim=1))
         print(f"{i}, dr={dr:0.2e}, dv={dv:0.2e}")

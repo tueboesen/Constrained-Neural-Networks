@@ -586,6 +586,10 @@ class PointChain(ConstraintTemplate):
 
 
 class MomentumConstraints(nn.Module):
+    """
+    Momentum constraints, these constraints will project the particle velocities down to the subspace of zero total momentum.
+    Note that these constraints are not currently used in any part of the project and as such are not updated to the same extent as the rest.
+    """
     def __init__(self,project,uplift,m):
         super(MomentumConstraints, self).__init__()
         self.register_buffer("m", m[:,None])
@@ -650,6 +654,11 @@ class MomentumConstraints(nn.Module):
 
 
 class EnergyMomentumConstraints(nn.Module):
+    """
+    Joint Energy-Momentum constraints, these constraints will iteratively try to project the particle positions and velocities down to a subspace where the total energy is matches a reference value, and the total momentum is zero.
+    Note that these constraints are not currently used in any part of the project and as such are not updated to the same extent as the rest.
+    Note that this constraint requires a fully trained neural network capable of predicting forces/potential energy of MD particles. Such a system can be trained using the train_force_and_energy_predictor.py file in the verlet_integration folder.
+    """
     def __init__(self,project, uplift, potential_energy_predictor,m,rescale_r=1,rescale_v=1):
         super(EnergyMomentumConstraints, self).__init__()
         self.register_buffer("m", m[None,:,None])
