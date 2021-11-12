@@ -19,7 +19,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.n_train = -1
     args.n_val = 0
-    args.batch_size = 5
+    args.batch_size = 1
     args.nskip = 999
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8

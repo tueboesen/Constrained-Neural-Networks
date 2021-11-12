@@ -17,7 +17,7 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
     else:
         pngfile = "{:}/Loss.png".format(results_dir)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(num=1, clear=True)
     for ii in range(njobs):
 
         idx = 0
@@ -49,7 +49,7 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
         pngfile = "{:}/LossD_{:}.png".format(results_dir,'semilogy')
     else:
         pngfile = "{:}/LossD.png".format(results_dir)
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(num=1, clear=True)
     for ii in range(njobs):
 
         idx = 2

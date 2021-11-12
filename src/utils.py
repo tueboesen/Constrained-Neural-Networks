@@ -193,7 +193,7 @@ def run_model_MD_propagation_simulation(model, dataloader, max_radius=15,log=Non
         # fig, ax = plt.subplots()
         legends = ['loss','lossD','MAE_r','MAE_v']
         for ii,(legend,mean,std) in enumerate(zip(legends,results_mean,results_std)):
-            fig, ax = plt.subplots()
+            fig, ax = plt.subplots(num=1, clear=True)
             pngfile = "{:}/endstep_{:}.png".format(viz,legend)
             ax.semilogy(x, mean, '-',label=legend)
             ax.fill_between(x, mean - std, mean + std, alpha=0.2)
