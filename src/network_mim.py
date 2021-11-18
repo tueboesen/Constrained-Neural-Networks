@@ -1,20 +1,19 @@
-import os, sys
+import math
 
 import e3nn.o3
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import math
-import matplotlib.pyplot as plt
-import torch.optim as optim
-from torch_cluster import radius_graph
 from torch_scatter import scatter
 
 from src.utils import smooth_cutoff
 
 
 class Mixing(nn.Module):
+    """
+    A mixing function for non-equivariant networks, it has the options to use the bilinear operation, and for the bilinear operation it has the option to use the e3nn version or the standard pytorch version.
+    When this program was made the standard pytorch version had some serious runtime issues, and the e3nn bilinear operation was much faster.
+    """
     def __init__(self, dim_in1,dim_in2,dim_out,use_bilinear=True,use_e3nn=True):
         super(Mixing, self).__init__()
         self.use_bilinear = use_bilinear
@@ -37,6 +36,9 @@ class Mixing(nn.Module):
 
 
 class NodesToEdges(nn.Module):
+    """
+    A mimetic node to edges operation utilizing average and gradient operations
+    """
     def __init__(self, dim_in, dim_out):
         super().__init__()
         self.dim_in = dim_in
@@ -49,6 +51,9 @@ class NodesToEdges(nn.Module):
 
 
 class EdgesToNodes(nn.Module):
+    """
+    A mimetic edges to node operation utilizing divergence and averaging operations.
+    """
     def __init__(self, dim_in, dim_out, num_neighbours=20,use_e3nn=True):
         super().__init__()
         self.dim_in = dim_in
@@ -93,6 +98,9 @@ def tv_norm(X, eps=1e-3):
 
 
 class DoubleLayer(nn.Module):
+    """
+    A double layer building block used to generate our mimetic neural network
+    """
     def __init__(self,dim_x):
         super().__init__()
         self.dim_x = dim_x
@@ -113,6 +121,9 @@ class DoubleLayer(nn.Module):
 
 
 class PropagationBlock(nn.Module):
+    """
+    A propagation block (layer) used in our mimetic neural network.
+    """
     def __init__(self, xn_dim, xn_attr_dim):
         super().__init__()
 
@@ -140,24 +151,34 @@ class PropagationBlock(nn.Module):
 
         d = xn.shape[-1]
         xn = xn_div[:,:d] + xn_ave[:,d:2*d] + xn_ave[:,2*d:3*d] + xn_ave[:,3*d:4*d] + xn_ave[:,4*d:]
-
+        if xn.isnan().any():
+            raise ValueError("NaN detected")
         return xn
 
 
-class network_simple(nn.Module):
+class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_attr_dim_in, node_dim_latent, nlayers, nmax_atom_types=10,atom_type_embed_dim=8,max_radius=5):
+    def __init__(self,node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None):
         super().__init__()
-
+        """
+        node_dimn_latent:   The dimension of the latent space
+        nlayers:            The number of propagationBlocks to include in the network 
+        PU:                 A handler to a projection uplifting class instance
+        nmax_atom_types:    Max number of particle types to handle, for proteins this should be the types of amino acids
+        atom_type_embed_dim: The out dimension of the embedding done to the atom_types
+        max_radius:         The maximum radius used when building the edges in the graph between the particles
+        con_fnc:            A handler to the constrain function wrapped in a nn.sequential.
+        con_type:           The type of constraints being used (high, low, reg)
+        """
         self.nlayers = nlayers
-
-        w = torch.empty((node_dim_in,node_dim_latent))
-        nn.init.xavier_normal_(w,gain=1/math.sqrt(node_dim_in)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        self.projection_matrix = nn.Parameter(w)
+        self.PU = PU
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
+        self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
+        self.con_fnc = con_fnc
+        self.con_type = con_type
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -165,67 +186,19 @@ class network_simple(nn.Module):
             self.PropagationBlocks.append(block)
         return
 
+    def forward(self, x, batch, node_attr, edge_src, edge_dst):
+        if x.isnan().any():
+            raise ValueError("NaN detected")
 
-
-    def make_matrix_semi_unitary(self, M,debug=False):
-        I = torch.eye(M.shape[-2])
-        if debug:
-            M_org = M.clone()
-        for i in range(10):
-            M = M - 0.5 * (M @ M.t() - I) @ M
-
-        if debug:
-            pre_error = torch.norm(I - M_org @ M_org.t())
-            post_error = torch.norm(I - M @ M.t())
-            print(f"Deviation from unitary before: {pre_error:2.2e}, deviation from unitary after: {post_error:2.2e}")
-        return M
-
-    def project(self,y):
-        M = self.projection_matrix
-        M = self.make_matrix_semi_unitary(M)
-        x = y @ M.t()
-        return x
-
-    def uplift(self,x):
-        M = self.projection_matrix
-        M = self.make_matrix_semi_unitary(M)
-        y = x @ M
-        return y
-
-    def apply_constraints(self, x, n=1, d=3.8):
-        for j in range(n):
-            x3 = self.project(x)
-            c = constraint(x3.t(), d)
-            lam = dConstraintT(c, x3.t())
-            lam = self.uplift(lam.t())
-
-            with torch.no_grad():
-                if j == 0:
-                    alpha = 1.0 / lam.norm()
-                lsiter = 0
-                while True:
-                    xtry = x - alpha * lam
-                    x3 = self.project(xtry)
-                    ctry = constraint(x3.t(), d)
-                    if torch.norm(ctry) < torch.norm(c):
-                        break
-                    alpha = alpha / 2
-                    lsiter = lsiter + 1
-                    if lsiter > 10:
-                        break
-                if lsiter == 0:
-                    alpha = alpha * 1.5
-            x = x - alpha * lam
-        return x
-
-    def forward(self, x, node_attr, edge_src, edge_dst):
-
+        self.PU.make_matrix_semi_unitary()
         node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
-        y = self.uplift(x)
+        y = self.PU.uplift(x)
 
         y_old = y
         for i in range(self.nlayers):
-            edge_vec = x[:,-3:][edge_src] - x[:,-3:][edge_dst]
+            if x.isnan().any():
+                raise ValueError("NaN detected")
+            edge_vec = x[:,0:3][edge_src] - x[:,0:3][edge_dst]
             edge_len = edge_vec.norm(dim=1)
             w = smooth_cutoff(edge_len / self.max_radius) / edge_len
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)
@@ -233,56 +206,27 @@ class network_simple(nn.Module):
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
             tmp = y.clone()
 
-            y = 2*y - y_old - 0.1 * y_new
+            y = 2*y - y_old - self.h[i]**2 * y_new
             y_old = tmp
 
-            # y = self.apply_constraints(y, n=100)
-            x = self.project(y)
+            if self.con_fnc is not None and self.con_type == 'high':
+                if y.isnan().any():
+                    raise ValueError("NaN detected")
+                data = self.con_fnc({'y': y, 'batch': batch,'z':node_attr})
+                y = data['y']
+                if y.isnan().any():
+                    raise ValueError("NaN detected")
 
-        return x
+            x = self.PU.project(y)
 
-
-class nn_distance_constraints(nn.Module):
-    def __init__(self,distance):
-        super(nn_distance_constraints, self).__init__()
-        self.d = distance
-        return
-
-    def diff(self,x):
-        return x[:,1:] - x[:,:-1]
-
-    def diffT(self,dx):
-        x = dx[:,:-1] - dx[:,1:]
-        x0 = -dx[:,:0]
-        x1 = dx[:,-1:]
-        X = torch.cat([x0,x,x1],dim=1)
-        return X
-
-    def forward(self,x):
-        e = torch.ones(1,3,device=x.device)
-        dx = self.diff(x)
-        c = e @ (dx**2) - self.d**2
-        return c
-
-    def dConstraintT(self,c,x):
-        dx = self.diff(x)
-        e = torch.ones(3, 1, device=x.device)
-        C = (e @ c) * dx
-        C = self.diffT(C)
-        return 2 * C
-
-
-class momentum_constraints(nn.Module):
-    def __init__(self,m):
-        super(momentum_constraints, self).__init__()
-        self.m = m
-        return
-
-    def forward(self, v):
-        c = v @ self.m.T
-        return c
-
-    def dConstraintT(self, c, v):
-        e = torch.ones(1, 3, device=v.device)
-        C = (self.m.T * e) @ c
-        return C
+        if self.con_fnc is not None and self.con_type == 'low':
+            data = self.con_fnc({'x': x, 'batch': batch,'z':node_attr})
+            x = data['x']
+        if self.con_fnc is not None and self.con_type == 'reg':
+            data = self.con_fnc({'x': x, 'batch': batch, 'z': node_attr})
+            reg = data['c']
+        else:
+            reg = 0
+        if x.isnan().any():
+            raise ValueError("NaN detected")
+        return x, reg
