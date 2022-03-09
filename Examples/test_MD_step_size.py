@@ -26,8 +26,9 @@ if __name__ == '__main__':
     args.epochs = 300
     args.network_type = ['eq','mim']  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.
     args.loss = ''
-    args.data = './../../../data/MD/water_jones/water.npz'
+    args.data = './../Data/water.npz'
     args.data_type = 'water'
+    # args.con = ['triangle']
     args.con = ['','triangle']
     args.con_type = ['high']
     args.con_data = ''

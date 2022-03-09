@@ -58,7 +58,7 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition)
     else:
         c['use_same_data'] = False
     c['result_dir'] = f"{c['result_dir_base']}/{c['network_type']}_{c['con']}_{c['con_type']}_{repetition}/"
-    legend = f"{c['con']:} {c['con_type']:}"
+    legend = f"{network_type}_{c['con']:} {c['con_type']:}"
     jobid = jobid + 1
     return c,jobid,legend
 

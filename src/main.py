@@ -41,15 +41,16 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     # load training data
     if dataloader_train is None:
         dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'])
+    ds = dataloader_train.dataset
 
     if c['network_type'].lower() == 'eq':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
     elif c['network_type'].lower() == 'mim':
-        PU = ProjectUplift(cn['node_dim_in'], cn['node_dim_latent'])
+        node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in']*2
+        PU = ProjectUplift(node_dim_in, cn['node_dim_latent'])
 
     cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'])
 
-    ds = dataloader_train.dataset
     #PU, masses=ds.m, R=ds.Rin, V=ds.Vin, z=ds.z, rscale=ds.rscale, vscale=ds.vscale, energy_predictor=c['PE_predictor']
     con_fnc = load_constraints(c['con'], c['con_type'], project_fnc=PU.project, uplift_fnc=PU.uplift, debug=c['debug'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,pos_only=ds.pos_only)
 

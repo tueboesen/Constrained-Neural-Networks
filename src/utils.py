@@ -114,7 +114,7 @@ def update_results_and_save_to_csv(results,epoch,loss_t,lossD_t,loss_v,lossD_v,c
         results = result
         results.iloc[-1:].to_csv(csv_file, header=True, sep='\t')
     else:
-        results = results.append(result, ignore_index=True)
+        results = pd.concat([results, pd.DataFrame.from_records(result)], ignore_index=True)
         results.iloc[-1:].to_csv(csv_file, mode='a', header=False, sep='\t')
     return results
 
