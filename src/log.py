@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 
-def setup_custom_logger(name,logfile_loc,mode):
+def setup_custom_logger(name,logfile_loc,debug):
     '''
     Starts a logger that prints to a file and to the screen.
     :param name:
@@ -14,7 +14,7 @@ def setup_custom_logger(name,logfile_loc,mode):
     # sh.setFormatter(formatter)
 
     logger = logging.getLogger(name)
-    if mode == 'debug':
+    if debug:
         logger.setLevel(logging.DEBUG)
     else:
         logger.setLevel(logging.INFO)
@@ -28,6 +28,9 @@ def setup_custom_logger(name,logfile_loc,mode):
     return logger
 
 def log_all_parameters(LOG,args):
+    """
+    Logs all parameters in the dictionary args
+    """
     LOG.info('---------Listing all parameters-------')
     # state = {k: v for k, v in args._get_kwargs()}
     # for key, value in state.items():

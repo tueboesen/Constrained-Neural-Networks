@@ -1,46 +1,26 @@
-import time
 import torch
-import torch.nn.functional as F
-import torch.utils.data as data
-import numpy as np
 import random
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+from torch_cluster import radius_graph
 import math
 
-from e3nn import o3
-from torch_cluster import radius_graph
-
-
 def smooth_cutoff(x):
+    """
+    A smooth cutoff operation used to continuously bring a function from it variable down to 0 at a certain cutoff.
+    """
     u = 2 * (x - 1)
     y = (math.pi * u).cos().neg().add(1).div(2)
     y[u > 0] = 0
     y[u < -1] = 1
     return y
 
-
-def smooth_cutoff2(x,cutoff_start=0.5,cutoff_end=1):
-    '''
-    x should be a vector of numbers that needs to smoothly be cutoff at 1
-    :param x:
-    :return:
-    '''
-
-    M1 = x < cutoff_end
-    M2 = x > cutoff_start
-    M_cutoff_region = M1 * M2
-    M_out = x > 1
-    s = torch.ones_like(x)
-    s[M_out] = 0
-    pi = math.pi
-    s[M_cutoff_region] = 0.5 * torch.cos(pi * (x[M_cutoff_region]-cutoff_start) / (cutoff_end-cutoff_start)) + 0.5
-    return s
-
 def convert_snapshots_to_future_state_dataset(n_skips,x):
     """
-    :param n_input_samples:
-    :param n_skips:
-    :param x:
-    :return:
+    converts snapshots of molecular dynamics data pairs of datapoints with n_skip+1 steps in between.
     """
     xout = x[1+n_skips:]
     xin = x[:xout.shape[0]]
@@ -48,6 +28,10 @@ def convert_snapshots_to_future_state_dataset(n_skips,x):
 
 
 def fix_seed(seed, include_cuda=True):
+    """
+    Fixes the seed and enables a deterministic run, for replicable results.
+    Note that the operating speed will be reduced.
+    """
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
@@ -60,297 +44,161 @@ def fix_seed(seed, include_cuda=True):
         torch.backends.cudnn.deterministic = True
 
 
-class DatasetFutureState(data.Dataset):
-    def __init__(self, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None):
-        self.Rin = Rin
-        self.Rout = Rout
-        self.z = z
-        self.Vin = Vin
-        self.Vout = Vout
-        self.Fin = Fin
-        self.Fout = Fout
-        self.KEin = KEin
-        self.KEout = KEout
-        self.PEin = PEin
-        self.PEout = PEout
-        if Fin is None or Fout is None:
-            self.useF = False
-        else:
-            self.useF = True
-        if KEin is None or KEout is None:
-            self.useKE = False
-        else:
-            self.useKE = True
-        if PEin is None or PEout is None:
-            self.usePE = False
-        else:
-            self.usePE = True
-        return
 
-    def __getitem__(self, index):
-        Rin = self.Rin[index]
-        Rout = self.Rout[index]
-        z = self.z[:,None]
-        Vin = self.Vin[index]
-        Vout = self.Vout[index]
-        if self.useF:
-            Fin = self.Fin[index]
-            Fout = self.Fout[index]
-        else:
-            Fin = 0
-            Fout = 0
-        if self.useKE:
-            KEin = self.KEin[index]
-            KEout = self.KEout[index]
-        else:
-            KEin = 0
-            KEout = 0
-        if self.usePE:
-            PEin = self.PEin[index]
-            PEout = self.PEout[index]
-        else:
-            PEin = 0
-            PEout = 0
-        return Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout,PEin, PEout
+def split_data(data,train_idx,val_idx,test_idx):
+    """
+    Splits data into training validation and testing
+    """
+    data_train = data[train_idx]
+    data_val = data[val_idx]
+    data_test = data[test_idx]
+    return data_train,data_val,data_test
 
-    def __len__(self):
-        return len(self.Rin)
-
-    def __repr__(self):
-        return self.__class__.__name__ + ' (' + ')'
 
 def atomic_masses(z):
-    atomic_masses = torch.tensor([0,1.008, 4.0026, 6.94, 9.0122, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180, 22.990, 24.305, 26.982, 28.085])
+    """
+    A lookup table for atomic masses for the lightest elements
+    z is the number of protons in the element.
+    """
+    atomic_masses = torch.tensor([0,1.008, 4.0026, 6.94, 9.0122, 10.81, 12.011, 14.007, 15.999, 18.998, 20.180, 22.990, 24.305, 26.982, 28.085,30.974,32.06,35.45,39.948])
     masses = atomic_masses[z.to(dtype=torch.int64)]
-    return masses
+    return masses.to(device=z.device)
 
 
-
-
-def run_network_e3(model, dataloader, train, max_samples, optimizer, batch_size=1, check_equivariance=False, max_radius=5):
-    aloss = 0.0
-    aloss_ref = 0.0
-    MAE = 0.0
-    t_dataload = 0.0
-    t_prepare = 0.0
-    t_model = 0.0
-    t_backprop = 0.0
-    if train:
-        model.train()
+def Distogram(r):
+    """
+    r should be of shape (n,3) or shape (nb,n,3)
+    Note that it computes the distance squared, this is due to stability reasons in connection with autograd, if you want the actual distance, take the square-root
+    """
+    if r.ndim == 2:
+        D = torch.relu(torch.sum(r.t() ** 2, dim=0, keepdim=True) + torch.sum(r.t() ** 2, dim=0, keepdim=True).t() - 2 * r @ r.t())
+    elif r.ndim == 3:
+        D = torch.relu(torch.sum(r.transpose(1,2) ** 2, dim=1, keepdim=True) + torch.sum(r.transpose(1,2) ** 2, dim=1, keepdim=True).transpose(1,2) - 2 * r @ r.transpose(1,2))
     else:
-        model.eval()
-    t3 = time.time()
-    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout) in enumerate(dataloader):
-        nb, natoms, ndim = Rin.shape
-        t0 = time.time()
-        optimizer.zero_grad()
-        # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
+        raise Exception("shape not supported")
 
-        Rin_vec = Rin.reshape(-1,Rin.shape[-1])
-        Rout_vec = Rout.reshape(-1,Rout.shape[-1])
-        Vin_vec = Vin.reshape(-1,Vin.shape[-1])
-        Vout_vec = Vout.reshape(-1,Vout.shape[-1])
-        x = torch.cat([Vin_vec,Rin_vec],dim=-1)
-        z_vec = z.reshape(-1,z.shape[-1])
-        batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
-
-        edge_index = radius_graph(Rin_vec, max_radius, batch)
-        edge_src = edge_index[0]
-        edge_dst = edge_index[1]
+    return D
 
 
-        t1 = time.time()
-        output = model(x, batch, z_vec, edge_src, edge_dst)
-        t2 = time.time()
-        Rpred = output[:, -3:]
-        Vpred = output[:, :-3]
-
-        loss = torch.sum(torch.norm(Rpred - Rout_vec, p=2, dim=1)) / nb
-        loss_last_step = torch.sum(torch.norm(Rin.reshape(Rout_vec.shape) - Rout_vec, p=2, dim=1)) / nb
-        MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
-
-        if check_equivariance:
-            rot = o3.rand_matrix(1)
-            Rin_vec_rotated = (Rin_vec.transpose(1, 2) @ rot).transpose(1, 2)
-            Rpred_rotated = model(Rin_vec_rotated, z_vec, batch)
-            Rpred_rotated_after = (Rpred.transpose(1, 2) @ rot).transpose(1, 2)
-            assert torch.allclose(Rpred_rotated, Rpred_rotated_after, rtol=1e-4, atol=1e-4)
-
-        if train:
-            loss.backward()
-            optimizer.step()
-        aloss += loss.detach()
-        aloss_ref += loss_last_step
-        MAE += MAEi
-        t_dataload += t0 - t3
-        t3 = time.time()
-        t_prepare += t1 - t0
-        t_model += t2 - t1
-        t_backprop += t3 - t2
-        if (i + 1) * batch_size >= max_samples:
-            break
-    aloss /= (i + 1)
-    aloss_ref /= (i + 1)
-    MAE /= (i + 1)
-    t_dataload /= (i + 1)
-    t_prepare /= (i + 1)
-    t_model /= (i + 1)
-    t_backprop /= (i + 1)
-
-    return aloss, aloss_ref, MAE, t_dataload, t_prepare, t_model, t_backprop
 
 
-def run_network_eq(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False):
-    aloss = 0.0
-    aloss_ref = 0.0
-    MAE = 0.0
-    t_dataload = 0.0
-    t_prepare = 0.0
-    t_model = 0.0
-    t_backprop = 0.0
-    if train:
-        model.train()
+def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.5640976472642336e-06):
+    """
+    Lennard Jones potential
+    """
+    # eps_conv=31.453485691837958
+    # V(r) = 4.0 * EPSILON * [(SIGMA / r) ^ 12 - (SIGMA / r) ^ 6]
+    D = torch.sqrt(Distogram(r))
+    M = D >= rcut
+    Delta = sigma / D
+    # Delta_au = Delta*5.291772E-1
+    tmp = (Delta) ** 6
+    V = 4.0 * eps * (tmp ** 2 - tmp)
+    V[:, torch.arange(V.shape[-1]), torch.arange(V.shape[-1])] = 0
+    V[M] = 0
+    V *= Energy_conversion
+    return V
+
+def update_results_and_save_to_csv(results,epoch,loss_t,lossD_t,loss_v,lossD_v,csv_file):
+    """
+    Updates the results and saves it to a csv file.
+    """
+    result = pd.DataFrame({
+        'epoch': [epoch],
+        'loss_t': [loss_t.cpu().numpy()],
+        'loss_v': [loss_v.cpu().numpy()],
+        'lossD_t': [lossD_t.cpu().numpy()],
+        'lossD_v': [lossD_v.cpu().numpy()]}, dtype=np.float32)
+    result = result.astype({'epoch': np.int64})
+    if epoch == 0:
+        results = result
+        results.iloc[-1:].to_csv(csv_file, header=True, sep='\t')
     else:
-        model.eval()
-    t3 = time.time()
-    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, Ein, Eout) in enumerate(dataloader):
-        nb, natoms, nhist, ndim = Rin.shape
-        t0 = time.time()
-        # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
-        Rin_vec = Rin.reshape(nb*natoms,-1,3).transpose(1,2)
-        Rout_vec = Rout.reshape(nb*natoms,3)
-        z_vec = z.reshape(-1,z.shape[-1])
-        batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
+        results = pd.concat([results, pd.DataFrame.from_records(result)], ignore_index=True)
+        results.iloc[-1:].to_csv(csv_file, mode='a', header=False, sep='\t')
+    return results
 
-        optimizer.zero_grad()
-        t1 = time.time()
 
-        output = model(Rin_vec,z_vec,batch)
-        Rpred = output[:,:,-1]
-        Vpred = output[:,:,0]
-        t2 = time.time()
+def run_model_MD_propagation_simulation(model, dataloader, max_radius=15,log=None,viz=None):
+    """
+    This function runs a Molecular dynamics propagation simulation using an already trained neural network.
+    The dataloader should have been prepared with a dataset of similar future time stepping length as the model was originally trained on.
+    This function propagates a particle system forward and continuously feeds it to itself, in order to propagate the MD simulation.
+    """
+    rscale = dataloader.dataset.rscale
+    vscale = dataloader.dataset.vscale
+    model.eval()
+    nrep = len(dataloader.dataset)
+    nsteps = dataloader.dataset.Rin.shape[1]
 
-        loss = torch.sum(torch.norm(Rpred-Rout_vec,p=2,dim=1))/nb
-        loss_last_step = torch.sum(torch.norm(Rin[:,:,-1,:].reshape(Rout_vec.shape) - Rout_vec, p=2,dim=1))/nb
-        MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+    lossD_his = torch.zeros(nrep,nsteps)
+    loss_his = torch.zeros(nrep,nsteps)
+    MAE_r_his = torch.zeros(nrep,nsteps)
+    MAE_v_his = torch.zeros(nrep,nsteps)
+    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
+        nb, _,natoms, ndim = Rin.shape
+        for j in range(nsteps):
+            if j==0:
+                Rin_vec = Rin[:,j].reshape(-1,Rin.shape[-1])
+                Vin_vec = Vin[:,j].reshape(-1,Vin.shape[-1])
+            else:
+                Rin_vec = Rpred
+                Vin_vec = Vpred
 
-        if check_equivariance:
-            rot = o3.rand_matrix(1)
-            Rin_vec_rotated = (Rin_vec.transpose(1, 2) @ rot).transpose(1, 2)
-            Rpred_rotated = model(Rin_vec_rotated,z_vec,batch)
-            Rpred_rotated_after = (Rpred.transpose(1,2) @ rot).transpose(1,2)
-            assert torch.allclose(Rpred_rotated, Rpred_rotated_after, rtol=1e-4, atol=1e-4)
+            Rout_vec = Rout[:, j].reshape(-1, Rout.shape[-1])
+            Vout_vec = Vout[:, j].reshape(-1, Vout.shape[-1])
+            x = torch.cat([Rin_vec, Vin_vec], dim=-1)
+            z_vec = z.reshape(-1,z.shape[-1])
+            batch = torch.arange(nb).repeat_interleave(natoms).to(device=Rin.device)
+            edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
+            edge_src = edge_index[0]
+            edge_dst = edge_index[1]
+            output = model(x, batch, z_vec, edge_src, edge_dst)
+            Rpred = output[:, 0:ndim]
+            Vpred = output[:, ndim:]
 
-        if train:
-            loss.backward()
-            optimizer.step()
-        aloss += loss.detach()
-        aloss_ref += loss_last_step
-        MAE += MAEi
-        t_dataload += t0 - t3
-        t3 = time.time()
-        t_prepare += t1 - t0
-        t_model += t2 - t1
-        t_backprop += t3 - t2
-        if (i+1)*batch_size >= max_samples:
-            break
-    aloss /= (i+1)
-    aloss_ref /= (i+1)
-    MAE /= (i+1)
-    t_dataload /= (i+1)
-    t_prepare /= (i+1)
-    t_model /= (i+1)
-    t_backprop /= (i+1)
+            loss_r, loss_ref_r, loss_rel_r = loss_eq(Rpred, Rout_vec, Rin_vec)
+            loss_v, loss_ref_v, loss_rel_v = loss_eq(Vpred, Vout_vec, Vin_vec)
+            loss_rel = (loss_rel_r + loss_rel_v) / 2
 
-    return aloss, aloss_ref, MAE, t_dataload, t_prepare, t_model, t_backprop
+            lossD_r, lossD_ref_r, lossD_rel_r = loss_mim(Rpred, Rout_vec, Rin_vec, edge_src, edge_dst)
+            lossD_v, lossD_ref_v, lossD_rel_v = loss_mim(Vpred, Vout_vec, Vin_vec, edge_src, edge_dst)
+            lossD_rel = (lossD_rel_r + lossD_rel_v) / 2
 
-def run_network(model,dataloader,train,max_samples,optimizer,batch_size=1,check_equivariance=False, max_radius=5):
-    aloss = 0.0
-    aloss_ref = 0.0
-    MAE = 0.0
-    t_dataload = 0.0
-    t_prepare = 0.0
-    t_model = 0.0
-    t_backprop = 0.0
-    if train:
-        model.train()
-    else:
-        model.eval()
-    t3 = time.time()
-    for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, Ein, Eout) in enumerate(dataloader):
-        nb, natoms, nhist, ndim = Rin.shape
-        t0 = time.time()
-        # Rin_vec = Rin.reshape(-1,Rin.shape[-1]*Rin.shape[-2])
-        Rin_vec = Rin.reshape(nb*natoms,-1)
-        Rout_vec = Rout.reshape(nb*natoms,-1)
-        z_vec = z.reshape(-1,z.shape[-1])
-        batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
-        pos = Rin_vec[:, -3:]
-        edge_index = radius_graph(pos, max_radius, batch)
-        edge_src = edge_index[0]
-        edge_dst = edge_index[1]
+            MAEr = torch.mean(torch.abs(Rpred - Rout_vec) * rscale).detach()
+            MAEv = torch.mean(torch.abs(Vpred - Vout_vec) * vscale).detach()
 
-        optimizer.zero_grad()
-        t1 = time.time()
-        output = model(Rin_vec,z_vec,edge_src,edge_dst)
-        Rpred = output[:,-3:]
-        Vpred = output[:,:3]
-        t2 = time.time()
+            lossD_his[i,j] = lossD_rel.cpu().detach()
+            loss_his[i,j] = loss_rel.cpu().detach()
+            MAE_r_his[i,j] = MAEr.cpu().detach()
+            MAE_v_his[i,j] = MAEv.cpu().detach()
 
-        dPred = torch.norm(Rpred[edge_src] - Rpred[edge_dst],p=2,dim=1)
-        dTrue = torch.norm(Rout_vec[edge_src] - Rout_vec[edge_dst],p=2,dim=1)
-        RLast = Rin[:,:,-1,:].reshape(Rout_vec.shape)
-        dLast = torch.norm(RLast[edge_src] - RLast[edge_dst],p=2,dim=1)
+    lossD_mean = lossD_his.mean(dim=0)
+    loss_mean = loss_his.mean(dim=0)
+    MAE_r_mean = MAE_r_his.mean(dim=0)
+    MAE_v_mean = MAE_v_his.mean(dim=0)
 
-        loss = F.mse_loss(dPred,dTrue)/nb
-        loss_last_step = F.mse_loss(dLast, dTrue)/nb
-        MAEi = torch.mean(torch.abs(Rpred - Rout_vec)).detach()
+    lossD_std = lossD_his.std(dim=0)
+    loss_std = loss_his.std(dim=0)
+    MAE_r_std = MAE_r_his.std(dim=0)
+    MAE_v_std = MAE_v_his.std(dim=0)
+    results_mean = [loss_mean,lossD_mean,MAE_r_mean,MAE_v_mean]
+    results_std = [loss_std,lossD_std,MAE_r_std,MAE_v_std]
+    outputfile = "{:}/endstep_results.torch".format(viz)
+    data = {'loss':loss_his,'lossD':lossD_his,'MAE_r':MAE_r_his,'MAE_v':MAE_v_his}
+    torch.save(data,outputfile)
+    if viz is not None:
+        nskip = dataloader.dataset.nskip
+        x = torch.arange(nsteps)*(nskip+1)
+        # fig, ax = plt.subplots()
+        legends = ['loss','lossD','MAE_r','MAE_v']
+        for ii,(legend,mean,std) in enumerate(zip(legends,results_mean,results_std)):
+            fig, ax = plt.subplots(num=1, clear=True)
+            pngfile = "{:}/endstep_{:}.png".format(viz,legend)
+            ax.semilogy(x, mean, '-',label=legend)
+            ax.fill_between(x, mean - std, mean + std, alpha=0.2)
+            ax.legend()
+            plt.savefig(pngfile)
+            plt.clf()
 
-        if check_equivariance:
-            rot = o3.rand_matrix(1)
-            Rin_vec_rotated = (Rin_vec.transpose(1, 2) @ rot).transpose(1, 2)
-            Rpred_rotated = model(Rin_vec_rotated,z_vec,batch)
-            Rpred_rotated_after = (Rpred.transpose(1,2) @ rot).transpose(1,2)
-            assert torch.allclose(Rpred_rotated, Rpred_rotated_after, rtol=1e-4, atol=1e-4)
-
-        if train:
-            loss.backward()
-            optimizer.step()
-        aloss += loss.detach()
-        aloss_ref += loss_last_step
-        MAE += MAEi
-        t_dataload += t0 - t3
-        t3 = time.time()
-        t_prepare += t1 - t0
-        t_model += t2 - t1
-        t_backprop += t3 - t2
-        if (i+1)*batch_size >= max_samples:
-            break
-    aloss /= (i+1)
-    aloss_ref /= (i+1)
-    MAE /= (i+1)
-    t_dataload /= (i+1)
-    t_prepare /= (i+1)
-    t_model /= (i+1)
-    t_backprop /= (i+1)
-
-    return aloss, aloss_ref, MAE, t_dataload, t_prepare, t_model, t_backprop
-
-#
-# def compute_inverse_square_distogram(r):
-#     D2 = torch.relu(torch.sum(r ** 2, dim=1, keepdim=True) + \
-#                    torch.sum(r ** 2, dim=1, keepdim=True).transpose(1,2) - \
-#                    2 * r.transpose(1,2) @ r)
-#     iD2 = 1 / D2
-#     tmp = iD2.diagonal(0,dim1=1,dim2=2)
-#     tmp[:] = 0
-#     return D2, iD2
-#
-#
-# def compute_graph(r,nn=15):
-#     D2, iD2 = compute_inverse_square_distogram(r)
-#
-#     _, J = torch.topk(iD2, k=nn-1, dim=-1)
-#     I = (torch.ger(torch.arange(nn), torch.ones(nn-1, dtype=torch.long))[None,:,:]).repeat(nb,1,1).to(device=z.device)
-#     I = I.view(nb,-1)
-#     J = J.view(nb,-1)
+    return

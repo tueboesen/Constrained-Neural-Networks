@@ -1,6 +1,5 @@
-"""model with self-interactions and gates
-Exact equivariance to :math:`E(3)`
-version of february 2021
+"""
+A simple script for setting up and training a MD force predicting neural network, the network is from e3nn.
 """
 import math
 import os
@@ -21,7 +20,7 @@ from e3nn.util.jit import compile_mode
 from torch.autograd import grad
 import torch.nn.functional as F
 
-from src.EQ_operations import SelfInteraction, Convolution, TvNorm
+from src.EQ_operations import SelfInteraction, Convolution
 
 
 def smooth_cutoff(x):
@@ -93,6 +92,7 @@ class NequIP(torch.nn.Module):
         reduce_output=True,
     ) -> None:
         super().__init__()
+        self.z = None
         self.max_radius = max_radius
         self.number_of_basis = number_of_basis
         self.num_neighbors = num_neighbors
@@ -131,16 +131,15 @@ class NequIP(torch.nn.Module):
         # n_0e = o3.Irreps(self.irreps_hidden).count('0e')
         second_to_last_irrep = o3.Irreps("16x0e")
         last_irrep = o3.Irreps("1x0e")
-        self.self_interaction.append(SelfInteraction(self.irreps_hidden,second_to_last_irrep))
-        self.self_interaction.append(SelfInteraction(second_to_last_irrep,last_irrep))
-        self.activation = Activation("16x0e", [torch.nn.functional.silu])
+        self.self_interaction.append(SelfInteraction(self.irreps_hidden,last_irrep))
+        # self.self_interaction.append(SelfInteraction(second_to_last_irrep,last_irrep))
+        # self.activation = Activation("16x0e", [torch.nn.functional.silu])
         # n_1e = o3.Irreps(self.irreps_hidden).count('0e')
         # n_1o = o3.Irreps(self.irreps_hidden).count('1o')
 
 
         self.convolutions = torch.nn.ModuleList()
         self.gates = torch.nn.ModuleList()
-        self.norms = torch.nn.ModuleList()
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
             irreps_gated = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l > 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -157,16 +156,14 @@ class NequIP(torch.nn.Module):
                 self.irreps_node_attr,
                 self.irreps_edge_attr,
                 gate.irreps_in,
-                radial_neurons,
-                num_neighbors
+                radial_neurons
             )
-            self.norms.append(TvNorm(gate.irreps_in))
             irreps = gate.irreps_out
             self.convolutions.append(conv)
             self.gates.append(gate)
         return
 
-    def forward(self, pos,batch,z) -> torch.Tensor:
+    def forward(self, x,z,batch=None) -> torch.Tensor:
         """evaluate the network
         Parameters
         ----------
@@ -179,10 +176,12 @@ class NequIP(torch.nn.Module):
         """
 
         h = 0.1
-        edge_index = radius_graph(pos, self.max_radius, batch)
+        if batch is None:
+            batch = torch.zeros(z.shape[0],dtype=torch.int64,device=x.device)
+        edge_index = radius_graph(x, self.max_radius, batch)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
-        edge_vec = pos[edge_src] - pos[edge_dst]
+        edge_vec = x[edge_src] - x[edge_dst]
         edge_sh = o3.spherical_harmonics(self.irreps_edge_attr, edge_vec, True, normalization='component')
         edge_length = edge_vec.norm(dim=1)
         edge_length_embedded = soft_one_hot_linspace(
@@ -194,32 +193,25 @@ class NequIP(torch.nn.Module):
             cutoff=False
         ).mul(self.number_of_basis**0.5)
         edge_attr = smooth_cutoff(edge_length / self.max_radius)[:, None] * edge_sh
-
-        x = pos.new_ones((pos.shape[0], 1))
+        # print("#n = {:2.2f}".format(edge_dst.shape[0]/ x.shape[0] ))
+        num_neighbors = edge_dst.shape[0] / x.shape[0]
+        x = x.new_ones((x.shape[0], 1))
 
         # scalar_z = self.ext_z(z)
         edge_features = edge_length_embedded
 
-        # print(f'mean={x.pow(2).mean():2.2f}')
         z = self.node_embedder(z.to(dtype=torch.int64)).squeeze()
-        # print(f'mean={x.pow(2).mean():2.2f}')
-        # x = self.self_interaction[0](x)
-        # print(f'mean={x.pow(2).mean():2.2f}')
 
-        for i,(conv,norm,gate) in enumerate(zip(self.convolutions,self.norms,self.gates)):
-            y = conv(x, z, edge_src, edge_dst, edge_attr, edge_features)
-            # y = norm(y)
-            # print(f'mean={x.pow(2).mean():2.2f}')
+        for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
+            y = conv(x, z, edge_src, edge_dst, edge_attr, edge_features,num_neighbors)
             y = gate(y)
-            # print(f'mean={x.pow(2).mean():2.2f}')
             if y.shape == x.shape:
                 y = self.self_interaction[i](y)
                 x = x + h*y
             else:
                 x = y
-            # print(f'mean(abs(x))={torch.abs(x).mean():2.2f},norm={x.norm():2.2f}')
-        x = self.self_interaction[-2](x,normalize_variance=False)
-        x = self.activation(x)
+        # x = self.self_interaction[-2](x,normalize_variance=False)
+        # x = self.activation(x)
         x = self.self_interaction[-1](x,normalize_variance=False)
 
         if self.reduce_output:
@@ -274,7 +266,7 @@ def use_model_eq(model,dataloader,train,max_samples,optimizer,batch_size=1):
 
         optimizer.zero_grad()
         t1 = time.time()
-        E_pred = model(Ri_vec,batch,zi_vec)
+        E_pred = model(Ri_vec,zi_vec,batch)
         E_pred_tot = torch.sum(E_pred)
         t2 = time.time()
 
@@ -322,10 +314,10 @@ def generate_FE_network(natoms):
     irreps_node_attr = o3.Irreps("1x0e")
     irreps_edge_attr = o3.Irreps("1x0e+1x1o")
     layers = 6
-    max_radius = 5
+    max_radius = 45
     number_of_basis = 8
     radial_neurons = [8,16]
-    num_neighbors = 15
+    num_neighbors=40
     num_nodes = natoms
     model = NequIP(irreps_in=irreps_in, irreps_hidden=irreps_hidden, irreps_out=irreps_out, irreps_node_attr=irreps_node_attr, irreps_edge_attr=irreps_edge_attr, layers=layers, max_radius=max_radius,
                     number_of_basis=number_of_basis, radial_neurons=radial_neurons, num_neighbors=num_neighbors, num_nodes=num_nodes)
@@ -333,9 +325,11 @@ def generate_FE_network(natoms):
 
 
 if __name__ == '__main__':
-    n_train = 1000
-    n_val = 1000
-    batch_size = 100
+    torch.set_default_dtype(torch.float64)
+
+    n_train = 99000
+    n_val = 500
+    batch_size = 5
     model_name = './../pretrained_networks/force_energy_model.pt'
     os.makedirs(os.path.dirname(model_name), exist_ok=True)
 
@@ -348,12 +342,15 @@ if __name__ == '__main__':
     use_mean_map = False
     # load training data
     # data = np.load('../../../data/MD/MD17/aspirin_dft.npz')
-    data = np.load('../../../data/MD/water_jones/water.npz')
-    E = data['PE']
+    data = np.load('../../../data/MD/argon/argon.npz')
+    E = data['PE'] * 0.26254996403871417 #Converts the energy from [Hatree_energy units] to [atomic unit mass * Angstrom^2 / fs^2]
     Force = data['F']
     R = data['R']
+    # Rscale = np.sqrt(np.mean(R**2))
+
+
     epochs_for_lr_adjustment = 50
-    z = torch.from_numpy(data['z']).to(dtype=torch.float32, device=device)
+    z = torch.from_numpy(data['z']).to(device=device)
     ndata = E.shape[0]
     natoms = z.shape[0]
     R_mean = None
@@ -365,17 +362,17 @@ if __name__ == '__main__':
     np.random.shuffle(ndata_rand)
 
 
-    E_train = torch.from_numpy(E[ndata_rand[:n_train]]).to(dtype=torch.float32, device=device)
-    F_train = torch.from_numpy(Force[ndata_rand[:n_train]]).to(dtype=torch.float32, device=device)
-    R_train = torch.from_numpy(R[ndata_rand[:n_train]]).to(dtype=torch.float32, device=device)
+    E_train = torch.from_numpy(E[ndata_rand[:n_train]]).to( device=device)
+    F_train = torch.from_numpy(Force[ndata_rand[:n_train]]).to( device=device)
+    R_train = torch.from_numpy(R[ndata_rand[:n_train]]).to( device=device)
 
-    E_val = torch.from_numpy(E[ndata_rand[n_train:n_train+n_val]]).to(dtype=torch.float32, device=device)
-    F_val = torch.from_numpy(Force[ndata_rand[n_train:n_train+n_val]]).to(dtype=torch.float32, device=device)
-    R_val = torch.from_numpy(R[ndata_rand[n_train:n_train+n_val]]).to(dtype=torch.float32, device=device)
+    E_val = torch.from_numpy(E[ndata_rand[n_train:n_train+n_val]]).to( device=device)
+    F_val = torch.from_numpy(Force[ndata_rand[n_train:n_train+n_val]]).to( device=device)
+    R_val = torch.from_numpy(R[ndata_rand[n_train:n_train+n_val]]).to(device=device)
 
-    E_test = torch.from_numpy(E[ndata_rand[n_train+n_val:]]).to(dtype=torch.float32, device=device)
-    F_test = torch.from_numpy(Force[ndata_rand[n_train+n_val:]]).to(dtype=torch.float32, device=device)
-    R_test = torch.from_numpy(R[ndata_rand[n_train+n_val:]]).to(dtype=torch.float32, device=device)
+    E_test = torch.from_numpy(E[ndata_rand[n_train+n_val:]]).to( device=device)
+    F_test = torch.from_numpy(Force[ndata_rand[n_train+n_val:]]).to( device=device)
+    R_test = torch.from_numpy(R[ndata_rand[n_train+n_val:]]).to( device=device)
 
 
     dataset_train = Dataset_ForceEnergy(R_train, F_train, E_train, z)
@@ -394,11 +391,11 @@ if __name__ == '__main__':
 
 
     #### Start Training ####
-    lr = 1e-2
+    lr = 1e-3
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     alossBest = 1e6
-    epochs = 1000
+    epochs = 5
 
     bestModel = model
     hist = torch.zeros(epochs)

@@ -1,5 +1,11 @@
-import pandas as pd
+"""
+This preprocessing file converts cp2k outputs to numpy files.
+"""
 import numpy as np
+import pandas as pd
+import torch
+
+from src.utils import atomic_masses
 
 AtomicTable = {'H': 1,
      'He': 2,
@@ -8,7 +14,8 @@ AtomicTable = {'H': 1,
      'B': 5,
      'C': 6,
      'S': 7,
-     'O': 8
+     'O': 8,
+     'Ar': 18
      }
 
 def read_xyz(filename,skiplist=None):
@@ -16,7 +23,7 @@ def read_xyz(filename,skiplist=None):
         str = f.readline()
     n = [int(s) for s in str.split() if s.isdigit()][0]
     nskip = 2
-    nmax = 100001
+    nmax = 600001
     if skiplist is None:
         skiplist = [i for i in range(0,nmax*(n+nskip)) if i % (n+nskip) == 0  or i % (n+nskip) == 1]
     df = pd.read_csv(filename, header=None, delimiter='\s+', skiprows=skiplist, names=['atom','x','y','z'])
@@ -35,7 +42,7 @@ def read_xyz(filename,skiplist=None):
 
 def read_xyz_force(filename,n):
     nskip = 5
-    nmax = 100001
+    nmax = 600001
     skiplist = [i for i in range(0,nmax*(n+nskip)) if (i+1) % (n+nskip) == 0 or (i+1) % (n+nskip) == 1 or (i+1) % (n+nskip) == 2 or (i+1) % (n+nskip) == 3 or (i+1) % (n+nskip) == 4]
     df = pd.read_csv(filename, header=None, delimiter='\s+', skiprows=skiplist, names=['atom','kind','element','x','y','z'])
     nd = df.shape[0] // n
@@ -52,10 +59,12 @@ def read_xyz_force(filename,n):
 
 
 if __name__ == '__main__':
-    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/water_new/'
-    name_ener = 'water-1.ener'
-    name_vel = 'water-vel-1.xyz'
-    name_pos = 'water.xyz'
+    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/water300/'
+    # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/argon/'
+    # folder = '/home/tue/data/MD/ethanol_heating/'
+    name_ener = 'T300-1.ener'
+    name_vel = 'T300-vel-1.xyz'
+    name_pos = 'T300-pos-1.xyz'
     name_force = 'forces.xyz'
 
     name_out = 'water.npz'
@@ -67,6 +76,7 @@ if __name__ == '__main__':
     filename_force = folder + name_force
     filename_out = folder_out + name_out
 
+    # dat = np.load(filename_out)
     df = pd.read_csv(filename_ener, delimiter='\s+', names=["step", 'time', 'KE', 'temp', 'PE', 'const', 'used'], skiprows=1)
     df.head()
 
@@ -76,19 +86,41 @@ if __name__ == '__main__':
     KE = df['KE'[:]]
     PE = df['PE'[:]]
 
+    # plt.plot(temp)
+    # plt.show()
+
     pos,atomic_numbers = read_xyz(filename_pos)
     vel,_ = read_xyz(filename_vel)
+    force,_ = read_xyz(filename_force)
 
-    force = read_xyz_force(filename_force, pos.shape[1])
+    # force = read_xyz_force(filename_force, pos.shape[1])
 
-    data = {'R': pos,
-            'F': force,
-            'V': vel,
+    m = atomic_masses(torch.from_numpy(atomic_numbers)).numpy()
+
+    ndata = np.min([pos.shape[0], force.shape[0], vel.shape[0], temp.shape[0], KE.shape[0], PE.shape[0]])
+
+    data = {'R1': pos[:ndata,0::3],
+            'R2': pos[:ndata, 1::3],
+            'R3': pos[:ndata, 2::3],
+            'V1': vel[:ndata,0::3],
+            'V2': vel[:ndata,1::3],
+            'V3': vel[:ndata,2::3],
+            'F': force[:ndata],
             'z': atomic_numbers,
-            'temp': temp,
-            'KE': KE,
-            'PE': PE
+            'temp': temp[:ndata],
+            'KE': KE[:ndata],
+            'PE': PE[:ndata]
             }
+
+
+    # data = {'R': pos[:ndata],
+    #         'F': force[:ndata],
+    #         'V': vel[:ndata],
+    #         'z': atomic_numbers,
+    #         'temp': temp[:ndata],
+    #         'KE': KE[:ndata],
+    #         'PE': PE[:ndata]
+    #         }
 
     np.savez(filename_out,**data)
     # print("done")
