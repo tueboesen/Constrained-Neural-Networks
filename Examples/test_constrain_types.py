@@ -30,10 +30,10 @@ if __name__ == '__main__':
     args.debug = False
     args.viz = False
     args.lr = 1e-3
-    args.seed = [11,12,13,14,15,16,17,18,19,110,111,112,113,114,115]
+    args.seed = [1,2,3,4,5,6,7,8,9,10]
     args.use_same_data = True
     args.epochs = 300
-    args.network_type = ['mim']
+    args.network_type = ['eq','mim']
     args.loss = ''
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'

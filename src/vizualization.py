@@ -178,3 +178,6 @@ def plot_training_and_validation(results,result_dir):
     # plt.show()
     plt.savefig(f"{result_dir}/lossD.png")
     return
+
+if __name__ == '__main__':
+    file = ''
