@@ -52,7 +52,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'])
 
     #PU, masses=ds.m, R=ds.Rin, V=ds.Vin, z=ds.z, rscale=ds.rscale, vscale=ds.vscale, energy_predictor=c['PE_predictor']
-    con_fnc = load_constraints(c['con'], c['con_type'], project_fnc=PU.project, uplift_fnc=PU.uplift, debug=c['debug'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,pos_only=ds.pos_only)
+    con_fnc = load_constraints(c['con'], c['con_type'], project_fnc=PU.project, uplift_fnc=PU.uplift, debug=c['debug'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,pos_only=ds.pos_only,regularizationparameter=c['regularizationparameter'])
 
     if c['network_type'].lower() == 'eq':
         model = neural_network_equivariant(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],

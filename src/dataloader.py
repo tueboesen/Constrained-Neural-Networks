@@ -201,7 +201,7 @@ def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
 
     if use_val:
-        dataset_val = Dataset_protein(data_type, seq[val_idx], rCa[val_idx], rCb[val_idx], rN[val_idx], device=device)
+        dataset_val = Dataset_protein(data_type, seq[val_idx], rCa[val_idx], rCb[val_idx], rN[val_idx], device,log_units)
         dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collator)
     else:
         dataloader_val = None

@@ -5,7 +5,7 @@ import torch.nn as nn
 from torch.autograd import grad
 
 
-def load_constraints(con,con_type,project_fnc=None,uplift_fnc=None,con_variables=None,rscale=1,vscale=1,pos_only=False,debug=False):
+def load_constraints(con,con_type,project_fnc=None,uplift_fnc=None,con_variables=None,rscale=1,vscale=1,pos_only=False,debug=False,regularizationparameter=1):
     """
     This is a wrapper function for loading constraints.
 
@@ -13,22 +13,22 @@ def load_constraints(con,con_type,project_fnc=None,uplift_fnc=None,con_variables
     """
     if con == 'chain':
         d0 = con_variables['d0']
-        con_fnc = torch.nn.Sequential(PointChain(d0,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug))
+        con_fnc = torch.nn.Sequential(PointChain(d0,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
     elif con == 'triangle':
         r0 = con_variables['r0']
         r1 = con_variables['r1']
         r2 = con_variables['r2']
-        PTP = PointToPoint(r0/rscale,con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug)
-        PTSSI = PointToSphereSphereIntersection(r1/rscale,r2/rscale,con_type=con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug)
+        PTP = PointToPoint(r0/rscale,con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter)
+        PTSSI = PointToSphereSphereIntersection(r1/rscale,r2/rscale,con_type=con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter)
         con_fnc = torch.nn.Sequential(PTP,PTSSI)
     elif con == 'chaintriangle':
         d0 = con_variables['d0']
         r0 = con_variables['r0']
         r1 = con_variables['r1']
         r2 = con_variables['r2']
-        PC = PointChain(d0, con_type, project_fnc, uplift_fnc, pos_only=pos_only, debug=debug)
-        PTP = PointToPoint(r0/rscale,con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug)
-        PTSSI = PointToSphereSphereIntersection(r1/rscale,r2/rscale,con_type=con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug)
+        PC = PointChain(d0, con_type, project_fnc, uplift_fnc, pos_only=pos_only, debug=debug,regularizationparameter=regularizationparameter)
+        PTP = PointToPoint(r0/rscale,con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter)
+        PTSSI = PointToSphereSphereIntersection(r1/rscale,r2/rscale,con_type=con_type,project=project_fnc,uplift=uplift_fnc,pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter)
         con_fnc = torch.nn.Sequential(PC,PTP,PTSSI)
     elif con == 'P': # Momentum constraints
         mass = con_variables['mass']
@@ -96,9 +96,10 @@ class ConstraintTemplate(nn.Module):
     regularization constraints will be saved in 'c'
     """
 
-    def __init__(self, con_type):
+    def __init__(self, con_type, regularizationparameter):
         super(ConstraintTemplate, self).__init__()
         self.con_type = con_type
+        self.regularizationparameter = regularizationparameter
         return
 
     def constrain_high_dimension(self, data):
@@ -137,8 +138,8 @@ class PointToPoint(ConstraintTemplate):
     x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
-    def __init__(self,r0,con_type,project=None,uplift=None,pos_only=False,debug=False):
-        super(PointToPoint, self).__init__(con_type)
+    def __init__(self,r0,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+        super(PointToPoint, self).__init__(con_type,regularizationparameter)
         self.r0 = r0
         self.project = project
         self.uplift = uplift
@@ -221,7 +222,7 @@ class PointToPoint(ConstraintTemplate):
         r = x.view(1, -1, 9)
         z2 = z.view(1, -1, 1)
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6], z2)
-        c_new = torch.sum(lam_p2 ** 2)/100
+        c_new = torch.sum(lam_p2 ** 2)*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
 
 class PointToSphereSphereIntersection(ConstraintTemplate):
@@ -236,8 +237,8 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
     x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
-    def __init__(self,r1,r2,con_type,project=None,uplift=None,pos_only=False,debug=False):
-        super(PointToSphereSphereIntersection, self).__init__(con_type)
+    def __init__(self,r1,r2,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+        super(PointToSphereSphereIntersection, self).__init__(con_type,regularizationparameter)
         self.r1 = r1
         self.r2 = r2
         self.project = project
@@ -361,7 +362,7 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
 
         c23 = torch.sum((d23 - r2) ** 2)
         c13 = torch.sum((d13 - r1) ** 2)
-        c_new = (c23 + c13)/100
+        c_new = (c23 + c13)*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
 
 
@@ -380,8 +381,8 @@ class PointChain(ConstraintTemplate):
     x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
-    def __init__(self,d0,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9):
-        super(PointChain, self).__init__(con_type)
+    def __init__(self,d0,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9,regularizationparameter=1):
+        super(PointChain, self).__init__(con_type,regularizationparameter)
         self.d0 = d0
         self.project = project
         self.uplift = uplift
@@ -581,7 +582,7 @@ class PointChain(ConstraintTemplate):
         z2 = z.view(1, -1, 1)
         r = x[:, :3].view(1, -1, 3)
         cc = self.constraint(r, z2)
-        c_new = torch.sum(torch.abs(cc))/100
+        c_new = torch.sum(torch.abs(cc))*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
 
 
