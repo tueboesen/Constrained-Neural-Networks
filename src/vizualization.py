@@ -12,12 +12,8 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
     njobs, nrep, nlosses, nepochs = results.shape
     x = np.arange(nepochs)
     M = np.sum(results,axis=3) > 0
-    if semilogy:
-        pngfile = "{:}/Loss_{:}.png".format(results_dir,'semilogy')
-    else:
-        pngfile = "{:}/Loss.png".format(results_dir)
 
-    fig, ax = plt.subplots(num=1, clear=True)
+    fig, ax = plt.subplots(num=1,figsize=(15,15), clear=True)
     for ii in range(njobs):
 
         idx = 0
@@ -25,31 +21,42 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-training")
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
             else:
-                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
             ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
-
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+    plt.title("Training")
+    if semilogy:
+        pngfile = "{:}/Loss_{:}_training.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss_training.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.clf()
+    for ii in range(njobs):
         idx = 1
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-validation")
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
             else:
-                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-validation")
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
             ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.legend()
+    plt.title("Validation")
+    if semilogy:
+        pngfile = "{:}/Loss_{:}_validation.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss_validation.png".format(results_dir)
     plt.savefig(pngfile)
     plt.clf()
 
-    if semilogy:
-        pngfile = "{:}/LossD_{:}.png".format(results_dir,'semilogy')
-    else:
-        pngfile = "{:}/LossD.png".format(results_dir)
-    fig, ax = plt.subplots(num=1, clear=True)
+    fig, ax = plt.subplots(num=1, figsize=(15,15), clear=True)
     for ii in range(njobs):
 
         idx = 2
@@ -57,23 +64,40 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-training")
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
             else:
-                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-training")
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
             ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
+        plt.xlabel('Epochs')
+        plt.ylabel('LossD')
+        plt.legend()
+    plt.title("Training")
+    if semilogy:
+        pngfile = "{:}/LossD_{:}_training.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/LossD_training.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.clf()
+
+    for ii in range(njobs):
         idx = 3
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}-validation")
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
             else:
-                h = ax.plot(x, y, '-', label=f"{legends[ii]:}-validation")
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
             ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
         plt.xlabel('Epochs')
         plt.ylabel('LossD')
         plt.legend()
+    plt.title("Validation")
+    if semilogy:
+        pngfile = "{:}/LossD_{:}_validation.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/LossD_validation.png".format(results_dir)
     plt.savefig(pngfile)
     plt.clf()
     return

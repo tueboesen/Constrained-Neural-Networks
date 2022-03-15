@@ -39,7 +39,7 @@ def standard_network_sizes(c,network_type):
 
     return c
 
-def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition):
+def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,regularizationparameter):
     """
     Creates a job to be run.
     """
@@ -49,6 +49,7 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition)
     c['repetition'] = repetition
     c['jobid'] = jobid
     c['network_type'] = network_type
+    c['regularizationparameter'] = regularizationparameter
     if not ('network' in c):
         c = standard_network_sizes(c,network_type)
     if c['loss'] == '':
@@ -57,8 +58,8 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition)
         c['use_same_data'] = True
     else:
         c['use_same_data'] = False
-    c['result_dir'] = f"{c['result_dir_base']}/{c['network_type']}_{c['con']}_{c['con_type']}_{repetition}/"
-    legend = f"{network_type}_{c['con']:} {c['con_type']:}"
+    c['result_dir'] = f"{c['result_dir_base']}/{c['network_type']}_{c['con']}_{c['con_type']}_{c['regularizationparameter']:1.1e}_{repetition}/"
+    legend = f"{network_type} {c['con']:} {c['con_type']:} {regularizationparameter:1.1e}"
     jobid = jobid + 1
     return c,jobid,legend
 
@@ -83,16 +84,24 @@ def job_planner(c):
             for con in c_base['con']:
                 if con == '':
                     con_type = 'low'
-                    c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i)
+                    c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i,1)
                     cs.append(c_new)
                     if i == 0:
                         legends.append(legend)
                 else:
                     for con_type in c_base['con_type']:
-                        c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i)
-                        cs.append(c_new)
-                        if i == 0:
-                            legends.append(legend)
+                        if con_type == 'reg':
+                            for regularizationparameter in c_base['regularizationparameter']:
+                                c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,regularizationparameter)
+                                cs.append(c_new)
+                                if i == 0:
+                                    legends.append(legend)
+                        else:
+                            c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid, i, 1)
+                            cs.append(c_new)
+                            if i == 0:
+                                legends.append(legend)
+
     results = np.zeros((len(legends),len(c_base['seed']),4,c['epochs']))
     return cs, legends, results
 
