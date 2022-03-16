@@ -116,6 +116,10 @@ def job_runner(cs,legends, results):
     dataloader_val = None
     dataloader_test = None
     dataloader_endstep = None
+    file_legend = f"{cs[0]['result_dir_base']}/legends.txt"
+    with open(file_legend, 'w') as f:
+        for i, legend in enumerate(legends):
+            f.write(f"{i}: {legend} \n")
     for i,c in enumerate(cs):
         if c['use_same_data'] == False:
             dataloader_train = None

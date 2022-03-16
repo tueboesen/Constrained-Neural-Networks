@@ -18,8 +18,8 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 10
-    args.n_val = 10
+    args.n_train = 100
+    args.n_val = 100
     args.batch_size = 1
     args.nskip = 9999
     args.epochs_for_lr_adjustment = 20
@@ -30,9 +30,9 @@ if __name__ == '__main__':
     args.debug = False
     args.viz = False
     args.lr = 1e-3
-    args.seed = [1,2,3,4,5,6,7,8,9,10]
+    args.seed = [1,2,3,4,5]
     args.use_same_data = True
-    args.epochs = 3
+    args.epochs = 100
     args.network_type = ['mim']
     args.loss = ''
     args.data = './../../../data/casp11/casp11_sel.npz'
