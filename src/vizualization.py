@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib as mpl
 
 def plot_training_and_validation_accumulated(results,legends,results_dir,semilogy=False):
     """
@@ -105,17 +106,28 @@ def plot_training_and_validation_accumulated(results,legends,results_dir,semilog
     return
 
 
-def plot_training_and_validation_accumulated_custom(results,legends,results_dir,colors,semilogy=False):
+def plot_training_and_validation_accumulated_custom(results,legends,results_dir,colors,semilogy=False,fill_between=False):
     """
     This is a more customizable version of the above function, designed for printing specific figures for papers or similar things.
     """
+    mpl.rcParams['pdf.fonttype'] = 42
+    mpl.rcParams['ps.fonttype'] = 42
+    mpl.rcParams['ytick.labelsize'] = 25
+    mpl.rcParams['axes.labelsize'] = 25
+    mpl.rcParams['legend.fontsize'] = 25
+    mpl.rcParams['lines.markersize'] = 20
+    mpl.rcParams['lines.markeredgewidth'] = 5
+    mpl.rcParams['lines.linewidth'] = 5
+    mpl.rcParams['xtick.labelsize'] = 25
+    mpl.rcParams['ytick.labelsize'] = 25
+    # mpl.rcParams['xtick.labelsize'] = 25
+    # mpl.rcParams['xtick.labelsize'] = 25
+    # mpl.rcParams['font.family'] = 'Arial'
+
+
     njobs, nrep, nlosses, nepochs = results.shape
     x = np.arange(nepochs)
     M = np.sum(results,axis=3) > 0
-    if semilogy:
-        pngfile = "{:}/Loss_{:}.png".format(results_dir,'semilogy')
-    else:
-        pngfile = "{:}/Loss.png".format(results_dir)
 
     fig, ax = plt.subplots(figsize=(15,15))
     for ii in range(njobs):
@@ -128,8 +140,34 @@ def plot_training_and_validation_accumulated_custom(results,legends,results_dir,
                 h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
                 h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
-            ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    # ax.ticklabel_format(style='plain')
+    # plt.yticks(fontsize=25)
+
+    # ax.set_xticks([0,100,200,300])
+    plt.legend()
+    # plt.title("Training")
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # ax.set_yticks([20, 200, 500])
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    if semilogy:
+        pngfile = "{:}/Loss_{:}_training.png".format(results_dir, 'semilogy')
+    else:
+        pngfile = "{:}/Loss_training.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.close()
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
         idx = 1
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
@@ -138,17 +176,28 @@ def plot_training_and_validation_accumulated_custom(results,legends,results_dir,
                 h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
                 h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
-            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
-        plt.xlabel('Epochs')
-        plt.ylabel('Loss')
-        plt.legend()
-    plt.savefig(pngfile)
-    plt.clf()
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    # plt.title("Training")
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
 
     if semilogy:
-        pngfile = "{:}/LossD_{:}.png".format(results_dir,'semilogy')
+        pngfile = "{:}/Loss_{:}_validation.png".format(results_dir, 'semilogy')
     else:
-        pngfile = "{:}/LossD.png".format(results_dir)
+        pngfile = "{:}/Loss_validation.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.close()
     fig, ax = plt.subplots(figsize=(15,15))
     for ii in range(njobs):
 
@@ -160,8 +209,30 @@ def plot_training_and_validation_accumulated_custom(results,legends,results_dir,
                 h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
                 h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
-            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
+    plt.xlabel('Epochs')
+    plt.ylabel('LossD')
+    plt.legend()
+    # plt.title("Training")
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    if semilogy:
+        pngfile = "{:}/LossD_{:}_training.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/LossD_training.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.close()
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
         idx = 3
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
@@ -170,12 +241,27 @@ def plot_training_and_validation_accumulated_custom(results,legends,results_dir,
                 h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
             else:
                 h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
-            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
-        plt.xlabel('Epochs')
-        plt.ylabel('LossD')
-        plt.legend()
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+    plt.xlabel('Epochs')
+    plt.ylabel('LossD')
+    plt.legend()
+    # plt.title("Validation")
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    if semilogy:
+        pngfile = "{:}/LossD_{:}_validation.png".format(results_dir, 'semilogy')
+    else:
+        pngfile = "{:}/LossD_validation.png".format(results_dir)
     plt.savefig(pngfile)
-    plt.clf()
+    plt.close()
     return
 
 

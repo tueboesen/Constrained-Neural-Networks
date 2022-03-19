@@ -174,6 +174,8 @@ class neural_network_mimetic(nn.Module):
         """
         self.nlayers = nlayers
         self.PU = PU
+        # self.PU.make_matrix_semi_unitary()
+
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
         self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
@@ -190,7 +192,6 @@ class neural_network_mimetic(nn.Module):
         if x.isnan().any():
             raise ValueError("NaN detected")
 
-        self.PU.make_matrix_semi_unitary()
         node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
         y = self.PU.uplift(x)
 

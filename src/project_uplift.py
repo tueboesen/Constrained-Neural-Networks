@@ -21,8 +21,14 @@ class ProjectUpliftEQ(torch.nn.Module):
         w = torch.empty((self.n_vec_low, self.n_vec_high))
         torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.n_vec_low)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
         # self.M = torch.nn.Parameter(w)
-        self.register_buffer("M", w)
+        # self.register_buffer("M", w)
+        # self.make_matrix_semi_unitary()
 
+        M = w
+        I = torch.eye(M.shape[-2],device=M.device)
+        for i in range(100):
+            M = M - 0.5 * (M @ M.t() - I) @ M
+        self.register_buffer("Mu", M)
         return
 
     def make_matrix_semi_unitary(self, debug=False):
@@ -104,8 +110,11 @@ class ProjectUplift(torch.nn.Module):
         w = torch.empty((self.low_dim, self.high_dim))
         torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
         # self.M = torch.nn.Parameter(w)
-        self.register_buffer("M", w)
-
+        M = w
+        I = torch.eye(M.shape[-2],device=M.device)
+        for i in range(100):
+            M = M - 0.5 * (M @ M.t() - I) @ M
+        self.register_buffer("Mu", M)
         return
 
     def make_matrix_semi_unitary(self, debug=False):

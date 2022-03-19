@@ -125,7 +125,7 @@ class neural_network_equivariant(torch.nn.Module):
             self.num_neighbors = edge_dst.shape[0]/x.shape[0]
 
         node_attr_embedded = self.node_embedder(node_attr.to(dtype=torch.int64)).squeeze()
-        self.PU.make_matrix_semi_unitary()
+        # self.PU.make_matrix_semi_unitary()
         y = self.PU.uplift(x)
         y_old = y
 
