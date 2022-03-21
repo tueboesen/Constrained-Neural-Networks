@@ -129,48 +129,48 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     aMAEv /= (i + 1)
 
     return aloss, alossD#, aMAEr, aMAEv
-
-def best_coord_init(coords,scale=3.8,plot_coords=True):
-    ss = 0.1
-    x = torch.zeros_like(coords)
-    i = 0
-    x[:,i+0] = scale
-    x[::2,i+1] = ss*scale
-    x[1::2,i+1] = -ss*scale
-
-    i = 3
-    x[:,i+0] = scale
-    x[::2,i+1] = ss*scale
-    x[1::2,i+1] = -ss*scale
-
-    i = 6
-    x[:,i+0] = scale
-    x[::2,i+2] = ss*scale
-    x[1::2,i+2] = -ss*scale
-    x = torch.cumsum(x, dim=0)
-
-    x[:,4] = x[:,4]+1.5
-    x[:,8] = x[:,8]+1.5
-
-    if plot_coords:
-        import matplotlib.pyplot as plt
-        ax = plt.axes(projection='3d')
-        cc = x.cpu().numpy()
-        # ax.plot3D(cc[:, 3],cc[:, 4],cc[:, 5], 'blue')
-        # ax.plot3D(cc[:, 6],cc[:, 7],cc[:, 8], 'red')
-        ax.plot3D(cc[:, 0],cc[:, 1],cc[:, 2], 'gray')
-        for i in range(coords.shape[0]):
-            ax.plot3D([cc[i,0], cc[i, 3]], [cc[i,1],cc[i, 4]], [cc[i,2],cc[i, 5]], 'blue')
-            ax.plot3D([cc[i,0], cc[i, 6]], [cc[i,1],cc[i, 7]], [cc[i,2],cc[i, 8]], 'red')
-            # ax.plot3D(cc[:, 6], cc[:, 7], cc[:, 8], 'red')
-
-        ax.set_xlim3d(0, 250)
-        ax.set_ylim3d(0, 250)
-        ax.set_zlim3d(0, 250)
-        plt.show()
-
-    return x
-
+#
+# def best_coord_init(coords,scale=3.8,plot_coords=False):
+#     ss = 0.1
+#     x = torch.zeros_like(coords)
+#     i = 0
+#     x[:,i+0] = scale
+#     x[::2,i+1] = ss*scale
+#     x[1::2,i+1] = -ss*scale
+#
+#     i = 3
+#     x[:,i+0] = scale
+#     x[::2,i+1] = ss*scale
+#     x[1::2,i+1] = -ss*scale
+#
+#     i = 6
+#     x[:,i+0] = scale
+#     x[::2,i+2] = ss*scale
+#     x[1::2,i+2] = -ss*scale
+#     x = torch.cumsum(x, dim=0)
+#
+#     x[:,4] = x[:,4]+1.5
+#     x[:,8] = x[:,8]+1.5
+#
+#     if plot_coords:
+#         import matplotlib.pyplot as plt
+#         ax = plt.axes(projection='3d')
+#         cc = x.cpu().numpy()
+#         # ax.plot3D(cc[:, 3],cc[:, 4],cc[:, 5], 'blue')
+#         # ax.plot3D(cc[:, 6],cc[:, 7],cc[:, 8], 'red')
+#         ax.plot3D(cc[:, 0],cc[:, 1],cc[:, 2], 'gray')
+#         for i in range(coords.shape[0]):
+#             ax.plot3D([cc[i,0], cc[i, 3]], [cc[i,1],cc[i, 4]], [cc[i,2],cc[i, 5]], 'blue')
+#             ax.plot3D([cc[i,0], cc[i, 6]], [cc[i,1],cc[i, 7]], [cc[i,2],cc[i, 8]], 'red')
+#             # ax.plot3D(cc[:, 6], cc[:, 7], cc[:, 8], 'red')
+#
+#         ax.set_xlim3d(0, 250)
+#         ax.set_ylim3d(0, 250)
+#         ax.set_zlim3d(0, 250)
+#         plt.show()
+#
+#     return x
+#
 
 
 
@@ -206,8 +206,11 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
         optimizer.zero_grad()
 
         # We need to define a best guess for the amino acid coordinates
-        coords_init = best_coord_init(coords, scale=3.8)
-
+        coords_init = 0.1*torch.ones_like(coords)
+        coords_init[::2,::3] += 0.1
+        coords_init[:,3:] += 0.5
+        coords_init[:,6:] += 0.5
+        coords_init = torch.cumsum(coords_init,dim=0)
 
         coords_pred, reg = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
 
