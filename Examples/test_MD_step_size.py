@@ -31,7 +31,7 @@ if __name__ == '__main__':
     args.data_type = 'water'
     # args.con = ['triangle']
     args.con = ['','triangle']
-    args.con_type = ['high']
+    args.con_type = ['high','low']
     args.con_data = ''
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
