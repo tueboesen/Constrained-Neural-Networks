@@ -160,7 +160,7 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self,node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None):
+    def __init__(self, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
@@ -171,9 +171,11 @@ class neural_network_mimetic(nn.Module):
         max_radius:         The maximum radius used when building the edges in the graph between the particles
         con_fnc:            A handler to the constrain function wrapped in a nn.sequential.
         con_type:           The type of constraints being used (high, low, reg)
+        dim:                The dimension that the data lives in (default 3)
         """
         self.nlayers = nlayers
         self.PU = PU
+        self.dim = dim
         # self.PU.make_matrix_semi_unitary()
 
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
@@ -199,7 +201,7 @@ class neural_network_mimetic(nn.Module):
         for i in range(self.nlayers):
             if x.isnan().any():
                 raise ValueError("NaN detected")
-            edge_vec = x[:,0:3][edge_src] - x[:,0:3][edge_dst]
+            edge_vec = x[:,0:self.dim][edge_src] - x[:,0:self.dim][edge_dst]
             edge_len = edge_vec.norm(dim=1)
             w = smooth_cutoff(edge_len / self.max_radius) / edge_len
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)

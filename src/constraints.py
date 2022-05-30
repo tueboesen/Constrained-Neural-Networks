@@ -43,6 +43,10 @@ def load_constraints(con,con_type,project_fnc=None,uplift_fnc=None,con_variables
         EM = EnergyMomentumConstraints(project_fnc,uplift_fnc, energy_predictor, mass, rescale_r=rscale, rescale_v=vscale)
         con_fnc = torch.nn.Sequential(EM)
         # constraints[0].fix_reference_energy(R,V,z)
+    elif con == 'pendulum':
+        L1 = con_variables['L1']
+        L2 = con_variables['L2']
+        con_fnc = torch.nn.Sequential(PointToPointToPoint(L1,L2,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
     elif con == '':
         con_fnc = None
     else:
@@ -76,6 +80,9 @@ def constraint_hyperparameters(con,con_type,data_type):
             cv['r2'] = 1.513
         else:
             NotImplementedError("The combination of constraints={:} and data_type={:} has not been implemented in function {:}".format(con,data_type,inspect.currentframe().f_code.co_name))
+    elif con == 'pendulum':
+        cv['L1'] = 3.0
+        cv['L2'] = 2.0
     else:
         NotImplementedError("The combination of constraints={:} and data_type={:} has not been implemented in function {:}".format(con, data_type, inspect.currentframe().f_code.co_name))
 
@@ -363,6 +370,102 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         c23 = torch.sum((d23 - r2) ** 2)
         c13 = torch.sum((d13 - r1) ** 2)
         c_new = (c23 + c13)*self.regularizationparameter
+        return {'x': x, 'z': z, 'c': c + c_new}
+
+
+class PointToPointToPoint(ConstraintTemplate):
+    """
+TODO write description
+    """
+    def __init__(self,r1,r2,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+        super(PointToPointToPoint, self).__init__(con_type,regularizationparameter)
+        self.r1 = r1
+        self.r2 = r2
+        self.project = project
+        self.uplift = uplift
+        self.pos_only = pos_only
+        self.debug = debug
+        if con_type == 'high':
+            if project is None:
+                raise ValueError("For high dimensional constraints a projection function is needed.")
+            if uplift is None:
+                raise ValueError("For high dimensional constraints an uplifting function is needed.")
+        return
+
+    def constraint(self,p1,p2,r0):
+        d = p2 - p1
+        lam = d * (1 - (r0 / d.norm(dim=-1).unsqueeze(-1)))
+        return lam
+
+    def constrain_high_dimension(self,data):
+        batch = data['batch']
+        z = data['z']
+        y = data['y']
+        x = self.project(y)
+        ndim = x.shape[-1]
+        lam_x = torch.zeros_like(x)
+        nb = batch.max() + 1
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        # z2 = z.view(nb,-1,1)
+        lam_p1 = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r1)
+        lam_p2 = self.constraint(r[:, 0, :2] - lam_p1, r[:, 1, :2], self.r2)
+        lam_x[::2, 0:2] = lam_p1.view(-1,2)
+        lam_x[1::2, 0:2] = lam_p2.view(-1,2)
+        lam_y = self.uplift(lam_x.view(-1, ndim))
+        y = y - lam_y
+        if self.debug:
+            x = self.project(y)
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+            lam_p1_after = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r1)
+            lam_p2_after = self.constraint(r[:, 0, :2] - lam_p1_after, r[:, 1, :2], self.r2)
+            cnorm = torch.mean(torch.sum(lam_p1 ** 2, dim=-1)) + torch.mean(torch.sum(lam_p2 ** 2, dim=-1))
+            cnorm_after = torch.mean(torch.sum(lam_p1_after ** 2, dim=-1)) + torch.mean(torch.sum(lam_p2_after ** 2, dim=-1))
+            print(f"{self._get_name()} constraint c: {cnorm:2.6f} -> {cnorm_after:2.6f}")
+        return {'y': y, 'batch': batch, 'z': z}
+
+    def constrain_low_dimension(self, data):
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        z = data['z']
+        ndim = x.shape[-1]
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        # z2 = z.view(nb,-1,1)
+        # v = x[:, ndim:].view(nb, -1, ndim)
+        lam_p1 = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r1)
+        lam_p2 = self.constraint(r[:, 0, :2] - lam_p1, r[:, 1, :2], self.r2)
+        x[::2, 0:2] = x[::2, 0:2] - lam_p1.view(-1,2)
+        x[1::2, 0:2] = x[1::2, 0:2] - lam_p2.view(-1,2)
+
+        # lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
+        # x[:,3:6] = x[:,3:6] - lam_p2.view(-1,3)
+        if self.debug:
+            r = x[:, 0:ndim].view(nb, -1, ndim)
+
+            lam_p1_after = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r1)
+            lam_p2_after = self.constraint(r[:, 0, :2] - lam_p1_after, r[:, 1, :2], self.r2)
+            # lam_p2_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
+            cnorm = torch.mean(torch.sum(lam_p1 ** 2, dim=-1)) + torch.mean(torch.sum(lam_p2 ** 2, dim=-1))
+            cnorm_after = torch.mean(torch.sum(lam_p1_after ** 2, dim=-1)) + torch.mean(torch.sum(lam_p2_after ** 2, dim=-1))
+            print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
+        return {'x': x, 'batch': batch,'z':z}
+
+    def constrain_regularization(self, data):
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        z = data['z']
+        if 'c' in data:
+            c = data['c']
+        else:
+            c = 0
+        ndim = x.shape[-1]
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        # r = x.view(1, -1, 9)
+        # z2 = z.view(1, -1, 1)
+        lam_p1 = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r1)
+        lam_p2 = self.constraint(r[:, 0, :2] - lam_p1, r[:, 1, :2], self.r2)
+        c_new = (torch.sum(lam_p1 ** 2)+torch.sum(lam_p2 ** 2))*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
 
 

@@ -18,7 +18,7 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 1000
+    args.n_train = 38589
     args.n_val = 1000
     args.batch_size = 1
     args.nskip = 9999
@@ -32,13 +32,13 @@ if __name__ == '__main__':
     args.lr = 1e-3
     args.seed = [1,2,3,4,5]
     args.use_same_data = True
-    args.epochs = 100
+    args.epochs = 20
     args.network_type = ['mim']
     args.loss = ''
     args.data = './../../../data/casp11/casp11_sel.npz'
     args.data_type = 'protein'
     args.con = ['', 'chain', 'triangle', 'chaintriangle']
-    args.con_type = ['high', 'low']
+    args.con_type = ['high']
     args.con_data = './../../../data/casp11/casp11_sel_cons.pt'
     args.basefolder = os.path.basename(__file__).split(".")[0]
     args.regularizationparameter = [1e-12, 1e-4, 1e-3, 1e-2]

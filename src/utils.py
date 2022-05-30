@@ -105,10 +105,10 @@ def update_results_and_save_to_csv(results,epoch,loss_t,lossD_t,loss_v,lossD_v,c
     """
     result = pd.DataFrame({
         'epoch': [epoch],
-        'loss_t': [loss_t.cpu().numpy()],
-        'loss_v': [loss_v.cpu().numpy()],
-        'lossD_t': [lossD_t.cpu().numpy()],
-        'lossD_v': [lossD_v.cpu().numpy()]}, dtype=np.float32)
+        'loss_t': [loss_t],
+        'loss_v': [loss_v],
+        'lossD_t': [lossD_t],
+        'lossD_v': [lossD_v]}, dtype=np.float32)
     result = result.astype({'epoch': np.int64})
     if epoch == 0:
         results = result

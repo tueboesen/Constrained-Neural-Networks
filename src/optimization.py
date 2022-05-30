@@ -16,6 +16,8 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss, lossD = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
     elif data_type == 'protein':
         loss, lossD = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
+    elif data_type == 'pendulum':
+        loss, lossD = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
     return loss, lossD
@@ -108,16 +110,16 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
                 assert not torch.isnan(weights_1d).any()
                 assert not torch.isinf(weights_1d).any()
                 print(f"{weights_1d.max()}, {weights_1d.min()}")
-
-                grad_flat = [torch.flatten(weight.grad) for weight in weights]
-                grad_1d = torch.cat(grad_flat)
-                assert not torch.isnan(grad_1d).any()
-                assert not torch.isinf(grad_1d).any()
-                print(f"{grad_1d.max()}, {grad_1d.min()}")
+                #
+                # grad_flat = [torch.flatten(weight.grad) for weight in weights]
+                # grad_1d = torch.cat(grad_flat)
+                # assert not torch.isnan(grad_1d).any()
+                # assert not torch.isinf(grad_1d).any()
+                # print(f"{grad_1d.max()}, {grad_1d.min()}")
             optimizer.step()
 
-        aloss += loss_rel.detach()
-        alossD += lossD_rel.detach()
+        aloss += loss_rel.item()
+        alossD += lossD_rel.item()
         aMAEr += MAEr
         aMAEv += MAEv
         if (i + 1) * batch_size >= max_samples:

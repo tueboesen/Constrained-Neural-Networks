@@ -23,6 +23,8 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     c is the input configuration dictionary, which dictates the run.
     """
     cn = c['network']
+    if c['use_double']:
+        torch.set_default_dtype(torch.float64)
     fix_seed(c['seed'])  # Set a seed, so we make reproducible results.
     if 'result_dir' not in c:
         c['result_dir'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
@@ -60,7 +62,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                     num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node)
     elif c['network_type'] == 'mim':
-        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'])
+        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"])
     else:
         raise NotImplementedError("Network type is not implemented")
     model.to(device)
@@ -82,7 +84,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         loss_t, lossD_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'])
         t2 = time.time()
         if c['use_val']:
-            loss_v, lossD_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*5, max_radius=cn['max_radius'], debug=c['debug'])
+            loss_v, lossD_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'])
         else:
             loss_v, lossD_v = torch.tensor(0.0),torch.tensor(0.0)
         t3 = time.time()

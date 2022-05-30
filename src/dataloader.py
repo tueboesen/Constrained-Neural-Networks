@@ -18,9 +18,127 @@ def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_s
     elif data_type == 'protein':
         dataloader_train, dataloader_val, dataloader_test = load_protein_data(file, data_type, device, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle)
         dataloader_endstep = None
+    elif data_type == 'pendulum':
+        dataloader_train, dataloader_val, =load_pendulum_data(file, data_type, device, nskip, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle)
+        dataloader_test, dataloader_endstep = None, None
     else:
         NotImplementedError("The data_type={:} has not been implemented in function {:}".format(data_type, inspect.currentframe().f_code.co_name))
     return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
+
+def load_pendulum_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True):
+    M = torch.tensor([2.0, 0.5])
+    N = n_train+use_val *n_val + nskip
+    def double_pendulum_system(x, L1=3.0, L2=2.0, m1=2.0, m2=0.5, g=9.8):
+        # a system of differential equations defining a double pendulum
+        # from http://www.myphysicslab.com/dbl_pendulum.html
+        theta1 = x[0]
+        theta2 = x[1]
+        omega1 = x[2]
+        omega2 = x[3]
+        dtheta1 = omega1
+        dtheta2 = omega2
+        domega1 = (-g * (2 * m1 + m2) * torch.sin(theta1) -
+                   m2 * g * torch.sin(theta1 - 2 * theta2) -
+                   2 * torch.sin(theta1 - theta2) * m2 *
+                   (omega2 ** 2 * L2 + omega1 ** 2 * L1 * torch.cos(theta1 - theta2))) / (L1 * (2 * m1 + m2 - m2 * torch.cos(2 * theta1 - 2 * theta2)))
+        domega2 = (2 * torch.sin(theta1 - theta2) * (omega1 ** 2 * L1 * (m1 + m2) +
+                                                     g * (m1 + m2) * torch.cos(theta1) + omega2 ** 2 * L2 * m2 *
+                                                     torch.cos(theta1 - theta2))) / (L2 * (2 * m1 + m2 - m2 * torch.cos(2 * theta1 - 2 * theta2)));
+        f = torch.tensor([dtheta1, dtheta2, domega1, domega2])
+
+        return f
+
+    def integrateSystem(x0, dt, N,m1,m2):
+        x = x0
+        X = torch.zeros(4, N + 1)
+        X[:, 0] = x
+        for i in range(N):
+            k1 = double_pendulum_system(x,m1=m1,m2=m2)
+            k2 = double_pendulum_system(x + dt / 2 * k1,m1=m1,m2=m2)
+            k3 = double_pendulum_system(x + dt / 2 * k2,m1=m1,m2=m2)
+            k4 = double_pendulum_system(x + dt * k3,m1=m1,m2=m2)
+            x = x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+            X[:, i + 1] = x
+
+        t = torch.linspace(0, N * dt, N + 1)
+
+        return X, t
+
+    def getCoordsVelFromAngles(x, L1=3.0, L2=2.0):
+        theta1 = x[0]
+        theta2 = x[1]
+        dtheta1 = x[2]
+        dtheta2 = x[3]
+
+        x = L1 * torch.sin(theta1)
+        y = -L1 * torch.cos(theta1)
+        r1 = torch.cat((x[:,None],y[:,None]),dim=1)
+
+        x = x + L2 * torch.sin(theta2)
+        y = y - L2 * torch.cos(theta2)
+        r2 = torch.cat((x[:,None],y[:,None]),dim=1)
+
+        vx = dtheta1 * L1 * torch.cos(theta1)
+        vy = dtheta1 * L1 * torch.sin(theta1)
+        v1 = torch.cat((vx[:,None],vy[:,None]),dim=1)
+
+        vx = vx + dtheta2 * L2 * torch.cos(theta2)
+        vy = vy + dtheta2 * L2 * torch.sin(theta2)
+        v2 = torch.cat((vx[:,None],vy[:,None]),dim=1)
+
+        # v2 = v1 + (dtheta2 * L2 * torch.cos(theta2), dtheta2 * L2 * torch.sin(theta2))
+        # X = torch.cat((xm1.unsqueeze(0), ym1.unsqueeze(0), xm2.unsqueeze(0), ym2.unsqueeze(0)))
+        return r1,r2,v1,v2
+
+    def getAnglesFromCoords(x, L1=3.0, L2=2.0):
+        xm1 = x[0]
+        xm2 = x[1]
+        theta1 = torch.arcsin(xm1 / L1)
+        theta2 = torch.arcsin((xm2 - xm1) / L2)
+
+        return torch.tensor([[theta1], [theta2]])
+
+    theta0 = torch.tensor([3 * np.pi / 4, np.pi / 2, 0, 0])
+    Theta, t = integrateSystem(theta0, 0.01, N, m1=M[0], m2=M[1])
+    r1,r2,v1,v2 = getCoordsVelFromAngles(Theta)
+    R = torch.cat((r1[:,None,:],r2[:,None,:]),dim=1)
+    V = torch.cat((v1[:,None,:],v2[:,None,:]),dim=1)
+
+    Rin, Rout = convert_snapshots_to_future_state_dataset(nskip, R)
+    Vin, Vout = convert_snapshots_to_future_state_dataset(nskip, V)
+
+    ndata = Rout.shape[0]
+    print(f'Number of data: {ndata}')
+    assert n_train+n_val <= ndata, f"The number of datasamples: {ndata} is less than the number of training samples: {n_train} + the number of validation samples: {n_val}"
+
+    ndata_rand = 0 + np.arange(ndata)
+    if shuffle:
+        np.random.shuffle(ndata_rand)
+    train_idx = ndata_rand[:n_train]
+    val_idx = ndata_rand[n_train:n_train + n_val]
+    test_idx = ndata_rand[n_train + n_val:]
+
+    Rin_train = Rin[train_idx]
+    Rout_train = Rout[train_idx]
+    Vin_train = Vin[train_idx]
+    Vout_train = Vout[train_idx]
+
+
+    if use_val:
+        Rin_val = Rin[val_idx]
+        Rout_val = Rout[val_idx]
+        Vin_val = Vin[val_idx]
+        Vout_val = Vout[val_idx]
+
+    z = torch.tensor([1,2])
+    dataset_train = DatasetFutureState(data_type,Rin_train, Rout_train, z, Vin_train, Vout_train, m=M,device=device)
+    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+    if use_val:
+        dataset_val = DatasetFutureState(data_type,Rin_val, Rout_val, z, Vin_val, Vout_val, m=M,device=device)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=False)
+
+    return dataloader_train, dataloader_val
+
 
 def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
     """
@@ -258,30 +376,30 @@ class DatasetFutureState(data.Dataset):
 
     def __getitem__(self, index):
         device = self.device
-        Rin = self.Rin[index].to(device=device)
-        Rout = self.Rout[index].to(device=device)
-        z = self.z[:,None].to(device=device)
-        Vin = self.Vin[index].to(device=device)
-        Vout = self.Vout[index].to(device=device)
+        Rin = self.Rin[index]
+        Rout = self.Rout[index]
+        z = self.z[:,None]
+        Vin = self.Vin[index]
+        Vout = self.Vout[index]
         if self.m is not None:
             m = self.m[:,None]
         else:
             m = 0
         if self.useF:
-            Fin = self.Fin[index].to(device=device)
-            Fout = self.Fout[index].to(device=device)
+            Fin = self.Fin[index]
+            Fout = self.Fout[index]
         else:
             Fin = 0
             Fout = 0
         if self.useKE:
-            KEin = self.KEin[index].to(device=device)
-            KEout = self.KEout[index].to(device=device)
+            KEin = self.KEin[index]
+            KEout = self.KEout[index]
         else:
             KEin = 0
             KEout = 0
         if self.usePE:
-            PEin = self.PEin[index].to(device=device)
-            PEout = self.PEout[index].to(device=device)
+            PEin = self.PEin[index]
+            PEout = self.PEout[index]
         else:
             PEin = 0
             PEout = 0
