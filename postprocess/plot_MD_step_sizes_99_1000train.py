@@ -10,7 +10,7 @@ A simple file to load data from an already finished run, and plot it with custom
 
 # folders = ['/home/tue/remote_desktop/2022-03-21_09_47_05/']
 # folders = ['/home/tue/remote_desktop/2022-03-28_09_42_22/']
-folders = ['/home/tue/remote_desktop/test_MD_step_size/2022-05-16_14_20_30/']
+folders = ['/home/tue/remote_desktop/test_MD_step_size/2022-05-29_14_57_30/','/home/tue/remote_desktop/test_MD_step_size/2022-05-29_14_57_30/']
 # folders = ['/home/tue/remote_desktop/test_MD_step_size/2022-05-19_10_29_32/']
 
 # output_dir = '/home/tue/remote_desktop/regularization10/'
@@ -40,8 +40,8 @@ output_dir_mim = '/home/tue/remote_desktop/mim99_1000train/'
 os.makedirs(output_dir_eq,exist_ok=True)
 os.makedirs(output_dir_mim,exist_ok=True)
 
-result_eq = result[:3]
-result_mim = result[3:]
+result_eq = results_numpy[:3]
+result_mim = results_numpy[3:]
 
 
 # selected_idx = [0,1,2,7,8,13,14]

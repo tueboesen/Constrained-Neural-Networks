@@ -99,16 +99,16 @@ def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.564097647
     V *= Energy_conversion
     return V
 
-def update_results_and_save_to_csv(results,epoch,loss_t,lossD_t,loss_v,lossD_v,csv_file):
+def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,loss_r_v,loss_v_v,csv_file):
     """
     Updates the results and saves it to a csv file.
     """
     result = pd.DataFrame({
         'epoch': [epoch],
-        'loss_t': [loss_t],
-        'loss_v': [loss_v],
-        'lossD_t': [lossD_t],
-        'lossD_v': [lossD_v]}, dtype=np.float32)
+        'loss_r_t': [loss_r_t],
+        'loss_v_t': [loss_v_t],
+        'loss_r_v': [loss_r_v],
+        'loss_v_v': [loss_v_v]}, dtype=np.float32)
     result = result.astype({'epoch': np.int64})
     if epoch == 0:
         results = result

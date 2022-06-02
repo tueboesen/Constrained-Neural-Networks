@@ -13,17 +13,19 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
     A wrapper function for the different data types currently supported for training/inference
     """
     if data_type == 'water':
-        loss, lossD = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        loss_r, loss_v = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
     elif data_type == 'protein':
-        loss, lossD = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
+        #TODO fix this so it also returns the correct loss types0
+        loss, lossD,_ = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
     elif data_type == 'pendulum':
-        loss, lossD = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        #TODO fix this so it also returns the correct loss types0
+        loss, lossD,_ = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss, lossD
+    return loss_r, loss_v
 
 
-def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False):
+def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True):
     """
     A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -38,11 +40,14 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     max_radius:     The maximum radius used when building the edges in the graph between the particles
     debug:          Checks for NaNs and inf in the network while running.
     """
+    import tracemalloc
+    tracemalloc.start()
+
     ds = dataloader.dataset
     rscale = ds.rscale
     vscale = ds.vscale
-    aloss = 0.0
-    alossD = 0.0
+    aloss_r = 0.0
+    aloss_v = 0.0
     aMAEr = 0.0
     aMAEv = 0.0
     torch.set_grad_enabled(train)
@@ -51,6 +56,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     else:
         model.eval()
     for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
+        # print(f"{torch.cuda.memory_allocated()}/{torch.cuda.max_memory_allocated()}")
+        # continue
         nb, natoms, ndim = Rin.shape
         optimizer.zero_grad()
 
@@ -74,13 +81,29 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         Rpred = output[:, 0:ndim]
         Vpred = output[:, ndim:]
 
-        loss_r, loss_ref_r, loss_rel_r = loss_eq(Rpred, Rout_vec, Rin_vec)
-        loss_v, loss_ref_v, loss_rel_v = loss_eq(Vpred, Vout_vec, Vin_vec)
-        loss_rel = (loss_rel_r + loss_rel_v)/2
+
+        lossE_r, lossE_ref_r, lossE_rel_r = loss_eq(Rpred, Rout_vec, Rin_vec)
+        lossE_v, lossE_ref_v, lossE_rel_v = loss_eq(Vpred, Vout_vec, Vin_vec)
+        lossE_rel = (lossE_rel_r + lossE_rel_v)/2
 
         lossD_r, lossD_ref_r, lossD_rel_r = loss_mim(Rpred, Rout_vec, Rin_vec, edge_src, edge_dst)
         lossD_v, lossD_ref_v, lossD_rel_v = loss_mim(Vpred, Vout_vec, Vin_vec, edge_src, edge_dst)
         lossD_rel = (lossD_rel_r + lossD_rel_v)/2
+
+        if loss_type.lower() == 'eq':
+            loss_r, loss_v = lossE_rel_r, lossE_rel_v
+            if predict_pos_only:
+                loss = lossE_rel_r + reg
+            else:
+                loss = lossE_rel + reg
+        elif loss_type.lower() == 'mim':
+            loss_r, loss_v = lossD_rel_r, lossD_rel_v
+            if predict_pos_only:
+                loss = lossD_rel_r + reg
+            else:
+                loss = lossD_rel + reg
+        else:
+            raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
         # E_pred, Ekin_pred, Epot_pred, P_pred = energy_momentum(Vpred.view(Vout.shape) * vscale,Vpred.view(Vout.shape) * vscale, m) #TODO THIS DOESNT WORK JUST YET
 
@@ -93,23 +116,21 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             output_rot_after = output @ Drot
             output_rot = model(x @ Drot, batch, z_vec, edge_src, edge_dst)
             assert torch.allclose(output_rot,output_rot_after, rtol=1e-4, atol=1e-4)
-            print("network is equivariant")
         if train:
-            if loss_type.lower() == 'eq':
-                loss = loss_rel + reg
-            elif loss_type.lower() == 'mim':
-                loss = lossD_rel + reg
-            else:
-                raise NotImplementedError("The loss function you have chosen has not been implemented.")
-
             loss.backward()
-            if debug:
-                weights = optimizer.param_groups[0]['params']
-                weights_flat = [torch.flatten(weight) for weight in weights]
-                weights_1d = torch.cat(weights_flat)
-                assert not torch.isnan(weights_1d).any()
-                assert not torch.isinf(weights_1d).any()
-                print(f"{weights_1d.max()}, {weights_1d.min()}")
+            # if debug:
+            #     if loss_type.lower() == 'eq':
+            #         print(f"loss_rel_r:{loss_rel_r:2.2e},loss_rel_v:{loss_rel_v:2.2e}, loss_r:{loss_r:2.2e},loss_rel_v:{loss_v:2.2e}")
+            #     else:
+            #         print(f"lossD_rel_r:{lossD_rel_r:2.2e},lossD_rel_v:{lossD_rel_v:2.2e}, lossD_r:{lossD_r:2.2e},lossD_rel_v:{lossD_v:2.2e}")
+
+
+                # weights = optimizer.param_groups[0]['params']
+                # weights_flat = [torch.flatten(weight) for weight in weights]
+                # weights_1d = torch.cat(weights_flat)
+                # assert not torch.isnan(weights_1d).any()
+                # assert not torch.isinf(weights_1d).any()
+                # print(f"{weights_1d.max()}, {weights_1d.min()}")
                 #
                 # grad_flat = [torch.flatten(weight.grad) for weight in weights]
                 # grad_1d = torch.cat(grad_flat)
@@ -118,19 +139,38 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
                 # print(f"{grad_1d.max()}, {grad_1d.min()}")
             optimizer.step()
 
-        aloss += loss_rel.item()
-        alossD += lossD_rel.item()
-        aMAEr += MAEr
-        aMAEv += MAEv
+        aloss_r += loss_r.item()
+        aloss_v += loss_v.item()
+        # aMAEr += MAEr.item()
+        # aMAEv += MAEv.item()
         if (i + 1) * batch_size >= max_samples:
             break
+        # if i == 0:
+        #     snapshot = tracemalloc.take_snapshot()
+        #     top_stats = snapshot.statistics('lineno')
+        #
+        #     print("[ Top 10 ]")
+        #     for stat in top_stats[:10]:
+        #         print(stat)
+        # else:
+        #     snapshot_new = tracemalloc.take_snapshot()
+        #     top_stats = snapshot_new.compare_to(snapshot,'lineno')
+        #     for stat in top_stats[:10]:
+        #         print(stat)
+        #     snapshot = snapshot_new
+        # print(torch.cuda.memory_summary())
+        # print("done")
 
-    aloss /= (i + 1)
-    alossD /= (i + 1)
-    aMAEr /= (i + 1)
-    aMAEv /= (i + 1)
 
-    return aloss, alossD#, aMAEr, aMAEv
+
+
+
+    aloss_r /= (i + 1)
+    aloss_v /= (i + 1)
+    # aMAEr /= (i + 1)
+    # aMAEv /= (i + 1)
+
+    return aloss_r, aloss_v#, aMAEr, aMAEv
 #
 # def best_coord_init(coords,scale=3.8,plot_coords=False):
 #     ss = 0.1

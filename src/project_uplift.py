@@ -1,5 +1,6 @@
 import math
 
+import matplotlib.pyplot as plt
 import torch
 from e3nn import o3
 from e3nn.nn import ExtractIr
@@ -26,9 +27,22 @@ class ProjectUpliftEQ(torch.nn.Module):
 
         M = w
         I = torch.eye(M.shape[-2],device=M.device)
-        for i in range(100):
+        # errors = []
+        for i in range(1000):
             M = M - 0.5 * (M @ M.t() - I) @ M
+            # post_error = torch.norm(I - M @ M.t())
+            # errors.append(post_error)
+
+        # import matplotlib.pyplot as plt
+        # import matplotlib as mpl
+        # mpl.use('TkAgg')
+        # plt.figure()
+        # plt.semilogy(errors)
+        # plt.show()
+        # plt.pause(1)
         self.register_buffer("Mu", M)
+        # post_error = torch.norm(I - M @ M.t())
+        # print(f"Deviation from unitary: {post_error:2.2e}")
         return
 
     def make_matrix_semi_unitary(self, debug=False):

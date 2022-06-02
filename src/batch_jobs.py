@@ -5,7 +5,7 @@ from datetime import datetime
 import numpy as np
 
 from src.main import main
-from src.vizualization import plot_training_and_validation_accumulated
+from src.vizualization import plot_training_and_validation_accumulated, plot_training_and_validation_accumulated_2
 from e3nn import o3
 
 
@@ -117,6 +117,7 @@ def job_runner(cs,legends, results):
     dataloader_test = None
     dataloader_endstep = None
     file_legend = f"{cs[0]['result_dir_base']}/legends.txt"
+
     with open(file_legend, 'w') as f:
         for i, legend in enumerate(legends):
             f.write(f"{i}: {legend} \n")
@@ -128,13 +129,12 @@ def job_runner(cs,legends, results):
             dataloader_endstep = None
         result,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
 
-        results[c['jobid'],c['repetition'],0,:] = result['loss_t']
-        results[c['jobid'],c['repetition'],1,:] = result['loss_v']
-        results[c['jobid'],c['repetition'],2,:] = result['lossD_t']
-        results[c['jobid'],c['repetition'],3,:] = result['lossD_v']
+        results[c['jobid'],c['repetition'],0,:] = result['loss_r_t']
+        results[c['jobid'],c['repetition'],1,:] = result['loss_r_v']
+        results[c['jobid'],c['repetition'],2,:] = result['loss_v_t']
+        results[c['jobid'],c['repetition'],3,:] = result['loss_v_v']
         file = f"{c['result_dir_base']:}/results"
         np.save(file,results)
-        plot_training_and_validation_accumulated(results, legends, c['result_dir_base'])
-        plot_training_and_validation_accumulated(results, legends, c['result_dir_base'],semilogy=True)
-
+        # plot_training_and_validation_accumulated_2(results, legends, c['result_dir_base'])
+        plot_training_and_validation_accumulated_2(results, legends, c['result_dir_base'],semilogy=True)
     return

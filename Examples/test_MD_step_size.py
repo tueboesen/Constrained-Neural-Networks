@@ -9,13 +9,12 @@ import torch
 
 from src.batch_jobs import job_planner, job_runner
 if __name__ == '__main__':
-    torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.n_train = 100
     args.n_val = 1000
     args.batch_size = 5
-    args.nskip = 99
+    args.nskip = 999
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8
     args.use_val = True

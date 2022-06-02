@@ -79,20 +79,25 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     csv_file = f"{c['result_dir']}/training.csv"
 
     t0 = time.time()
+    # print(f"{torch.cuda.memory_allocated() / 1024 / 1024:2.2f}MB")
+    # print(f"{torch.cuda.max_memory_allocated() / 1024 / 1024:2.2f}MB")
     while epoch < c['epochs']:
         t1 = time.time()
-        loss_t, lossD_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'])
+        loss_r_t, loss_v_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'])
         t2 = time.time()
         if c['use_val']:
-            loss_v, lossD_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'])
+            loss_r_v, loss_v_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'])
         else:
-            loss_v, lossD_v = torch.tensor(0.0),torch.tensor(0.0)
+            loss_r_v, loss_v_v = torch.tensor(0.0),torch.tensor(0.0)
         t3 = time.time()
 
         # Next save results
-        results = update_results_and_save_to_csv(results, epoch, loss_t, lossD_t, loss_v, lossD_v, csv_file)
+        loss_t = (loss_r_t + loss_v_t) / 2
+        loss_v = (loss_r_v + loss_v_v) / 2
 
-        loss = find_relevant_loss(loss_t, lossD_t, loss_v, lossD_v, c['use_val'], c['loss'])
+        results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,loss_r_v,loss_v_v, csv_file)
+
+        loss = find_relevant_loss(loss_t, loss_t, loss_v, loss_v, c['use_val'], c['loss'])
         if loss < lossBest: # Check if model was better than previous
             lossBest = loss
             epochs_since_best = 0
@@ -105,7 +110,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                     lr = g['lr']
                 epochs_since_best = 0
 
-        LOG.info(f'{epoch:2d}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  LossD(train): {lossD_t:.2e}  LossD(val): {lossD_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
+        LOG.info(f'{epoch:2d}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
 
@@ -123,4 +128,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         run_model_MD_propagation_simulation(model, dataloader_endstep, log=LOG,viz=c['result_dir'])
 
     close_logger(LOG)
+    # print(f"{torch.cuda.memory_allocated() / 1024 / 1024:2.2f}MB")
+    # print(f"{torch.cuda.max_memory_allocated() / 1024 / 1024:2.2f}MB")
+    # print(torch.cuda.memory_summary())
     return results, dataloader_train, dataloader_val, dataloader_test, dataloader_endstep

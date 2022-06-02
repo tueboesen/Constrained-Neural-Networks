@@ -1,6 +1,138 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
+from mpl_toolkits import mplot3d
+
+def plot_water(r_new,v_new,r_old,v_old,r_org,v_org):
+    mpl.use('TkAgg')
+    fig = plt.figure()
+    ax = plt.axes(projection='3d')
+    r_new = r_new[0]
+    r_old = r_old[0]
+    r_org = r_org[0]
+    n_mol = 5
+    ax.scatter3D(r_new[:n_mol,0],r_new[:n_mol,1],r_new[:n_mol,2],color='red',s=100)
+    ax.scatter3D(r_old[:n_mol,0],r_old[:n_mol,1],r_old[:n_mol,2],color='pink',s=100)
+    ax.scatter3D(r_org[:n_mol,0],r_org[:n_mol,1],r_org[:n_mol,2],color='black',s=100)
+
+    ax.scatter3D(r_new[:n_mol,3],r_new[:n_mol,4],r_new[:n_mol,5],color='blue',s=50)
+    ax.scatter3D(r_old[:n_mol,3],r_old[:n_mol,4],r_old[:n_mol,5],color='darkblue',s=50)
+    ax.scatter3D(r_org[:n_mol,3],r_org[:n_mol,4],r_org[:n_mol,5],color='black',s=50)
+
+    ax.scatter3D(r_new[:n_mol,6],r_new[:n_mol,7],r_new[:n_mol,8],color='green',s=50)
+    ax.scatter3D(r_old[:n_mol,6],r_old[:n_mol,7],r_old[:n_mol,8],color='darkgreen',s=50)
+    ax.scatter3D(r_org[:n_mol,6],r_org[:n_mol,7],r_org[:n_mol,8],color='black',s=50)
+    assert np.max(np.abs(v_new-v_old)) < 1e-10
+
+    plt.show()
+    plt.pause(1)
+    print("done")
+
+
+def plot_training_and_validation_accumulated_2(results,legends,results_dir,semilogy=False):
+    """
+    plots the training and validation data as it accumulates over several jobs in a big run.
+    Expects the results to be a numpy variable, with shape (ntypes,nreps,nlosses,nepochs)
+    nlosses should be 4 and should contain the following: loss_r_t,loss_r_v,loss_v_t,loss_v_v (in that order)
+    Note that this function works even if not all the data is currently in the results.
+    It will only plot data where at least one datapoint is different from zero, and is even aware of the number of repetitions current filled out in results and will take that into account when plotting mean and std.
+    """
+    njobs, nrep, nlosses, nepochs = results.shape
+    x = np.arange(nepochs)
+    M = np.sum(results,axis=3) > 0
+
+    fig, ax = plt.subplots(num=1,figsize=(15,15), clear=True)
+    for ii in range(njobs):
+
+        idx = 0
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
+            ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss_r')
+    plt.legend()
+    plt.title("Training")
+    if semilogy:
+        pngfile = "{:}/Loss_r_{:}_training.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss_r_training.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.close()
+    fig, ax = plt.subplots(num=1,figsize=(15,15), clear=True)
+    for ii in range(njobs):
+        idx = 1
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
+            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss_r')
+    plt.legend()
+    plt.title("Validation")
+    if semilogy:
+        pngfile = "{:}/Loss_r_{:}_validation.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss_r_validation.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.close()
+
+    fig, ax = plt.subplots(num=1, figsize=(15,15), clear=True)
+    for ii in range(njobs):
+
+        idx = 2
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
+            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss_v')
+    plt.legend()
+    plt.title("Training")
+    if semilogy:
+        pngfile = "{:}/Loss_v_{:}_training.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss_v_training.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.close()
+    fig, ax = plt.subplots(num=1, figsize=(15,15), clear=True)
+
+    for ii in range(njobs):
+        idx = 3
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=f"{legends[ii]:}")
+            else:
+                h = ax.plot(x, y, '-', label=f"{legends[ii]:}")
+            ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss_v')
+    plt.legend()
+    plt.title("Validation")
+    if semilogy:
+        pngfile = "{:}/Loss_v_{:}_validation.png".format(results_dir,'semilogy')
+    else:
+        pngfile = "{:}/Loss_v_validation.png".format(results_dir)
+    plt.savefig(pngfile)
+    plt.clf()
+    return
+
+
 
 def plot_training_and_validation_accumulated(results,legends,results_dir,semilogy=False):
     """

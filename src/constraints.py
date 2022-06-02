@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 from torch.autograd import grad
 
+from src.vizualization import plot_water
+
 
 def load_constraints(con,con_type,project_fnc=None,uplift_fnc=None,con_variables=None,rscale=1,vscale=1,pos_only=False,debug=False,regularizationparameter=1):
     """
@@ -145,13 +147,14 @@ class PointToPoint(ConstraintTemplate):
     x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
-    def __init__(self,r0,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+    def __init__(self,r0,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1,viz=False):
         super(PointToPoint, self).__init__(con_type,regularizationparameter)
         self.r0 = r0
         self.project = project
         self.uplift = uplift
         self.pos_only = pos_only
         self.debug = debug
+        self.viz = viz
         if con_type == 'high':
             if project is None:
                 raise ValueError("For high dimensional constraints a projection function is needed.")
@@ -181,6 +184,10 @@ class PointToPoint(ConstraintTemplate):
         nb = batch.max() + 1
         r = x[:, 0:ndim].view(nb, -1, ndim)
         z2 = z.view(nb,-1,1)
+
+        if self.viz:
+            r_np = r.detach().cpu().numpy()
+
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
         lam_x[:, 3:6] = lam_p2.view(-1,3)
         if self.pos_only:
@@ -191,6 +198,10 @@ class PointToPoint(ConstraintTemplate):
         if self.debug:
             x = self.project(y)
             r = x[:, 0:ndim].view(nb, -1, ndim)
+            if self.viz:
+                r_np_new = r.detach().cpu().numpy()
+                plot_water(ro_0=r_np[0, :, :3], rh1_0=r_np[0, :, 3:6], rh2_0=r_np[0, :, 6:], ro_1=r_np_new[0, :, :3], rh1_1=r_np_new[0, :, 3:6], rh2_1=r_np_new[0, :, 6:])
+
             lam_p2_after = self.constraint(r[:, :, 0:3], r[:, :, 3:6],z2)
             cnorm = torch.mean(torch.sum(lam_p2 ** 2, dim=-1))
             cnorm_after = torch.mean(torch.sum(lam_p2_after ** 2, dim=-1))
@@ -244,7 +255,7 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
     x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
-    def __init__(self,r1,r2,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+    def __init__(self,r1,r2,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1,viz=True):
         super(PointToSphereSphereIntersection, self).__init__(con_type,regularizationparameter)
         self.r1 = r1
         self.r2 = r2
@@ -252,6 +263,7 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         self.uplift = uplift
         self.pos_only = pos_only
         self.debug = debug
+        self.viz = viz
         if con_type == 'high':
             if project is None:
                 raise ValueError("For high dimensional constraints a projection function is needed.")
@@ -325,10 +337,12 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
         nb = batch.max() + 1
         r = x[:, 0:ndim].view(nb, -1, ndim)
         z2 = z.view(nb,-1)
-        # v = x[:, ndim:].view(nb, -1, ndim)
+        v = x[:, ndim:].view(nb, -1, ndim)
         if self.debug:
             assert not r.isnan().any()
-
+        if self.viz:
+            r_np = r.detach().cpu().numpy()
+            v_np = v.detach().cpu().numpy()
         lam_p3 = self.constraint(r[:,:,0:3],r[:,:,3:6],r[:,:,6:9],z2)
         lam_x[:,6:9] = lam_p3.view(-1,3)
         if self.pos_only:
@@ -345,6 +359,10 @@ class PointToSphereSphereIntersection(ConstraintTemplate):
             print(f"{self._get_name()} constraint c: {cnorm:2.8f} -> {cnorm_after:2.8f}")
             assert not cnorm.isnan().any()
             assert not cnorm_after.isnan().any()
+            if self.viz:
+                r_np_new = r.detach().cpu().numpy()
+                v_np_new = v.detach().cpu().numpy()
+                plot_water(r_np_new,v_np_new,r_np,v_np)
 
         y = y - lam_y
         return {'y':y,'batch':batch, 'z':z}

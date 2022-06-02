@@ -11,6 +11,7 @@ from e3nn.nn import Gate
 
 from src.EQ_operations import SelfInteraction, Convolution, tp_path_exists
 from src.utils import smooth_cutoff
+from src.vizualization import plot_water
 
 
 class neural_network_equivariant(torch.nn.Module):
@@ -121,6 +122,7 @@ class neural_network_equivariant(torch.nn.Module):
         return edge_features, edge_attrs
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst,tmp=None,tmp2=None) -> torch.Tensor:
+        x_org = x.clone()
         if self.automatic_neighbors:
             self.num_neighbors = edge_dst.shape[0]/x.shape[0]
 
@@ -139,16 +141,50 @@ class neural_network_equivariant(torch.nn.Module):
             y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
             y_old = tmp
             if self.con_fnc is not None and self.con_type == 'high':
+                # y_old2 = y.clone()
                 data = self.con_fnc({'y':y,'batch':batch,'z':node_attr})
                 y = data['y']
+                # self.get_water_viz(y,y_old2,batch)
+
             x = self.PU.project(y)
         if self.con_fnc is not None and self.con_type == 'low':
+            # x_old = x.clone()
             data = self.con_fnc({'x':x,'batch':batch,'z':node_attr})
             x = data['x']
+            # self.get_water_viz_low(x,x_old,x_org,batch)
         if self.con_fnc is not None and self.con_type == 'reg':
             data = self.con_fnc({'x':x,'batch':batch,'z':node_attr})
             reg = data['c']
         else:
             reg = 0
 
-        return x,reg
+        return x,reg#,x_old
+
+    def get_water_viz(self, y_new, y_old, batch):
+        x_new = self.PU.project(y_new)
+        ndim = x_new.shape[-1] // 2
+        nb = batch.max() + 1
+
+        r_new = x_new[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
+        v_new = x_new[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
+
+        x_old = self.PU.project(y_old)
+        r_old = x_old[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
+        v_old = x_old[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
+        plot_water(r_new,v_new,r_old,v_old)
+
+    def get_water_viz_low(self, x_new, x_old, x_org, batch):
+        ndim = x_new.shape[-1] // 2
+        nb = batch.max() + 1
+
+        r_new = x_new[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
+        v_new = x_new[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
+
+        r_old = x_old[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
+        v_old = x_old[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
+
+        r_org = x_org[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
+        v_org = x_org[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
+
+        plot_water(r_new,v_new,r_old,v_old,r_org,v_org)
+
