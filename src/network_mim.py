@@ -160,7 +160,7 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3):
+    def __init__(self, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog'):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
@@ -183,6 +183,9 @@ class neural_network_mimetic(nn.Module):
         self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
         self.con_fnc = con_fnc
         self.con_type = con_type
+        self.embed_node_attr = embed_node_attr
+        self.discritization = discretization
+        assert self.discritization in ['leapfrog','euler']
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -190,29 +193,46 @@ class neural_network_mimetic(nn.Module):
             self.PropagationBlocks.append(block)
         return
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst):
+    def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,ignore_con=False):
+        gamma = 1000
         if x.isnan().any():
             raise ValueError("NaN detected")
 
-        node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
+        if self.embed_node_attr:
+            node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
+        else:
+            node_attr_embedded = node_attr
         y = self.PU.uplift(x)
 
         y_old = y
         for i in range(self.nlayers):
             if x.isnan().any():
                 raise ValueError("NaN detected")
-            edge_vec = x[:,0:self.dim][edge_src] - x[:,0:self.dim][edge_dst]
-            edge_len = edge_vec.norm(dim=1)
-            w = smooth_cutoff(edge_len / self.max_radius) / edge_len
+            if wstatic is None:
+                edge_vec = x[:,0:self.dim][edge_src] - x[:,0:self.dim][edge_dst]
+                edge_len = edge_vec.norm(dim=1)
+                w = smooth_cutoff(edge_len / self.max_radius) / edge_len
+            else:
+                w = wstatic
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)
 
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
             tmp = y.clone()
 
-            y = 2*y - y_old - self.h[i]**2 * y_new
-            y_old = tmp
+            if self.con_type == 'stabhigh':
+                data = self.con_fnc({'y': y, 'batch': batch, 'z': node_attr})  # TODO should this use y_new or y?
+                lam_y = data['lam_y']
+            else:
+                lam_y = 0
+            if self.discritization == 'leapfrog':
+                y = 2*y - y_old - self.h[i]**2 * (y_new - gamma*lam_y)
+                y_old = tmp
+            elif self.discritization == 'euler':
+                y = y + self.h[i]**2 * (y_new - gamma*lam_y)
+            else:
+                raise NotImplementedError(f"Discretization method {self.discritization} not implemented.")
 
-            if self.con_fnc is not None and self.con_type == 'high':
+            if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
                 data = self.con_fnc({'y': y, 'batch': batch,'z':node_attr})
@@ -222,10 +242,10 @@ class neural_network_mimetic(nn.Module):
 
             x = self.PU.project(y)
 
-        if self.con_fnc is not None and self.con_type == 'low':
+        if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
             data = self.con_fnc({'x': x, 'batch': batch,'z':node_attr})
             x = data['x']
-        if self.con_fnc is not None and self.con_type == 'reg':
+        if self.con_fnc is not None and self.con_type == 'reg' and ignore_con is False:
             data = self.con_fnc({'x': x, 'batch': batch, 'z': node_attr})
             reg = data['c']
         else:

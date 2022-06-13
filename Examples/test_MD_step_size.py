@@ -11,7 +11,7 @@ from src.batch_jobs import job_planner, job_runner
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 100
+    args.n_train = 1000
     args.n_val = 1000
     args.batch_size = 5
     args.nskip = 999
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     args.debug = False
     args.viz = False
     args.lr = 1e-3
-    args.seed = [1235,1236]
+    args.seed = [1236]
     args.use_same_data = True
     args.epochs = 100
     args.network_type = ['eq','mim']  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.

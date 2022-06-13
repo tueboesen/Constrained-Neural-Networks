@@ -42,7 +42,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
 
     # load training data
     if dataloader_train is None:
-        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'])
+        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'],file_val=c['data_val'],model_specific=c['model_specific'])
     ds = dataloader_train.dataset
 
     if c['network_type'].lower() == 'eq':
@@ -51,7 +51,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in']*2
         PU = ProjectUplift(node_dim_in, cn['node_dim_latent'])
 
-    cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'])
+    cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'],model_specific=c['model_specific'])
 
     #PU, masses=ds.m, R=ds.Rin, V=ds.Vin, z=ds.z, rscale=ds.rscale, vscale=ds.vscale, energy_predictor=c['PE_predictor']
     con_fnc = load_constraints(c['con'], c['con_type'], project_fnc=PU.project, uplift_fnc=PU.uplift, debug=c['debug'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,pos_only=ds.pos_only,regularizationparameter=c['regularizationparameter'])
@@ -62,7 +62,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                     num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node)
     elif c['network_type'] == 'mim':
-        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"])
+        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'])
     else:
         raise NotImplementedError("Network type is not implemented")
     model.to(device)
@@ -83,13 +83,16 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     # print(f"{torch.cuda.max_memory_allocated() / 1024 / 1024:2.2f}MB")
     while epoch < c['epochs']:
         t1 = time.time()
-        loss_r_t, loss_v_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'])
+        loss_r_t, loss_v_t,drmsd_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
         t2 = time.time()
         if c['use_val']:
-            loss_r_v, loss_v_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'])
+            loss_r_v, loss_v_v, drmsd_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
         else:
-            loss_r_v, loss_v_v = torch.tensor(0.0),torch.tensor(0.0)
+            loss_r_v, loss_v_v, drmsd_v = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0)
         t3 = time.time()
+        if c['ignore_cons']:
+            _,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
+
 
         # Next save results
         loss_t = (loss_r_t + loss_v_t) / 2
@@ -110,7 +113,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                     lr = g['lr']
                 epochs_since_best = 0
 
-        LOG.info(f'{epoch:2d}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
+        LOG.info(f'{epoch:2d}  DRMSD(train){drmsd_t:.2e}  DRMSD(val){drmsd_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
 

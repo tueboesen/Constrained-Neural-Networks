@@ -1,7 +1,53 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib as mpl
 from mpl_toolkits import mplot3d
+import torch
+
+def plot_pendulum_snapshot(Rin,Rout,Vin,Vout,Rpred=None,Vpred=None,file=None):
+    n = Rin.shape[0]
+    fig, ax = plt.subplots(figsize=(15,15))
+    origo = torch.tensor([[0.0,0.0]])
+
+    Rin = torch.cat((origo,Rin),dim=0)
+    Rout = torch.cat((origo,Rout),dim=0)
+    Rpred = torch.cat((origo,Rpred),dim=0)
+
+    Rin = Rin.numpy()
+    Vin = Vin.numpy()
+    Rout = Rout.numpy()
+    Vout = Vout.numpy()
+
+    v_origo =np.asarray([Rin[1:,0], Rin[1:,1]])
+    plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color='r', scale=200,width=0.003)
+
+    v_origo =np.asarray([Rout[1:,0], Rout[1:,1]])
+    plt.quiver(*v_origo, Vout[:, 0], Vout[:, 1], color='b', scale=200,width=0.003)
+
+
+    l_in, = ax.plot(Rin[:,0], Rin[:,1],color='pink', alpha=0.7)
+    lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'ro',  alpha=0.7)
+
+    l_out, = ax.plot(Rout[:,0], Rout[:,1],color='lightblue',  alpha=0.7)
+    lm_out, = ax.plot(Rout[:,0], Rout[:,1], 'bo',  alpha=0.7)
+
+    l_p, = ax.plot(Rpred[:,0], Rpred[:,1], '--', color='lime', alpha=0.7)
+    lm_p, = ax.plot(Rpred[:,0], Rpred[:,1], 'go', alpha=0.7)
+
+    ax.set_xlim(-n,n)
+    ax.set_ylim(-n,n)
+    if file is None:
+        plt.show()
+        plt.pause(1)
+    else:
+        os.makedirs(os.path.dirname(file),exist_ok=True)
+        plt.savefig(file, bbox_inches="tight", pad_inches=0)
+    plt.close()
+    return
+
+
 
 def plot_water(r_new,v_new,r_old,v_old,r_org,v_org):
     mpl.use('TkAgg')

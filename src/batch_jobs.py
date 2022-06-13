@@ -61,6 +61,12 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,
     c['result_dir'] = f"{c['result_dir_base']}/{c['network_type']}_{c['con']}_{c['con_type']}_{c['regularizationparameter']:1.1e}_{repetition}/"
     legend = f"{network_type} {c['con']:} {c['con_type']:} {regularizationparameter:1.1e}"
     jobid = jobid + 1
+
+    if con == 'angles':
+        c['model_specific']['angles'] = True
+        c['network']['node_dim_in'] = 1
+        c['con'] = ''
+
     return c,jobid,legend
 
 
@@ -82,7 +88,7 @@ def job_planner(c):
         jobid = 0
         for network_type in c_base['network_type']:
             for con in c_base['con']:
-                if con == '':
+                if con == '' or con == 'angles':
                     con_type = 'low'
                     c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i,1)
                     cs.append(c_new)
@@ -127,6 +133,15 @@ def job_runner(cs,legends, results):
             dataloader_val = None
             dataloader_test = None
             dataloader_endstep = None
+        else:
+            if dataloader_train is not None:
+                if c['data_type'] == 'n-pendulum' and c['model_specific']['angles'] == True:
+                    dataloader_train.dataset.useprimary = False
+                    dataloader_val.dataset.useprimary = False
+                else:
+                    dataloader_train.dataset.useprimary = True
+                    dataloader_val.dataset.useprimary = True
+
         result,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
 
         results[c['jobid'],c['repetition'],0,:] = result['loss_r_t']

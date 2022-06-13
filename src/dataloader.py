@@ -1,4 +1,6 @@
 import inspect
+import math
+import time
 
 import numpy as np
 import torch
@@ -7,23 +9,149 @@ from torch.utils.data import DataLoader
 from torch_cluster import radius_graph
 
 from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset
+from src.npendulum import NPendulum, get_coordinates_from_angle
 
 
-def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
+def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False,file_val=None,model_specific=None):
     """
     Wrapper function that handles the different supported data_types.
     """
     if data_type == 'water':
         dataloader_train, dataloader_val, dataloader_test, dataloader_endstep =load_MD_data(file, data_type, device, nskip, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle, use_endstep=use_endstep)
     elif data_type == 'protein':
-        dataloader_train, dataloader_val, dataloader_test = load_protein_data(file, data_type, device, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle)
+        dataloader_train= load_protein_data(file, data_type, device, n_train, batch_size, shuffle=shuffle)
+        if use_val:
+            dataloader_val = load_protein_data(file_val, data_type, device, n_val, batch_size, shuffle=shuffle)
+        else:
+            dataloader_val = None
         dataloader_endstep = None
-    elif data_type == 'pendulum':
+        dataloader_test = None
+    elif data_type == 'double-pendulum':
         dataloader_train, dataloader_val, =load_pendulum_data(file, data_type, device, nskip, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle)
+        dataloader_test, dataloader_endstep = None, None
+    elif data_type == 'n-pendulum':
+        dataloader_train, dataloader_val, =load_npendulum_data(data_type, device, nskip, n_train, n_val, use_val, batch_size, shuffle=shuffle,n=model_specific['n'],dt=model_specific['dt'],M=model_specific['M'],L=model_specific['L'], use_angles=model_specific['angles'])
         dataloader_test, dataloader_endstep = None, None
     else:
         NotImplementedError("The data_type={:} has not been implemented in function {:}".format(data_type, inspect.currentframe().f_code.co_name))
     return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
+
+
+
+
+def load_npendulum_data(data_type,device,nskip,n_train,n_val,use_val,batch_size,n,dt, M, L, shuffle=True,n_extra=1000,use_angles=False):
+    assert len(L) == n
+    assert len(M) == n
+
+    L = torch.tensor(L)
+    M = torch.tensor(M)
+    assert (L == 1).all(), f"Current implementation only supports npendulums with Lengths=1, you selected {L}"
+    assert (M == 1).all(), f"Current implementation only supports npendulums with Mass=1, you selected {M}"
+
+    theta0 = 0.5*math.pi*torch.ones(n)
+    dtheta0 = 0.0*torch.ones(n)
+    nsteps = n_train + use_val *n_val+nskip + n_extra
+
+    Npend = NPendulum(n,dt)
+
+    t0 = time.time()
+    times, thetas, dthetas = Npend.simulate(nsteps,theta0,dtheta0)
+    t1 = time.time()
+    print(f"simulated {nsteps} steps for a {n}-pendulum in {t1-t0:2.2f}s")
+
+    # if use_angles:
+    Ra = (thetas.T)[:,:,None]
+    Va = (dthetas.T)[:,:,None]
+
+    Rscale = torch.sqrt(Ra.pow(2).mean())
+    Vscale = torch.sqrt(Va.pow(2).mean())
+    Ra /= Rscale
+    Va /= Vscale
+
+
+
+    # else:
+    x,y,vx,vy = get_coordinates_from_angle(thetas,dthetas)
+    x = x.T
+    y = y.T
+    vx = vx.T
+    vy = vy.T
+    R = torch.cat((x[:,1:,None],y[:,1:,None]),dim=2)
+    V = torch.cat((vx[:,1:,None],vy[:,1:,None]),dim=2)
+
+    Rin, Rout = convert_snapshots_to_future_state_dataset(nskip, R)
+    Vin, Vout = convert_snapshots_to_future_state_dataset(nskip, V)
+    Rina, Routa = convert_snapshots_to_future_state_dataset(nskip, Ra)
+    Vina, Vouta = convert_snapshots_to_future_state_dataset(nskip, Va)
+
+    ndata = Rout.shape[0]
+    print(f'Number of data: {ndata}')
+    assert n_train+n_val <= ndata, f"The number of datasamples: {ndata} is less than the number of training samples: {n_train} + the number of validation samples: {n_val}"
+
+    ndata_rand = 0 + np.arange(ndata)
+    if shuffle:
+        np.random.shuffle(ndata_rand)
+    train_idx = ndata_rand[:n_train]
+    val_idx = ndata_rand[n_train:n_train + n_val]
+
+    Rin_train = Rin[train_idx]
+    Rout_train = Rout[train_idx]
+    Vin_train = Vin[train_idx]
+    Vout_train = Vout[train_idx]
+
+    Rina_train = Rina[train_idx]
+    Routa_train = Routa[train_idx]
+    Vina_train = Vina[train_idx]
+    Vouta_train = Vouta[train_idx]
+
+    if use_val:
+        Rina_val = Rina[val_idx]
+        Routa_val = Routa[val_idx]
+        Vina_val = Vina[val_idx]
+        Vouta_val = Vouta[val_idx]
+        Rin_val = Rin[val_idx]
+        Rout_val = Rout[val_idx]
+        Vin_val = Vin[val_idx]
+        Vout_val = Vout[val_idx]
+
+    z = torch.arange(1,n+1)
+    # z = torch.ones(n) #Should I go for this or torch arange(1,n+1)?
+
+    z = z.to(device)
+    M = M.to(device)
+    Rin_train = Rin_train.to(device)
+    Rout_train = Rout_train.to(device)
+    Vin_train = Vin_train.to(device)
+    Vout_train = Vout_train.to(device)
+    Rina_train = Rina_train.to(device)
+    Routa_train = Routa_train.to(device)
+    Vina_train = Vina_train.to(device)
+    Vouta_train = Vouta_train.to(device)
+
+    Rin_val = Rin_val.to(device)
+    Rout_val = Rout_val.to(device)
+    Vin_val = Vin_val.to(device)
+    Vout_val = Vout_val.to(device)
+    Rina_val = Rina_val.to(device)
+    Routa_val = Routa_val.to(device)
+    Vina_val = Vina_val.to(device)
+    Vouta_val = Vouta_val.to(device)
+
+
+    dataset_train = DatasetFutureState(data_type,Rin_train, Rout_train, z, Vin_train, Vout_train, m=M,device=device,Rin2=Rina_train, Rout2=Routa_train, Vin2=Vina_train, Vout2=Vouta_train)
+    if use_angles:
+        dataset_train.useprimary = False
+    dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+    if use_val:
+        dataset_val = DatasetFutureState(data_type,Rin_val, Rout_val, z, Vin_val, Vout_val, m=M,device=device, Rin2=Rina_val, Rout2=Routa_val, Vin2=Vina_val, Vout2=Vouta_val)
+        if use_angles:
+            dataset_val.useprimary = False
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=False)
+
+    return dataloader_train, dataloader_val
+
+
+
 
 def load_pendulum_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True):
     M = torch.tensor([2.0, 0.5])
@@ -289,7 +417,7 @@ def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batc
 
     return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
 
-def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch_size, shuffle=False):
+def load_protein_data(file, data_type,device,n_train,batch_size, shuffle=False):
     """
     function for loading protein data
 
@@ -300,6 +428,8 @@ def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch
     rCa = data['rCa']
     rCb = data['rCb']
     rN = data['rN']
+    pssm = data['pssm']
+    entropy = data['entropy']
     log_units = data['log_units']
     ndata = len(seq)
     print('Number of datapoints={:}'.format(ndata))
@@ -309,28 +439,14 @@ def load_protein_data(file,data_type,device,n_train,n_val,use_val,use_test,batch
     if shuffle:
         np.random.shuffle(ndata_rand)
     train_idx = ndata_rand[:n_train]
-    val_idx = ndata_rand[n_train:n_train + n_val]
-    test_idx = ndata_rand[n_train + n_val:]
-
-
+    # val_idx = ndata_rand[n_train:n_train + n_val]
+    # test_idx = ndata_rand[n_train + n_val:]
 
     collator = GraphCollate()
-    dataset_train = Dataset_protein(data_type, seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],device,log_units)
+    dataset_train = Dataset_protein(data_type, seq[train_idx],rCa[train_idx],rCb[train_idx],rN[train_idx],pssm[train_idx],entropy[train_idx],device,log_units)
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True, drop_last=True, collate_fn=collator)
 
-    if use_val:
-        dataset_val = Dataset_protein(data_type, seq[val_idx], rCa[val_idx], rCb[val_idx], rN[val_idx], device,log_units)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=True, collate_fn=collator)
-    else:
-        dataloader_val = None
-
-    if use_test:
-        dataset_test = Dataset_protein(data_type, seq[test_idx], rCa[test_idx], rCb[test_idx], rN[test_idx], device=device)
-        dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False, collate_fn=collator)
-    else:
-        dataloader_test = None
-
-    return dataloader_train, dataloader_val, dataloader_test
+    return dataloader_train
 
 
 
@@ -340,7 +456,7 @@ class DatasetFutureState(data.Dataset):
     """
     A dataset type for future state predictions of molecular dynamics data
     """
-    def __init__(self, data_type, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1, pos_only=False):
+    def __init__(self, data_type, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1, pos_only=False,Rin2=None,Rout2=None,Vin2=None,Vout2=None):
         self.Rin = Rin
         self.Rout = Rout
         self.z = z
@@ -360,6 +476,13 @@ class DatasetFutureState(data.Dataset):
         self.particles_pr_node = Rin.shape[-1] // 3
         self.data_type = data_type
         self.pos_only = pos_only
+
+        self.Rin2 = Rin2
+        self.Rout2 = Rout2
+        self.Vin2 = Vin2
+        self.Vout2 = Vout2
+        self.useprimary = True
+
         if Fin is None or Fout is None:
             self.useF = False
         else:
@@ -376,11 +499,18 @@ class DatasetFutureState(data.Dataset):
 
     def __getitem__(self, index):
         device = self.device
-        Rin = self.Rin[index]
-        Rout = self.Rout[index]
         z = self.z[:,None]
-        Vin = self.Vin[index]
-        Vout = self.Vout[index]
+        if self.useprimary:
+            Rin = self.Rin[index]
+            Rout = self.Rout[index]
+            Vin = self.Vin[index]
+            Vout = self.Vout[index]
+        else:
+            Rin = self.Rin2[index]
+            Rout = self.Rout2[index]
+            Vin = self.Vin2[index]
+            Vout = self.Vout2[index]
+
         if self.m is not None:
             m = self.m[:,None]
         else:
@@ -443,7 +573,7 @@ class GraphCollate:
         nb = len(data)    # Number of batches
         nv = len(data[0]) # Number of variables in each batch
 
-        seqs, coords,coords_init,Ms = zip(*data)
+        seqs, coords,coords_init,Ms, pssms, entropy = zip(*data)
         batchs = [i+0*datai[0] for i,datai in enumerate(data)]
         batch = torch.cat(batchs)
         seq = torch.cat(seqs)
@@ -451,12 +581,14 @@ class GraphCollate:
         coord_init = torch.cat(coords_init,dim=0)
         edge_index = radius_graph(coord_init, 20.0, batch)
         edge_index_all = radius_graph(coord_init, 10000.0, batch,max_num_neighbors=99999)
+        pssm = torch.cat(pssms, dim=0)
+        entropy = torch.cat(entropy, dim=0)
         M = torch.cat(Ms)
         Msrc = M[edge_index_all[0]]
         Mdst = M[edge_index_all[1]]
         MM = Msrc * Mdst
         edge_index_all = [edge_index_all[0][MM], edge_index_all[1][MM]]
-        return seq,batch, coord, M, edge_index,edge_index_all
+        return seq,batch, coord, M, pssm, entropy, edge_index,edge_index_all
 
 
 def compute_all_connections(n,mask=None, include_self_connections=False, device='cpu'):
@@ -491,7 +623,7 @@ class Dataset_protein(data.Dataset):
     pos_only:       Whether we only store positions or also velocities (for proteins this should always be true)
     internal_log_units: The logarithmic unit type we wish to do the calculations in (this is the unit type the constraints for instance are given in)
     """
-    def __init__(self, data_type,seq, rCa,rCb,rN, device, log_units, pos_only=True,internal_log_units=-10):
+    def __init__(self, data_type,seq, rCa,rCb,rN, pssm, entropy, device, log_units, pos_only=True,internal_log_units=-10):
         self.log_units = log_units
         self.internal_log_units = internal_log_units
         self.scale = 10**(log_units-internal_log_units)
@@ -499,6 +631,8 @@ class Dataset_protein(data.Dataset):
         self.rCa = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCa]
         self.rCb = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rCb]
         self.rN = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype())*self.scale for tmp in rN]
+        self.pssm = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype()) for tmp in pssm]
+        self.entropy = [torch.from_numpy(tmp).to(device=device,dtype=torch.get_default_dtype()) for tmp in entropy]
         self.device = device
         self.rscale = 1 #The constraints are in Angstrom which is also what we have scaled to data to be in, so rscale should be unity.
         self.vscale = 1 #This is not used for proteins at all, since there are no velocity component
@@ -511,6 +645,8 @@ class Dataset_protein(data.Dataset):
         rCa = self.rCa[index] #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
         rCb = self.rCb[index] #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
         rN = self.rN[index] #This gives coordinates in Angstrom, with a typical amino acid binding distance of 3.8 A
+        pssm = self.pssm[index]
+        entropy = self.entropy[index]
         m1 = rCa[:,0] != 0.0
         m2 = rCb[:,0] != 0.0
         m3 = rN[:,0] != 0.0
@@ -521,7 +657,7 @@ class Dataset_protein(data.Dataset):
         rCa_init[:,0] = torch.arange(rCa.shape[0])
         coords_init = torch.cat([rCa_init,rCa_init,rCa_init],dim=-1)
 
-        return seq, coords,coords_init, M
+        return seq, coords,coords_init, M,pssm, entropy
 
     def __len__(self):
         return len(self.seq)

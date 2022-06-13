@@ -6,26 +6,30 @@ from e3nn import o3
 from torch_cluster import radius_graph
 
 from src.loss import loss_eq, loss_mim
+from src.npendulum import get_coordinates_from_angle
+from src.utils import Distogram
+from src.vizualization import plot_pendulum_snapshot
 
 
-def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False):
+def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False):
     """
     A wrapper function for the different data types currently supported for training/inference
     """
     if data_type == 'water':
         loss_r, loss_v = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        drmsd = 0
     elif data_type == 'protein':
-        #TODO fix this so it also returns the correct loss types0
-        loss, lossD,_ = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
-    elif data_type == 'pendulum':
-        #TODO fix this so it also returns the correct loss types0
-        loss, lossD,_ = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
+        loss_v = 0
+    elif data_type == 'pendulum' or data_type == 'n-pendulum' :
+        loss_r, loss_v = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons)
+        drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v
+    return loss_r, loss_v, drmsd
 
 
-def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True):
+def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False):
     """
     A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -40,9 +44,6 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     max_radius:     The maximum radius used when building the edges in the graph between the particles
     debug:          Checks for NaNs and inf in the network while running.
     """
-    import tracemalloc
-    tracemalloc.start()
-
     ds = dataloader.dataset
     rscale = ds.rscale
     vscale = ds.vscale
@@ -70,11 +71,35 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         x = torch.cat([Rin_vec,Vin_vec],dim=-1)
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
-        edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
-        edge_src = edge_index[0]
-        edge_dst = edge_index[1]
+        if ds.data_type == 'n-pendulum':
+            n=5
+            nb = (torch.max(batch)+1).item()
+            a = torch.tensor([0])
+            b = torch.arange(1,n-1).repeat_interleave(2)
+            c = torch.tensor([n-1])
+            I =torch.cat((a,b,c))
 
-        output, reg = model(x, batch, z_vec, edge_src, edge_dst)
+            bb1 = torch.arange(1,n)
+            bb2 = torch.arange(n-1)
+            J = torch.stack((bb1,bb2),dim=1).view(-1)
+
+            shifts = torch.arange(nb).repeat_interleave(I.shape[0])*n
+
+            II = I.repeat(nb)
+            JJ = J.repeat(nb)
+
+            edge_src = (JJ+shifts).to(device=Rin.device)
+            edge_dst = (II+shifts).to(device=Rin.device)
+
+            wstatic = torch.ones_like(edge_dst)
+
+        else:
+            edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
+            edge_src = edge_index[0]
+            edge_dst = edge_index[1]
+            wstatic = None
+
+        output, reg = model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,ignore_con=ignore_con)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
@@ -107,8 +132,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
         # E_pred, Ekin_pred, Epot_pred, P_pred = energy_momentum(Vpred.view(Vout.shape) * vscale,Vpred.view(Vout.shape) * vscale, m) #TODO THIS DOESNT WORK JUST YET
 
-        MAEr = torch.mean(torch.abs(Rpred - Rout_vec)*rscale).detach()
-        MAEv = torch.mean(torch.abs(Vpred - Vout_vec)*vscale).detach()
+        # MAEr = torch.mean(torch.abs(Rpred - Rout_vec)*rscale).detach()
+        # MAEv = torch.mean(torch.abs(Vpred - Vout_vec)*vscale).detach()
 
         if check_equivariance:
             rot = o3.rand_matrix().to(device=x.device)
@@ -143,6 +168,39 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         aloss_v += loss_v.item()
         # aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
+
+        if ds.data_type == 'n-pendulum' and viz == True and i == 0:
+            if ndim == 1:
+                x,y,vx,vy = get_coordinates_from_angle(Rin.detach().cpu()[:,:,0].T, Vin.detach().cpu()[:,:,0].T)
+                x = x.T
+                y = y.T
+                vx = vx.T
+                vy = vy.T
+                Rin_xy = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2)
+                Vin_xy = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2)
+
+                x,y,vx,vy = get_coordinates_from_angle(Rout.detach().cpu()[:,:,0].T, Vout.detach().cpu()[:,:,0].T)
+                x = x.T
+                y = y.T
+                vx = vx.T
+                vy = vy.T
+                Rout_xy = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2)
+                Vout_xy = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2)
+
+                x,y,vx,vy = get_coordinates_from_angle(Rpred.detach().cpu().view(Rin.shape)[:,:,0].T, Vpred.detach().cpu().view(Rin.shape)[:,:,0].T)
+                x = x.T
+                y = y.T
+                vx = vx.T
+                vy = vy.T
+                Rpred_xy = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2)
+                Vpred_xy = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2)
+            else:
+                Rin_xy,Vin_xy,Rout_xy,Vout_xy,Rpred_xy,Vpred_xy = Rin.detach().cpu(), Vin.detach().cpu(),Rout.detach().cpu(),Vout.detach().cpu(),Rpred.detach().cpu().view(Rin.shape),Vpred.detach().cpu().view(Rin.shape)
+
+            for j in range(min(5,batch_size)):
+                filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_{'' if ignore_con==False else 'ignore_con'}.png"
+                plot_pendulum_snapshot(Rin_xy[j],Rout_xy[j],Vin_xy[j],Vout_xy[j],Rpred_xy[j],Vpred_xy[j],file=filename)
+
         if (i + 1) * batch_size >= max_samples:
             break
         # if i == 0:
@@ -229,14 +287,18 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
     loss_type:      a string that determines which loss to use. ('mim','eq')
     batch_size:     the batch_size to use during the run. NOTE THAT THE CURRENT CODE ONLY SUPPORTS BATCH_SIZE OF 1 FOR PROTEINS.
     """
-    aloss = 0.0
     alossD = 0.0
+    aDRMSD = 0.0
+    ds = dataloader.dataset
+    rscale = ds.rscale
+    # vscale = ds.vscale
+
     torch.set_grad_enabled(train)
     if train:
         model.train()
     else:
         model.eval()
-    for i, (seq,batch, coords, M, edge_index,edge_index_all) in enumerate(dataloader):
+    for i, (seq,batch, coords, M, pssm, entropy, edge_index,edge_index_all) in enumerate(dataloader):
         if torch.sum(M) < 5 or len(edge_index_all[0]) == 0:
             continue # We skip proteins where there are 5 or less known amino acids in, and where there are no edge connections, this should never really be a problem but in unsanitized datasets it might be a problem
         nb = len(torch.unique(batch))
@@ -253,18 +315,15 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
         coords_init[:,3:] += 0.5
         coords_init[:,6:] += 0.5
         coords_init = torch.cumsum(coords_init,dim=0)
+        seq1hot = F.one_hot(seq,num_classes=20)
+        node_attr = torch.cat([seq1hot,pssm,entropy[:,None]],dim=1)
 
         coords_pred, reg = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
 
-        loss, loss_ref, loss_rel = loss_eq(coords_pred, coords, coords*0) #Note that we don't use the inital guess here, but rather 0.
+        # loss, loss_ref, loss_rel = loss_eq(coords_pred, coords, coords*0) #Note that we don't use the inital guess here, but rather 0.
         lossD, lossD_ref, lossD_rel = loss_mim(coords_pred, coords, coords*0, edge_src_all, edge_dst_all) #Note that we don't use the inital guess here, but rather 0.
 
-        if loss_type.lower() == 'eq':
-            loss = loss_rel + reg
-        elif loss_type.lower() == 'mim':
-            loss = lossD_rel + reg
-        else:
-            raise NotImplementedError("The loss_fnc is not implemented.")
+        loss = lossD_rel + reg
         if train:
             loss.backward()
             optimizer.step()
@@ -280,15 +339,39 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
                 assert not torch.isnan(grad_1d).any()
                 assert not torch.isinf(grad_1d).any()
 
-        aloss += loss_rel.detach()
-        alossD += lossD_rel.detach()
+        coords_pred_vec = coords_pred.reshape(-1,3,3).detach()*rscale #[0,0,:] is Ca, [0,1,:] is Cb,
+        coords_vec = coords.reshape(-1,3,3).detach()*rscale
+
+        D1_pred = Distogram(coords_pred_vec[:,0,:])
+        D1_pred = torch.sqrt(D1_pred)
+        D1 = Distogram(coords_vec[:,0,:])
+        D1 = torch.sqrt(D1)
+
+        D2_pred = Distogram(coords_pred_vec[:,1,:])
+        D2_pred = torch.sqrt(D2_pred)
+        D2 = Distogram(coords_vec[:,1,:])
+        D2 = torch.sqrt(D2)
+
+        D3_pred = Distogram(coords_pred_vec[:,2,:])
+        D3_pred = torch.sqrt(D3_pred)
+        D3 = Distogram(coords_vec[:,2,:])
+        D3 = torch.sqrt(D3)
+
+        Mn = M*1.0
+        MM = Mn[:,None]@Mn[None,:]
+        DRMSD1 = torch.sum(torch.abs(D1-D1_pred)*MM)/torch.sum(MM).item()
+        DRMSD2 = torch.sum(torch.abs(D2-D2_pred)*MM)/torch.sum(MM).item()
+        DRMSD3 = torch.sum(torch.abs(D3-D3_pred)*MM)/torch.sum(MM).item()
+        DRMSD = (DRMSD1 + DRMSD2 + DRMSD3)/3
+        aDRMSD += DRMSD.item()
+        alossD += lossD_rel.item()
 
         if (i + 1) * batch_size >= max_samples:
             break
 
-    aloss /= (i + 1)
     alossD /= (i + 1)
-    return aloss, alossD
+    aDRMSD /= (i + 1)
+    return alossD, aDRMSD
 
 
 
