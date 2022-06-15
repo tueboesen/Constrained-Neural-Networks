@@ -252,4 +252,10 @@ class neural_network_mimetic(nn.Module):
             reg = 0
         if x.isnan().any():
             raise ValueError("NaN detected")
-        return x, reg
+
+        if self.con_fnc is not None:
+            cv = self.con_fnc[0].compute_constraint_violation({'x': x, 'batch': batch, 'z': node_attr})
+        else:
+            cv = -1
+
+        return x, reg, cv

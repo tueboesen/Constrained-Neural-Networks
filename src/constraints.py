@@ -132,6 +132,10 @@ class ConstraintTemplate(nn.Module):
         raise NotImplementedError(
             "Regularization constraints have not been implemented for {:}".format(self._get_name()))
 
+    def compute_constraint_violation(self, data):
+        raise NotImplementedError(
+            "constraints violations have not been implemented for {:}".format(self._get_name()))
+
     def forward(self, data):
         if self.con_type == 'high':
             data = self.constrain_high_dimension(data)
@@ -253,6 +257,8 @@ class PointToPoint(ConstraintTemplate):
         lam_p2 = self.constraint(r[:, :, 0:3], r[:, :, 3:6], z2)
         c_new = torch.sum(lam_p2 ** 2)*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
+
+
 
 class PointToSphereSphereIntersection(ConstraintTemplate):
     """
@@ -555,7 +561,19 @@ class PointToNPoint(ConstraintTemplate):
         c_new = torch.sum(alam_pn)*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
 
-
+    def compute_constraint_violation(self, data):
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        ndim = x.shape[-1]
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        dx = torch.zeros_like(x)
+        lam_pn = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+        dx[::self.n, 0:2] = lam_pn.view(-1, 2)
+        for i in range(1,self.n):
+            lam_pn = self.constraint(r[:, i-1, :2] - lam_pn, r[:, i, :2], self.r[i])
+            dx[i::self.n, 0:2] = lam_pn.view(-1,2)
+        return torch.sum(torch.abs(dx))
 
 
 class PointToPointToPoint(ConstraintTemplate):

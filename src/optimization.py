@@ -22,11 +22,11 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons)
+        loss_r, loss_v, cv = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v, drmsd
+    return loss_r, loss_v, drmsd, cv
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False):
@@ -49,6 +49,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     vscale = ds.vscale
     aloss_r = 0.0
     aloss_v = 0.0
+    acv = 0.0
     aMAEr = 0.0
     aMAEv = 0.0
     torch.set_grad_enabled(train)
@@ -99,7 +100,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             edge_dst = edge_index[1]
             wstatic = None
 
-        output, reg = model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,ignore_con=ignore_con)
+        output, reg, cv = model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,ignore_con=ignore_con)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
@@ -166,6 +167,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
         aloss_r += loss_r.item()
         aloss_v += loss_v.item()
+        acv += cv.item()
         # aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
 
@@ -225,10 +227,11 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
     aloss_r /= (i + 1)
     aloss_v /= (i + 1)
+    acv /= (i + 1)
     # aMAEr /= (i + 1)
     # aMAEv /= (i + 1)
 
-    return aloss_r, aloss_v#, aMAEr, aMAEv
+    return aloss_r, aloss_v, acv#, aMAEr, aMAEv
 #
 # def best_coord_init(coords,scale=3.8,plot_coords=False):
 #     ss = 0.1
