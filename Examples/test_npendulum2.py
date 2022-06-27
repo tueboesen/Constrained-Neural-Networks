@@ -9,7 +9,7 @@ if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 100
+    args.n_train = 1000
     args.n_val = 1000
     args.batch_size = 10
     args.nskip = 100

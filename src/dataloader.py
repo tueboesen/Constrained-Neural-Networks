@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from torch_cluster import radius_graph
 
 from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset
-from src.npendulum import NPendulum, get_coordinates_from_angle
+from src.npendulum import NPendulum, get_coordinates_from_angle, animate_pendulum
 
 
 def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False,file_val=None,model_specific=None):
@@ -60,18 +60,22 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,use_val,batch_size,
     print(f"simulated {nsteps} steps for a {n}-pendulum in {t1-t0:2.2f}s")
 
     # if use_angles:
-    Ra = (thetas.T)[:,:,None]
-    Va = (dthetas.T)[:,:,None]
+    Ra = (thetas.clone().T)[:,:,None]
+    Va = (dthetas.clone().T)[:,:,None]
 
-    Rscale = torch.sqrt(Ra.pow(2).mean())
-    Vscale = torch.sqrt(Va.pow(2).mean())
-    Ra /= Rscale
-    Va /= Vscale
+    # Rscale = torch.sqrt(Ra.pow(2).mean())
+    # Vscale = torch.sqrt(Va.pow(2).mean())
+    # Ra /= Rscale
+    # Va /= Vscale
 
 
 
     # else:
     x,y,vx,vy = get_coordinates_from_angle(thetas,dthetas)
+
+    # animate_pendulum(x.numpy(), y.numpy(),vx.numpy(),vy.numpy())
+
+
     x = x.T
     y = y.T
     vx = vx.T

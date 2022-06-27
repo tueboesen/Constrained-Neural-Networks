@@ -99,7 +99,7 @@ def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.564097647
     V *= Energy_conversion
     return V
 
-def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,loss_r_v,loss_v_v,csv_file):
+def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v,cv_max_v,MAEr_t,MAEr_v,csv_file,cv_t,cv_v):
     """
     Updates the results and saves it to a csv file.
     """
@@ -108,7 +108,14 @@ def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,loss_r_v,loss
         'loss_r_t': [loss_r_t],
         'loss_v_t': [loss_v_t],
         'loss_r_v': [loss_r_v],
-        'loss_v_v': [loss_v_v]}, dtype=np.float32)
+        'loss_v_v': [loss_v_v],
+        'cv_t': [cv_t],
+        'cv_v': [cv_v],
+        'cv_max_t': [cv_max_t],
+        'cv_max_v': [cv_max_v],
+        'MAE_r_t': [MAEr_t],
+        'MAE_r_v': [MAEr_v],
+    }, dtype=np.float32)
     result = result.astype({'epoch': np.int64})
     if epoch == 0:
         results = result
@@ -202,3 +209,12 @@ def run_model_MD_propagation_simulation(model, dataloader, max_radius=15,log=Non
             plt.clf()
 
     return
+
+
+def define_data_keys():
+    base_keys = ['loss_r','loss_v','cv','cv_max','MAE_r','MAE_v']
+    keys_r = [f"{key}_r" for key in base_keys]
+    keys_v = [f"{key}_v" for key in base_keys]
+    keys = keys_r + keys_v
+    return keys
+

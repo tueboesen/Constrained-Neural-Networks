@@ -49,9 +49,26 @@ def load_constraints(con,con_type,project_fnc=None,uplift_fnc=None,con_variables
         L1 = con_variables['L1']
         L2 = con_variables['L2']
         con_fnc = torch.nn.Sequential(PointToPointToPoint(L1,L2,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
-    elif con == 'n-pendulum':
+    elif con == 'n-pendulum-seq':
         L = con_variables['L']
-        con_fnc = torch.nn.Sequential(PointToNPoint(L,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
+        con_fnc = torch.nn.Sequential(SequentialPendul(L,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
+    elif con == 'n-pendulum-seq-start':
+        L = con_variables['L']
+        con_fnc = torch.nn.Sequential(SequentialPendul(L,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
+    elif con == 'n-pendulum':
+        dimensions = 2
+        if con_type == 'stabhigh':
+            niter = 1
+        else:
+            niter = 2000
+        converged_acc = 1e-5
+        L = torch.tensor(con_variables['L'][0])
+        con_fnc = torch.nn.Sequential(PointChainPendulum2(L,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter, niter=niter,dimensions=dimensions, converged_acc=converged_acc))
+    # elif con == 'n-pendulum':
+    #     L = con_variables['L']
+    #     con_fnc = torch.nn.Sequential(PointToNPoint(L,con_type,project_fnc,uplift_fnc, pos_only=pos_only,debug=debug,regularizationparameter=regularizationparameter))
+
+
     elif con == '':
         con_fnc = None
     else:
@@ -88,11 +105,10 @@ def constraint_hyperparameters(con,con_type,data_type,model_specific):
     elif con == 'pendulum':
         cv['L1'] = 3.0
         cv['L2'] = 2.0
-    elif con == 'n-pendulum':
+    elif con == 'n-pendulum' or con == 'n-pendulum-seq' or con == 'n-pendulum-seq-start':
         cv['L'] = model_specific['L']
     else:
         NotImplementedError("The combination of constraints={:} and data_type={:} has not been implemented in function {:}".format(con, data_type, inspect.currentframe().f_code.co_name))
-
     return cv
 
 
@@ -573,7 +589,187 @@ class PointToNPoint(ConstraintTemplate):
         for i in range(1,self.n):
             lam_pn = self.constraint(r[:, i-1, :2] - lam_pn, r[:, i, :2], self.r[i])
             dx[i::self.n, 0:2] = lam_pn.view(-1,2)
-        return torch.sum(torch.abs(dx))
+        return torch.sum(torch.norm(dx[:,:2],dim=1))
+
+class SequentialPendul_start(ConstraintTemplate):
+    """
+    """
+    def __init__(self,r,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+        super(SequentialPendul_start, self).__init__(con_type,regularizationparameter)
+        self.r = r
+        self.n = len(r)
+        self.project = project
+        self.uplift = uplift
+        self.pos_only = pos_only
+        self.debug = debug
+        if con_type == 'high':
+            if project is None:
+                raise ValueError("For high dimensional constraints a projection function is needed.")
+            if uplift is None:
+                raise ValueError("For high dimensional constraints an uplifting function is needed.")
+        return
+
+    def constraint(self,p1,p2,r0):
+        d = p2 - p1
+        lam = d * (1 - (r0 / d.norm(dim=-1).unsqueeze(-1)))
+        return lam
+
+    def constrain_high_dimension(self,data):
+        batch = data['batch']
+        z = data['z']
+        y = data['y']
+        x = self.project(y)
+        lam_x = torch.zeros_like(x)
+        nb = batch.max() + 1
+        r = x[:, 0:2].view(nb, -1, 2)
+        lam_r = torch.zeros_like(r)
+        lam_r[:, 0, :] = self.constraint(0*r[:, 0], r[:, 0], self.r[0])
+        for i in range(1,self.n):
+            lam_r[:,i,:] = self.constraint(r[:, i-1] - lam_r[:,i-1], r[:, i], self.r[i])
+        cv = torch.mean(torch.norm(lam_r, dim=-1))
+        lam_x[:,:2] = lam_r.view(-1,2)
+        lam_y = self.uplift(lam_x)
+        y = y - lam_y
+        if self.debug:
+            x = self.project(y)
+            r = x[:, 0:2].view(nb, -1, 2)
+            dr = torch.zeros_like(r)
+            dr[:, 0] = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+            for i in range(1, self.n):
+                dr[:, i] = self.constraint(r[:, i - 1, :2], r[:, i, :2], self.r[i])
+            cv_after = torch.mean(torch.norm(dr, dim=-1))
+            print(f"{self._get_name()} constraint c: {cv:2.6f} -> {cv_after:2.6f}")
+        return {'y': y, 'batch': batch, 'z': z}
+
+    def constrain_low_dimension(self, data):
+        batch = data['batch']
+        x = data['x']
+        z = data['z']
+        lam_x = torch.zeros_like(x)
+        nb = batch.max() + 1
+        r = x[:, 0:2].view(nb, -1, 2)
+        lam_r = torch.zeros_like(r)
+        lam_r[:, 0, :] = self.constraint(0*r[:, 0], r[:, 0], self.r[0])
+        for i in range(1,self.n):
+            lam_r[:,i,:] = self.constraint(r[:, i-1] - lam_r[:,i-1], r[:, i], self.r[i])
+        cv = torch.mean(torch.norm(lam_r, dim=-1))
+        lam_x[:, :2] = lam_r.view(-1, 2)
+        x = x - lam_x
+        if self.debug:
+            r = x[:, 0:2].view(nb, -1, 2)
+            dr = torch.zeros_like(r)
+            dr[:, 0] = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+            for i in range(1, self.n):
+                dr[:, i] = self.constraint(r[:, i - 1, :2], r[:, i, :2], self.r[i])
+            cv_after = torch.mean(torch.norm(dr, dim=-1))
+            print(f"{self._get_name()} constraint c: {cv:2.6f} -> {cv_after:2.6f}")
+        return {'x': x, 'batch': batch,'z':z}
+
+    def compute_constraint_violation(self, data):
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        r = x[:, 0:2].view(nb, -1, 2)
+        dr = torch.zeros_like(r)
+        dr[:,0] = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+        for i in range(1,self.n):
+            dr[:,i] = self.constraint(r[:, i-1, :2], r[:, i, :2], self.r[i])
+        return torch.mean(torch.norm(dr,dim=-1))
+
+
+class SequentialPendul(ConstraintTemplate):
+    """
+    """
+    def __init__(self,r,con_type,project=None,uplift=None,pos_only=False,debug=False,regularizationparameter=1):
+        super(SequentialPendul, self).__init__(con_type,regularizationparameter)
+        self.r = r
+        self.n = len(r)
+        self.project = project
+        self.uplift = uplift
+        self.pos_only = pos_only
+        self.debug = debug
+        if con_type == 'high':
+            if project is None:
+                raise ValueError("For high dimensional constraints a projection function is needed.")
+            if uplift is None:
+                raise ValueError("For high dimensional constraints an uplifting function is needed.")
+        return
+
+    def constraint(self,p1,p2,r0):
+        d = p2 - p1
+        lam = d * (1 - (r0 / d.norm(dim=-1).unsqueeze(-1)))
+        return lam
+
+    def constrain_high_dimension(self,data):
+        batch = data['batch']
+        z = data['z']
+        y = data['y']
+        x = self.project(y)
+        lam_x = torch.zeros_like(x)
+        nb = batch.max() + 1
+        r = x[:, 0:2].view(nb, -1, 2)
+        lam_r = torch.zeros_like(r)
+        j = torch.randint(0,self.n,(1,))
+        for i in range(j+1,self.n):
+            lam_r[:,i,:] = self.constraint(r[:, i-1] - lam_r[:,i-1], r[:, i], self.r[i])
+        for i in range(j-1,-1,-1):
+            lam_r[:,i] = - self.constraint(r[:, i] , r[:, i+1] - lam_r[:,i+1], self.r[i])
+        dr = (r[:,0] - lam_r[:,0]) * (1 - self.r[0] / (r[:,0] - lam_r[:,0]).norm(dim=-1).unsqueeze(-1))
+        lam_r += dr[:,None,:]
+        cv = torch.mean(torch.norm(lam_r, dim=-1))
+        lam_x[:,:2] = lam_r.view(-1,2)
+        lam_y = self.uplift(lam_x)
+        y = y - lam_y
+        if self.debug:
+            x = self.project(y)
+            r = x[:, 0:2].view(nb, -1, 2)
+            dr = torch.zeros_like(r)
+            dr[:, 0] = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+            for i in range(1, self.n):
+                dr[:, i] = self.constraint(r[:, i - 1, :2], r[:, i, :2], self.r[i])
+            cv_after = torch.mean(torch.norm(dr, dim=-1))
+            print(f"{self._get_name()} constraint c: {cv:2.6f} -> {cv_after:2.6f}")
+        return {'y': y, 'batch': batch, 'z': z}
+
+    def constrain_low_dimension(self, data):
+        batch = data['batch']
+        x = data['x']
+        z = data['z']
+        lam_x = torch.zeros_like(x)
+        nb = batch.max() + 1
+        r = x[:, 0:2].view(nb, -1, 2)
+        lam_r = torch.zeros_like(r)
+        j = torch.randint(0, self.n, (1,))
+        for i in range(j + 1, self.n):
+            lam_r[:, i, :] = self.constraint(r[:, i - 1] - lam_r[:, i - 1], r[:, i], self.r[i])
+        for i in range(j - 1, -1, -1):
+            lam_r[:, i] = - self.constraint(r[:, i], r[:, i + 1] - lam_r[:, i + 1], self.r[i])
+        dr = (r[:, 0] - lam_r[:, 0]) * (1 - self.r[0] / (r[:, 0] - lam_r[:, 0]).norm(dim=-1).unsqueeze(-1))
+        lam_r += dr[:, None, :]
+        cv = torch.mean(torch.norm(lam_r, dim=-1))
+        lam_x[:, :2] = lam_r.view(-1, 2)
+        x = x - lam_x
+        if self.debug:
+            r = x[:, 0:2].view(nb, -1, 2)
+            dr = torch.zeros_like(r)
+            dr[:, 0] = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+            for i in range(1, self.n):
+                dr[:, i] = self.constraint(r[:, i - 1, :2], r[:, i, :2], self.r[i])
+            cv_after = torch.mean(torch.norm(dr, dim=-1))
+            print(f"{self._get_name()} constraint c: {cv:2.6f} -> {cv_after:2.6f}")
+        return {'x': x, 'batch': batch,'z':z}
+
+    def compute_constraint_violation(self, data):
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        r = x[:, 0:2].view(nb, -1, 2)
+        dr = torch.zeros_like(r)
+        dr[:,0] = self.constraint(0 * r[:, 0, :2], r[:, 0, :2], self.r[0])
+        for i in range(1,self.n):
+            dr[:,i] = self.constraint(r[:, i-1, :2], r[:, i, :2], self.r[i])
+        return torch.mean(torch.norm(dr,dim=-1))
+
 
 
 class PointToPointToPoint(ConstraintTemplate):
@@ -671,6 +867,442 @@ TODO write description
         c_new = (torch.sum(lam_p1 ** 2)+torch.sum(lam_p2 ** 2))*self.regularizationparameter
         return {'x': x, 'z': z, 'c': c + c_new}
 
+class PointChainPendulum(ConstraintTemplate):
+    """
+    This is a PointChain constraint, which ensures that neighbouring points all have a fixed distance, d0, between them.
+
+    d0 is the distances the points get constrained to, it can either be a vector or a scalar (vectors are used when different distances are needed for different types of particles)
+    constrain_type can either be 'high', 'low', or 'reg'
+    project and uplift are functions that performs a projection and uplifting operations, they are only needed for high dimensional constraining, and can otherwise be omitted.
+    pos_only can be used if the data only contains positions rather than positions and velocities.
+
+    niter and converged_acc are used to determine how many iterations are used to try to enforce the constraint, n_iter is the maxmimum number of iterations to use, while converged_acc is the accuracy at which it will stop iterating.
+
+    y is the high dimensional variable, ordered as [nparticles,latent_dim]
+    x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
+
+    """
+    def __init__(self,d0,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9,regularizationparameter=1,dimensions=3):
+        super(PointChainPendulum, self).__init__(con_type,regularizationparameter)
+        self.d0 = d0
+        self.project = project
+        self.uplift = uplift
+        self.pos_only = pos_only
+        self.debug = debug
+        self.niter = niter
+        self.converged_acc = converged_acc
+        self.dimensions = dimensions
+        if con_type == 'high':
+            if project is None:
+                raise ValueError("For high dimensional constraints a projection function is needed.")
+            if uplift is None:
+                raise ValueError("For high dimensional constraints an uplifting function is needed.")
+        return
+
+    def diff(self,x):
+        return x[:,1:] - x[:,:-1]
+
+    def diffT(self,dx):
+        x = dx[:,:-1] - dx[:,1:]
+        x0 = -dx[:,:1]
+        x1 = dx[:,-1:]
+        X = torch.cat([x0,x,x1],dim=1)
+        return X
+
+    def delta_r(self,r):
+        dr_0 = r[:,0]
+        dr_i = r[:,1:] - r[:,:-1]
+        dr = torch.cat((dr_0[:,None],dr_i),dim=1)
+        return dr
+
+
+    def constraint_linear(self,r): #[nb,npendulums,2]
+        dr = self.delta_r(r)
+        drnorm = torch.norm(dr, dim=-1)
+        c = drnorm - self.d0
+        return c
+
+
+    def constraint(self,x):
+        d = self.d0
+        e = torch.ones((self.dimensions,1),device=x.device)
+        dx = self.diff(x)
+        c = (dx**2)@e - d**2
+        return c
+
+    def dConstraintT2(self,c, X):
+         dX = self.diff(X)
+         e = torch.ones(1, self.dimensions, device=X.device)
+         C = (c @ e) * dX
+         C2 = self.diffT(C)
+         return 2 * C2
+
+    def constrain_high_dimension(self, data):
+        """
+        """
+        y = data['y']
+        batch = data['batch']
+        z = data['z']
+        new_y = True
+        for j in range(self.niter):
+            if new_y:
+                x = self.project(y)
+                if self.pos_only:
+                    ndim = x.shape[-1]
+                else:
+                    ndim = x.shape[-1] // 2
+                nb = batch.max() + 1
+                r = x[:, 0:ndim].view(nb, -1, ndim)
+                c_chain = self.constraint(r)
+                lam_r = self.dConstraintT2(c_chain, r)
+                c_origo = torch.norm(r[:,0,:],dim=1) - self.d0
+                lam_r_origo = r[:,0,:] * (1 - self.d0 / torch.norm(r[:,0,:],dim=1))[:,None]
+                c = torch.cat((c_origo[:,None,None],c_chain),dim=1)
+                lam_r[:,0,:] = lam_r[:,0,:] + lam_r_origo
+                lam_x = torch.zeros_like(x)
+                lam_x[:,:ndim] = lam_r.view(-1, ndim)
+                lam_y = self.uplift(lam_x)
+
+                cnorm = torch.sum(c**2)
+                if cnorm < self.converged_acc:
+                    break
+                # with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 / lam_y.norm()
+            lsiter = 0
+            while True:
+                ytry = y - alpha * lam_y
+                x = self.project(ytry)
+                r = x[:, 0:ndim].view(nb, -1, ndim)
+                c_chain_try = self.constraint(r)
+                c_origo_try = torch.norm(r[:, 0, :], dim=1) - self.d0
+                c_try = torch.cat((c_origo_try[:, None, None], c_chain_try), dim=1)
+                ctry_norm = torch.sum(c_try**2)
+                if ctry_norm < cnorm:
+                    break
+                alpha = alpha / 2
+                lsiter = lsiter + 1
+                if lsiter > 10:
+                    break
+            if lsiter == 0 and ctry_norm > self.converged_acc: #TODO Should this really be before the step? or should it be after?
+                alpha = alpha * 1.5
+            if ctry_norm < cnorm:
+                y = y - alpha * lam_y
+                new_y = True
+            else:
+                new_y = False
+            if self.debug:
+                print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.2e} -> {ctry_norm.detach().cpu():2.2e}   ")
+            if ctry_norm < self.converged_acc:
+                break
+        return {'y':y,'batch':batch, 'z': z}
+
+    def constrain_low_dimension(self, data):
+        """
+        """
+        x = data['x']
+        batch = data['batch']
+        z = data['z']
+        new_x = True
+        for j in range(self.niter):
+            if new_x:
+                if self.pos_only:
+                    ndim = x.shape[-1]
+                else:
+                    ndim = x.shape[-1] // 2
+                nb = batch.max() + 1
+                r = x[:, 0:ndim].view(nb, -1, ndim)
+                c_chain = self.constraint(r)
+                lam_r = self.dConstraintT2(c_chain, r)
+                c_origo = torch.norm(r[:, 0, :], dim=1) - self.d0
+                lam_r_origo = r[:, 0, :] * (1 - self.d0 / torch.norm(r[:, 0, :], dim=1))[:, None]
+                c = torch.cat((c_origo[:, None, None], c_chain), dim=1)
+                lam_r[:, 0, :] = lam_r[:, 0, :] + lam_r_origo
+                lam_x = torch.zeros_like(x)
+                lam_x[:, :ndim] = lam_r.view(-1, ndim)
+
+                cnorm = torch.sum(c ** 2)
+                if cnorm < self.converged_acc:
+                    break
+                # with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 / lam_x.norm()
+            lsiter = 0
+            while True:
+                xtry = x - alpha * lam_x
+                r = xtry[:, 0:ndim].view(nb, -1, ndim)
+                c_chain_try = self.constraint(r)
+                c_origo_try = torch.norm(r[:, 0, :], dim=1) - self.d0
+                c_try = torch.cat((c_origo_try[:, None, None], c_chain_try), dim=1)
+                ctry_norm = torch.sum(c_try ** 2)
+                if ctry_norm < cnorm:
+                    break
+                alpha = alpha / 2
+                lsiter = lsiter + 1
+                if lsiter > 10:
+                    break
+            if lsiter == 0 and ctry_norm > self.converged_acc:
+                alpha = alpha * 1.5
+            if ctry_norm < cnorm:
+                x = x - alpha * lam_x
+                new_x = True
+            else:
+                new_x = False
+            if self.debug:
+                print(f"{self._get_name()} constraints {j} c: {cnorm.detach().cpu():2.2e} -> {ctry_norm.detach().cpu():2.2e}   ")
+            if ctry_norm < self.converged_acc:
+                break
+        return {'x': x, 'batch': batch, 'z': z}
+
+    def constrain_regularization(self, data):
+        x = data['x']
+        z = data['z']
+        if 'c' in data:
+            c = data['c']
+        else:
+            c = 0
+        z2 = z.view(1, -1, 1)
+        r = x[:, :3].view(1, -1, 3)
+        cc = self.constraint(r, z2)
+        c_new = torch.sum(torch.abs(cc))*self.regularizationparameter
+        return {'x': x, 'z': z, 'c': c + c_new}
+
+    def compute_constraint_violation(self, data):
+        """
+        Here we compute the linear constraint violation.
+        """
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        if self.pos_only:
+            ndim = x.shape[-1]
+        else:
+            ndim = x.shape[-1] // 2
+        nb = batch.max() + 1
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        c = self.constraint_linear(r)
+        cnorm = torch.mean(torch.abs(c))
+        return cnorm
+
+
+class PointChainPendulum2(ConstraintTemplate):
+    """
+    This is a PointChain constraint, which ensures that neighbouring points all have a fixed distance, d0, between them.
+
+    d0 is the distances the points get constrained to, it can either be a vector or a scalar (vectors are used when different distances are needed for different types of particles)
+    constrain_type can either be 'high', 'low', or 'reg'
+    project and uplift are functions that performs a projection and uplifting operations, they are only needed for high dimensional constraining, and can otherwise be omitted.
+    pos_only can be used if the data only contains positions rather than positions and velocities.
+
+    niter and converged_acc are used to determine how many iterations are used to try to enforce the constraint, n_iter is the maxmimum number of iterations to use, while converged_acc is the accuracy at which it will stop iterating.
+
+    y is the high dimensional variable, ordered as [nparticles,latent_dim]
+    x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
+
+    """
+    def __init__(self,d,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9,regularizationparameter=1,dimensions=3):
+        super(PointChainPendulum2, self).__init__(con_type,regularizationparameter)
+        self.d = d
+        self.project = project
+        self.uplift = uplift
+        self.pos_only = pos_only
+        self.debug = debug
+        self.niter = niter
+        self.converged_acc = converged_acc
+        self.dimensions = dimensions
+        if con_type == 'high':
+            if project is None:
+                raise ValueError("For high dimensional constraints a projection function is needed.")
+            if uplift is None:
+                raise ValueError("For high dimensional constraints an uplifting function is needed.")
+        return
+
+    def delta_r(self,r):
+        dr_0 = r[:,0]
+        dr_i = r[:,1:] - r[:,:-1]
+        dr = torch.cat((dr_0[:,None],dr_i),dim=1)
+        return dr
+
+
+    def constraint(self,r): #[nb,npendulums,2]
+        dr = self.delta_r(r)
+        drnorm = torch.norm(dr, dim=-1)
+        c = drnorm - self.d
+        return c
+
+    def Jtc(self,c,r):
+        """
+        Jacobian transpose times the constraints
+        """
+        npend = r.shape[1]
+        dr = self.delta_r(r)
+        rnorm = dr / torch.norm(dr,dim=-1,keepdim=True)
+        out = torch.zeros_like(r)
+        for i in range(npend-1):
+            out[:, i, :] = c[:, i][:, None] * rnorm[:, i, :] - c[:, i+1][:, None] * rnorm[:, i+1, :]
+        out[:,-1,:] = c[:, -1][:, None] * rnorm[:, -1, :]
+        return out
+
+    def constrain_stabhigh_dimension(self, data):
+        y = data['y']
+        batch = data['batch']
+        z = data['z']
+        K = data['K']
+        x = y @ K
+        if self.pos_only:
+            ndim = x.shape[-1]
+        else:
+            ndim = x.shape[-1] // 2
+        nb = batch.max() + 1
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        c = self.constraint(r)
+        lam_r = self.Jtc(c, r)
+        lam_x = torch.zeros_like(x)
+        lam_x[:,:ndim] = lam_r.view(-1, ndim)
+        lam_y = lam_x @ K.T
+        return {'lam_y':lam_y}
+
+    def constrain_high_dimension(self, data):
+        """
+            fragmentid is used when the input consists of multiple fragments, in that case the constraints are only applied piecewise to points sharing the same fragmentid. If all the points are in the same fragment the variable can just be ignored.
+        """
+        y = data['y']
+        batch = data['batch']
+        z = data['z']
+        K = data['K']
+        new_y = True
+        for j in range(self.niter):
+            if new_y:
+                # x = self.project(y)
+                x = y @ K
+                if self.pos_only:
+                    ndim = x.shape[-1]
+                else:
+                    ndim = x.shape[-1] // 2
+                nb = batch.max() + 1
+                r = x[:, 0:ndim].view(nb, -1, ndim)
+                c = self.constraint(r)
+                cabs_mean = torch.mean(torch.abs(c))
+                if cabs_mean < self.converged_acc:
+                    break
+
+                lam_r = self.Jtc(c, r)
+                lam_x = torch.zeros_like(x)
+                lam_x[:,:ndim] = lam_r.view(-1, ndim)
+                lam_y = lam_x @ K.T
+
+                # with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 / lam_y.norm()
+            lsiter = 0
+            while True:
+                ytry = y - alpha * lam_y
+                x = ytry @ K
+                r = x[:, 0:ndim].view(nb, -1, ndim)
+                c_try = self.constraint(r)
+                c_try_abs_mean = torch.mean(torch.abs(c_try))
+                if c_try_abs_mean < cabs_mean:
+                    break
+                alpha = alpha / 2
+                lsiter = lsiter + 1
+                if lsiter > 10:
+                    break
+            if lsiter == 0 and c_try_abs_mean > self.converged_acc:
+                alpha = alpha * 1.5
+            if c_try_abs_mean < cabs_mean:
+                y = y - alpha * lam_y
+                new_y = True
+            else:
+                new_y = False
+            if self.debug:
+                print(f"{self._get_name()} constraints {j} c: {cabs_mean.detach().cpu():2.4f} -> {c_try_abs_mean.detach().cpu():2.4f}   ")
+            if c_try_abs_mean < self.converged_acc:
+                break
+        return {'y':y,'batch':batch, 'z': z}
+
+    def constrain_low_dimension(self, data):
+        """
+        """
+        x = data['x']
+        batch = data['batch']
+        z = data['z']
+        new_x = True
+        for j in range(self.niter):
+            if new_x:
+                if self.pos_only:
+                    ndim = x.shape[-1]
+                else:
+                    ndim = x.shape[-1] // 2
+                nb = batch.max() + 1
+                r = x[:, 0:ndim].view(nb, -1, ndim)
+                c = self.constraint(r)
+                lam_r = self.Jtc(c, r)
+                lam_x = torch.zeros_like(x)
+                lam_x[:, :ndim] = lam_r.view(-1, ndim)
+                cabs_mean = torch.mean(torch.abs(c))
+                if cabs_mean < self.converged_acc:
+                    break
+                # with torch.no_grad():
+                if j == 0:
+                    alpha = 1.0 / lam_x.norm()
+            lsiter = 0
+            while True:
+                xtry = x - alpha * lam_x
+                r = xtry[:, 0:ndim].view(nb, -1, ndim)
+                c_try = self.constraint(r)
+                ctry_abs_mean = torch.mean(torch.abs(c_try))
+                if ctry_abs_mean < cabs_mean:
+                    break
+                alpha = alpha / 2
+                lsiter = lsiter + 1
+                if lsiter > 10:
+                    break
+            if lsiter == 0 and ctry_abs_mean > self.converged_acc:
+                alpha = alpha * 1.5
+            if ctry_abs_mean < cabs_mean:
+                x = x - alpha * lam_x
+                new_x = True
+            else:
+                new_x = False
+            if self.debug:
+                print(f"{self._get_name()} constraints {j} c: {cabs_mean.detach().cpu():2.4f} -> {ctry_abs_mean.detach().cpu():2.4f}   ")
+            if ctry_abs_mean < self.converged_acc:
+                break
+        return {'x': x, 'batch': batch, 'z': z}
+
+    def constrain_regularization(self, data):
+        x = data['x']
+        z = data['z']
+        if 'c' in data:
+            c = data['c']
+        else:
+            c = 0
+        z2 = z.view(1, -1, 1)
+        r = x[:, :3].view(1, -1, 3)
+        cc = self.constraint(r, z2)
+        c_new = torch.sum(torch.abs(cc))*self.regularizationparameter
+        return {'x': x, 'z': z, 'c': c + c_new}
+
+    def compute_constraint_violation(self, data):
+        batch = data['batch']
+        nb = batch.max() + 1
+        x = data['x']
+        if self.pos_only:
+            ndim = x.shape[-1]
+        else:
+            ndim = x.shape[-1] // 2
+        nb = batch.max() + 1
+        r = x[:, 0:ndim].view(nb, -1, ndim)
+        c = self.constraint(r)
+        cabs = torch.abs(c)
+        cabs_mean = torch.mean(cabs)
+        cabs_max = torch.max(torch.abs(cabs))
+        return cabs_mean, cabs_max
+
+
+
+
+
 
 class PointChain(ConstraintTemplate):
     """
@@ -687,7 +1319,7 @@ class PointChain(ConstraintTemplate):
     x is the low dimensional variable, ordered as [nparticles,9/18 dim] (depending on whether pos_only is true or not. If pos_only=False, then the ordering should be r,v)
 
     """
-    def __init__(self,d0,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9,regularizationparameter=1):
+    def __init__(self,d0,con_type,project=None,uplift=None,pos_only=False,debug=False, niter=10, converged_acc=1e-9,regularizationparameter=1,dimensions=3):
         super(PointChain, self).__init__(con_type,regularizationparameter)
         self.d0 = d0
         self.project = project
@@ -696,6 +1328,7 @@ class PointChain(ConstraintTemplate):
         self.debug = debug
         self.niter = niter
         self.converged_acc = converged_acc
+        self.dimensions = dimensions
         if con_type == 'high':
             if project is None:
                 raise ValueError("For high dimensional constraints a projection function is needed.")
@@ -718,14 +1351,14 @@ class PointChain(ConstraintTemplate):
             d = self.d0
         else:
             d = (self.d0[z[:, :-1], z[:, 1:]]).to(device=x.device,dtype=x.dtype)
-        e = torch.ones((3,1),device=x.device)
+        e = torch.ones((self.dimensions,1),device=x.device)
         dx = self.diff(x)
         c = (dx**2)@e - d**2
         return c
 
     def dConstraintT2(self,c, X):
          dX = self.diff(X)
-         e = torch.ones(1, 3, device=X.device)
+         e = torch.ones(1, self.dimensions, device=X.device)
          C = (c @ e) * dX
          C2 = self.diffT(C)
          return 2 * C2
@@ -749,7 +1382,7 @@ class PointChain(ConstraintTemplate):
                 ndim = x.shape[-1]
             else:
                 ndim = x.shape[-1] // 2
-            nvec = ndim // 3
+            nvec = ndim // self.dimensions
             lam_x = torch.zeros_like(x)
             nb = batch.max() + 1
             r = x[:, 0:ndim].view(nb, -1, ndim)

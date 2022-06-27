@@ -123,37 +123,85 @@ class ProjectUplift(torch.nn.Module):
         self.high_dim = high_dim
         w = torch.empty((self.low_dim, self.high_dim))
         torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        # self.M = torch.nn.Parameter(w)
-        M = w
-        I = torch.eye(M.shape[-2],device=M.device)
-        for i in range(100):
-            M = M - 0.5 * (M @ M.t() - I) @ M
-        self.register_buffer("Mu", M)
+        self.M = torch.nn.Parameter(w)
+        # M = w
+        # I = torch.eye(M.shape[-2],device=M.device)
+        # for i in range(100):
+        #     M = M - 0.5 * (M @ M.t() - I) @ M
+        # self.register_buffer("Mu", M)
         return
 
-    def make_matrix_semi_unitary(self, debug=False):
-        M = self.M.clone()
-        I = torch.eye(M.shape[-2],device=M.device)
-        for i in range(100):
-            M = M - 0.5 * (M @ M.t() - I) @ M
-
-        if debug:
-            pre_error = torch.norm(I - self.M @ self.M.t())
-            post_error = torch.norm(I - M @ M.t())
-            print(f"Deviation from unitary before: {pre_error:2.2e}, deviation from unitary after: {post_error:2.2e}")
-        self.Mu = M
-        return
+    # def make_matrix_semi_unitary(self, debug=False):
+    #     M = self.M.clone()
+    #     I = torch.eye(M.shape[-2],device=M.device)
+    #     for i in range(100):
+    #         M = M - 0.5 * (M @ M.t() - I) @ M
+    #
+    #     if debug:
+    #         pre_error = torch.norm(I - self.M @ self.M.t())
+    #         post_error = torch.norm(I - M @ M.t())
+    #         print(f"Deviation from unitary before: {pre_error:2.2e}, deviation from unitary after: {post_error:2.2e}")
+    #     self.Mu = M
+    #     return
 
     def project(self, y):
         """
         Projects the high dimensional variable y, into the low dimensional space x by the multiplication of a semi-unitary matrix
         """
-        x = y @ self.Mu.t()
+        x = y @ self.M.t()
         return x
 
     def uplift(self, x):
         """
         Uplifts the low dimensional variable x, into the high dimensional space y by the multiplication of a semi-unitary matrix
         """
-        y = x @ self.Mu
+        y = x @ self.M
         return y
+
+
+
+#
+# class ProjectUplift(torch.nn.Module):
+#     '''
+#     A projection and uplifting class for standard networks.
+#     '''
+#     def __init__(self,low_dim,high_dim):
+#         super(ProjectUplift, self).__init__()
+#         self.low_dim = low_dim
+#         self.high_dim = high_dim
+#         w = torch.empty((self.low_dim, self.high_dim))
+#         torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
+#         self.M = torch.nn.Parameter(w)
+#         M = w
+#         I = torch.eye(M.shape[-2],device=M.device)
+#         for i in range(100):
+#             M = M - 0.5 * (M @ M.t() - I) @ M
+#         self.register_buffer("Mu", M)
+#         return
+#
+#     def make_matrix_semi_unitary(self, debug=False):
+#         M = self.M.clone()
+#         I = torch.eye(M.shape[-2],device=M.device)
+#         for i in range(100):
+#             M = M - 0.5 * (M @ M.t() - I) @ M
+#
+#         if debug:
+#             pre_error = torch.norm(I - self.M @ self.M.t())
+#             post_error = torch.norm(I - M @ M.t())
+#             print(f"Deviation from unitary before: {pre_error:2.2e}, deviation from unitary after: {post_error:2.2e}")
+#         self.Mu = M
+#         return
+#
+#     def project(self, y):
+#         """
+#         Projects the high dimensional variable y, into the low dimensional space x by the multiplication of a semi-unitary matrix
+#         """
+#         x = y @ self.Mu.t()
+#         return x
+#
+#     def uplift(self, x):
+#         """
+#         Uplifts the low dimensional variable x, into the high dimensional space y by the multiplication of a semi-unitary matrix
+#         """
+#         y = x @ self.Mu
+#         return y

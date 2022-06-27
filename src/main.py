@@ -62,7 +62,8 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                     num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node)
     elif c['network_type'] == 'mim':
-        model = neural_network_mimetic(cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'])
+        node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in'] * 2
+        model = neural_network_mimetic(node_dim_in,cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'],gamma=c['gamma'])
     else:
         raise NotImplementedError("Network type is not implemented")
 
@@ -88,24 +89,24 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     while epoch < c['epochs']:
         t1 = time.time()
         if c['use_training']:
-            loss_r_t, loss_v_t,drmsd_t,cv_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
+            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
         else:
-            loss_r_t, loss_v_t, drmsd_t,cv_t = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+            loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t2 = time.time()
         if c['use_val']:
-            loss_r_v, loss_v_v, drmsd_v,cv_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
         else:
-            loss_r_v, loss_v_v, drmsd_v,cv_v = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t3 = time.time()
         if c['ignore_cons']:
-            _,_,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
+            _,_,_,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
 
 
         # Next save results
         loss_t = (loss_r_t + loss_v_t) / 2
         loss_v = (loss_r_v + loss_v_v) / 2
 
-        results = update_results_and_save_to_csv(results, epoch, loss_r_t,cv_t,loss_r_v,cv_v, csv_file)
+        results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v, cv_max_v, MAE_r_t, MAE_r_v, csv_file,cv_t,cv_v)
         # results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,loss_r_v,loss_v_v, csv_file)
 
         loss = find_relevant_loss(loss_t, loss_t, loss_v, loss_v, c['use_val'], c['loss'])
@@ -124,7 +125,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         # LOG.info(f'{epoch:2d}  DRMSD(train){drmsd_t:.2e}  DRMSD(val){drmsd_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
         #          f'Time(total) {(time.time() - t0)/3600:.1f}h')
 
-        LOG.info(f'{epoch:2d}  cv(train){cv_t:.2e}  cv(val){cv_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
+        LOG.info(f'{epoch:2d}  cv(train){cv_t:.2e}  cv(val){cv_v:.2e}  cvm(train){cv_max_t:.2e}  cvm(val){cv_max_v:.2e}  MAEr(train): {MAE_r_t:.2e}  MAEr(val): {MAE_r_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_r(val): {loss_r_v:.2e}Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
 

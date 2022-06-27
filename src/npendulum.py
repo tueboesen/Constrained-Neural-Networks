@@ -1,5 +1,8 @@
 import math
 import torch
+
+from src.vizualization import plot_pendulum_snapshot
+
 torch.set_default_dtype(torch.float64)
 import time
 
@@ -119,10 +122,10 @@ def get_coordinates_from_angle(theta,dtheta):
     :return:
     """
     n,ns = theta.shape
-    x = torch.zeros(n+1,ns)
-    y = torch.zeros(n+1,ns)
-    vx = torch.zeros(n+1,ns)
-    vy = torch.zeros(n+1,ns)
+    x = torch.zeros(n+1,ns,device=theta.device)
+    y = torch.zeros(n+1,ns,device=theta.device)
+    vx = torch.zeros(n+1,ns,device=theta.device)
+    vy = torch.zeros(n+1,ns,device=theta.device)
     for i in range(n):
         x[i+1] = x[i] + torch.sin(theta[i])
         y[i+1] = y[i] - torch.cos(theta[i])
@@ -168,7 +171,7 @@ def animate_pendulum(x,y,vx=None,vy=None,save=None):
         lines[-1].set_UVC(vx[1:, i], vy[1:, i])
         return lines
 
-    ani = animation.FuncAnimation(fig, update, frames=np.arange(1, nsteps), init_func=init, interval=100, blit=True)
+    ani = animation.FuncAnimation(fig, update, frames=np.arange(1, nsteps), init_func=init, interval=25, blit=True)
     if save is None:
         plt.show()
     else:
@@ -184,7 +187,7 @@ if __name__ == '__main__':
     g = Npend.g
     theta0 = 0.5*math.pi*torch.ones(n)
     dtheta0 = 0.0*torch.ones(n)
-    nsteps = 1000
+    nsteps = 10000
 
     t0 = time.time()
     times, thetas, dthetas = Npend.simulate(nsteps,theta0,dtheta0)
@@ -196,24 +199,34 @@ if __name__ == '__main__':
     K = 0.5*torch.sum(v2[1:],dim=0)
     V = g * torch.sum(y[1:],dim=0)
     E = K + V
-    import matplotlib.pyplot as plt
-    import matplotlib
-    matplotlib.use('TkAgg')
-    plt.figure(1)
-    plt.plot(E,label='Energy')
-    plt.plot(K,label='Kinetic energy')
-    plt.plot(V,label='Potential energy')
-    plt.legend()
-    plt.show()
-    plt.pause(1)
+    # import matplotlib.pyplot as plt
+    # import matplotlib
+    # matplotlib.use('TkAgg')
+    # plt.figure(1)
+    # plt.plot(E,label='Energy')
+    # plt.plot(K,label='Kinetic energy')
+    # plt.plot(V,label='Potential energy')
+    # plt.legend()
+    # plt.show()
+    # plt.pause(1)
 
     # x = x[:,100:]
     # y = y[:,100:]
     # vx = vx[:,100:]
     # vy = vy[:,100:]
+    # filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train == True else 'val'}_.png"
+    # plot_pendulum_snapshot(Rin_xy[j], Rout_xy[j], Vin_xy[j], Vout_xy[j], Rpred_xy[j], Vpred_xy[j], file=filename)
+    i = 5100
+    k = 20
+    Rin = torch.cat((x.T[i,1:,None],y.T[i,1:,None]),dim=-1)
+    Rout = torch.cat((x.T[i+k,1:,None],y.T[i+k,1:,None]),dim=-1)
+    Vin = torch.cat((vx.T[i,1:,None],vy.T[i,1:,None]),dim=-1)
+    Vout = torch.cat((vx.T[i+k,1:,None],vy.T[i+k,1:,None]),dim=-1)
+    file = f'/home/tue/npendulum/test.png'
+    plot_pendulum_snapshot(Rin, Rout, Vin, Vout, Rpred=None, Vpred=None, file=file)
 
 
-    animate_pendulum(x.numpy(), y.numpy(),vx.numpy(),vy.numpy())
+    # animate_pendulum(x.numpy(), y.numpy(),vx.numpy(),vy.numpy())
 
     # file = f'/home/tue/{n}_pendulum_{nsteps}.gif'
     # animate_pendulum(x.numpy(), y.numpy(),save=file)

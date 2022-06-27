@@ -7,7 +7,7 @@ from torch_cluster import radius_graph
 
 from src.loss import loss_eq, loss_mim
 from src.npendulum import get_coordinates_from_angle
-from src.utils import Distogram
+from src.utils import Distogram, define_data_keys
 from src.vizualization import plot_pendulum_snapshot
 
 
@@ -22,11 +22,11 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons)
+        loss_r, loss_v, cv,cv_max ,MAEr = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v, drmsd, cv
+    return loss_r, loss_v, drmsd, cv, cv_max,MAEr
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False):
@@ -50,6 +50,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     aloss_r = 0.0
     aloss_v = 0.0
     acv = 0.0
+    acv_max = 0.0
     aMAEr = 0.0
     aMAEv = 0.0
     torch.set_grad_enabled(train)
@@ -69,7 +70,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         Vout_vec = Vout.reshape(-1,Vout.shape[-1])
         z_vec = z.reshape(-1,z.shape[-1])
 
-        x = torch.cat([Rin_vec,Vin_vec],dim=-1)
+        model_input = torch.cat([Rin_vec,Vin_vec],dim=-1)
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
         if ds.data_type == 'n-pendulum':
@@ -100,12 +101,37 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             edge_dst = edge_index[1]
             wstatic = None
 
-        output, reg, cv = model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,ignore_con=ignore_con)
+        output, reg, cv_mean,cv_max = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
         Rpred = output[:, 0:ndim]
         Vpred = output[:, ndim:]
+
+        if ds.data_type == 'n-pendulum' and ndim == 1:
+            x,y,vx,vy = get_coordinates_from_angle(Rpred.view(Rin.shape)[:,:,0].T, Vpred.view(Rin.shape)[:,:,0].T)
+            x = x.T
+            y = y.T
+            vx = vx.T
+            vy = vy.T
+            Rpred = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2).view(-1,2)
+            Vpred = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2).view(-1,2)
+
+            x, y, vx, vy = get_coordinates_from_angle(Rin[:, :, 0].T, Vin[:, :, 0].T)
+            x = x.T
+            y = y.T
+            vx = vx.T
+            vy = vy.T
+            Rin_vec = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2).view(-1,2)
+            Vin_vec = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2).view(-1,2)
+
+            x, y, vx, vy = get_coordinates_from_angle(Rout[:, :, 0].T, Vout[:, :, 0].T)
+            x = x.T
+            y = y.T
+            vx = vx.T
+            vy = vy.T
+            Rout_vec = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2).view(-1,2)
+            Vout_vec = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2).view(-1,2)
 
 
         lossE_r, lossE_ref_r, lossE_rel_r = loss_eq(Rpred, Rout_vec, Rin_vec)
@@ -132,9 +158,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
         # E_pred, Ekin_pred, Epot_pred, P_pred = energy_momentum(Vpred.view(Vout.shape) * vscale,Vpred.view(Vout.shape) * vscale, m) #TODO THIS DOESNT WORK JUST YET
-
-        # MAEr = torch.mean(torch.abs(Rpred - Rout_vec)*rscale).detach()
-        # MAEv = torch.mean(torch.abs(Vpred - Vout_vec)*vscale).detach()
+        MAEr = torch.mean(torch.norm((Rpred - Rout_vec)*rscale,dim=1))
 
         if check_equivariance:
             rot = o3.rand_matrix().to(device=x.device)
@@ -167,41 +191,42 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
         aloss_r += loss_r.item()
         aloss_v += loss_v.item()
-        acv += cv.item()
-        # aMAEr += MAEr.item()
+        acv += cv_mean.item()
+        acv_max = max(cv_max.item(),acv_max)
+        aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
 
         if ds.data_type == 'n-pendulum' and viz == True and i == 0:
             if ndim == 1:
-                x,y,vx,vy = get_coordinates_from_angle(Rin.detach().cpu()[:,:,0].T, Vin.detach().cpu()[:,:,0].T)
-                x = x.T
-                y = y.T
-                vx = vx.T
-                vy = vy.T
-                Rin_xy = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2)
-                Vin_xy = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2)
+                Rin_xy = Rin_vec.detach().cpu().view(nb,natoms,-1)
+                Rout_xy = Rout_vec.detach().cpu().view(nb,natoms,-1)
+                Rpred_xy = Rpred.detach().cpu().view(nb,natoms,-1)
+                Vin_xy = Vin_vec.detach().cpu().view(nb,natoms,-1)
+                Vout_xy = Vout_vec.detach().cpu().view(nb,natoms,-1)
+                Vpred_xy = Vpred.detach().cpu().view(nb,natoms,-1)
 
-                x,y,vx,vy = get_coordinates_from_angle(Rout.detach().cpu()[:,:,0].T, Vout.detach().cpu()[:,:,0].T)
-                x = x.T
-                y = y.T
-                vx = vx.T
-                vy = vy.T
-                Rout_xy = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2)
-                Vout_xy = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2)
-
-                x,y,vx,vy = get_coordinates_from_angle(Rpred.detach().cpu().view(Rin.shape)[:,:,0].T, Vpred.detach().cpu().view(Rin.shape)[:,:,0].T)
-                x = x.T
-                y = y.T
-                vx = vx.T
-                vy = vy.T
-                Rpred_xy = torch.cat((x[:, 1:, None], y[:, 1:, None]), dim=2)
-                Vpred_xy = torch.cat((vx[:, 1:, None], vy[:, 1:, None]), dim=2)
             else:
-                Rin_xy,Vin_xy,Rout_xy,Vout_xy,Rpred_xy,Vpred_xy = Rin.detach().cpu(), Vin.detach().cpu(),Rout.detach().cpu(),Vout.detach().cpu(),Rpred.detach().cpu().view(Rin.shape),Vpred.detach().cpu().view(Rin.shape)
+                Rin_xy, Vin_xy, Rout_xy, Vout_xy, Rpred_xy, Vpred_xy = Rin.detach().cpu(), Vin.detach().cpu(), Rout.detach().cpu(), Vout.detach().cpu(), Rpred.detach().cpu().view(
+                    Rin.shape), Vpred.detach().cpu().view(Rin.shape)
 
             for j in range(min(5,batch_size)):
-                filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_{'' if ignore_con==False else 'ignore_con'}.png"
+                filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_.png"
                 plot_pendulum_snapshot(Rin_xy[j],Rout_xy[j],Vin_xy[j],Vout_xy[j],Rpred_xy[j],Vpred_xy[j],file=filename)
+
+            if ignore_con and ndim > 1:
+                with torch.no_grad():
+                    output_no_con, reg, cv = model(model_input, batch, z_vec, edge_src, edge_dst, wstatic=wstatic,ignore_con=ignore_con)
+                    Rpred_no_con = output_no_con[:, 0:ndim]
+                    Vpred_no_con = output_no_con[:, ndim:]
+
+                    Rpred_no_con_xy = Rpred_no_con.detach().cpu().view(Rin.shape)
+                    Vpred_no_con_xy = Vpred_no_con.detach().cpu().view(Vin.shape)
+                    for j in range(min(5,batch_size)):
+                        filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_ignore_con.png"
+                        plot_pendulum_snapshot(Rin_xy[j],Rout_xy[j],Vin_xy[j],Vout_xy[j],Rpred_no_con_xy[j],Vpred_no_con_xy[j],file=filename)
+
+
+
 
         if (i + 1) * batch_size >= max_samples:
             break
@@ -228,10 +253,12 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     aloss_r /= (i + 1)
     aloss_v /= (i + 1)
     acv /= (i + 1)
-    # aMAEr /= (i + 1)
+    aMAEr /= (i + 1)
     # aMAEv /= (i + 1)
 
-    return aloss_r, aloss_v, acv#, aMAEr, aMAEv
+    return aloss_r, aloss_v, acv, acv_max, aMAEr#, aMAEv
+
+
 #
 # def best_coord_init(coords,scale=3.8,plot_coords=False):
 #     ss = 0.1
