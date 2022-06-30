@@ -12,7 +12,7 @@ from src.loss import find_relevant_loss
 from src.network_e3 import neural_network_equivariant
 from src.network_mim import neural_network_mimetic
 from src.optimization import run_model
-from src.project_uplift import ProjectUpliftEQ, ProjectUplift
+from src.project_uplift import ProjectUpliftEQ
 from src.utils import fix_seed, update_results_and_save_to_csv, run_model_MD_propagation_simulation
 from src.vizualization import plot_training_and_validation
 
@@ -47,23 +47,19 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
 
     if c['network_type'].lower() == 'eq':
         PU = ProjectUpliftEQ(cn['irreps_inout'], cn['irreps_hidden'])
-    elif c['network_type'].lower() == 'mim':
-        node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in']*2
-        PU = ProjectUplift(node_dim_in, cn['node_dim_latent'])
 
     cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'],model_specific=c['model_specific'])
 
-    #PU, masses=ds.m, R=ds.Rin, V=ds.Vin, z=ds.z, rscale=ds.rscale, vscale=ds.vscale, energy_predictor=c['PE_predictor']
-    con_fnc = load_constraints(c['con'], c['con_type'], project_fnc=PU.project, uplift_fnc=PU.uplift, debug=c['debug'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,pos_only=ds.pos_only,regularizationparameter=c['regularizationparameter'])
+    con_fnc = load_constraints(c['con'], c['con_type'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,device=device)
 
     if c['network_type'].lower() == 'eq':
         model = neural_network_equivariant(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node)
+                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node,discretization=c['network_discretization'],gamma=c['gamma'])
     elif c['network_type'] == 'mim':
         node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in'] * 2
-        model = neural_network_mimetic(node_dim_in,cn['node_dim_latent'], cn['nlayers'], PU=PU, con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'],gamma=c['gamma'])
+        model = neural_network_mimetic(node_dim_in,cn['node_dim_latent'], cn['nlayers'], con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'],gamma=c['gamma'])
     else:
         raise NotImplementedError("Network type is not implemented")
 

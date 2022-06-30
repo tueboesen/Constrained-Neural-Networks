@@ -13,9 +13,8 @@ from e3nn import o3
 
 def standard_network_sizes(c,network_type):
     """
-    These are the standard networks that are used in this project
+    These are the standard networks that are used in this project. The exception is the multi-body pendulum that works in 2D
     """
-
     if network_type.lower() == 'eq':
         c['network'] = {
             'irreps_inout': o3.Irreps("6x1o"),

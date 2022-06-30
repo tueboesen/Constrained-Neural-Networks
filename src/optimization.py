@@ -7,7 +7,7 @@ from torch_cluster import radius_graph
 
 from src.loss import loss_eq, loss_mim
 from src.npendulum import get_coordinates_from_angle
-from src.utils import Distogram, define_data_keys
+from src.utils import Distogram, define_data_keys, atomic_masses
 from src.vizualization import plot_pendulum_snapshot
 
 
@@ -16,7 +16,7 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
     A wrapper function for the different data types currently supported for training/inference
     """
     if data_type == 'water':
-        loss_r, loss_v = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        loss_r, loss_v, cv, cv_max, MAEr = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
         drmsd = 0
     elif data_type == 'protein':
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
@@ -59,9 +59,9 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     else:
         model.eval()
     for i, (Rin, Rout, z, Vin, Vout, Fin, Fout, KEin, KEout, PEin, PEout, m) in enumerate(dataloader):
-        # print(f"{torch.cuda.memory_allocated()}/{torch.cuda.max_memory_allocated()}")
-        # continue
+
         nb, natoms, ndim = Rin.shape
+
         optimizer.zero_grad()
 
         Rin_vec = Rin.reshape(-1,Rin.shape[-1])
@@ -72,6 +72,10 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
         model_input = torch.cat([Rin_vec,Vin_vec],dim=-1)
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
+
+        m = m.view(nb,natoms,-1)
+        weights = (1/m).repeat_interleave(ndim//m.shape[-1],dim=-1).repeat(1,1,model_input.shape[-1]//ndim)
+
 
         if ds.data_type == 'n-pendulum':
             n=5
@@ -101,7 +105,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             edge_dst = edge_index[1]
             wstatic = None
 
-        output, reg, cv_mean,cv_max = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic)
+        output, cv_mean,cv_max = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
@@ -145,15 +149,15 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         if loss_type.lower() == 'eq':
             loss_r, loss_v = lossE_rel_r, lossE_rel_v
             if predict_pos_only:
-                loss = lossE_rel_r + reg
+                loss = lossE_rel_r
             else:
-                loss = lossE_rel + reg
+                loss = lossE_rel
         elif loss_type.lower() == 'mim':
             loss_r, loss_v = lossD_rel_r, lossD_rel_v
             if predict_pos_only:
-                loss = lossD_rel_r + reg
+                loss = lossD_rel_r
             else:
-                loss = lossD_rel + reg
+                loss = lossD_rel
         else:
             raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
@@ -191,8 +195,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
         aloss_r += loss_r.item()
         aloss_v += loss_v.item()
-        acv += cv_mean.item()
-        acv_max = max(cv_max.item(),acv_max)
+        acv += (cv_mean*rscale).item()
+        acv_max = max((cv_max*rscale).item(),acv_max)
         aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
 

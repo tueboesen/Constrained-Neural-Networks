@@ -10,7 +10,7 @@ from e3nn.math import soft_one_hot_linspace
 from e3nn.nn import Gate
 
 from src.EQ_operations import SelfInteraction, Convolution, tp_path_exists
-from src.utils import smooth_cutoff
+from src.utils import smooth_cutoff, atomic_masses
 from src.vizualization import plot_water
 
 
@@ -33,7 +33,9 @@ class neural_network_equivariant(torch.nn.Module):
         con_fnc=None,
         con_type=None,
         PU=None,
-        particles_pr_node = 1,
+        particles_pr_node=1,
+        discretization='leapfrog',
+        gamma=1
     ) -> None:
         super().__init__()
         self.max_radius = max_radius
@@ -47,6 +49,8 @@ class neural_network_equivariant(torch.nn.Module):
         self.con_fnc = con_fnc
         self.con_type = con_type
         self.PU = PU
+        self.discretization = discretization
+        self.gamma = gamma
         self.particles_pr_nodes = particles_pr_node
         if self.num_neighbors < 0:
             self.automatic_neighbors = True
@@ -121,14 +125,17 @@ class neural_network_equivariant(torch.nn.Module):
         edge_features = torch.cat(edge_features, dim=-1)
         return edge_features, edge_attrs
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst,tmp=None,tmp2=None) -> torch.Tensor:
-        x_org = x.clone()
+    def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,weight=1) -> torch.Tensor:
+
         if self.automatic_neighbors:
             self.num_neighbors = edge_dst.shape[0]/x.shape[0]
 
-        node_attr_embedded = self.node_embedder(node_attr.to(dtype=torch.int64)).squeeze()
-        # self.PU.make_matrix_semi_unitary()
-        y = self.PU.uplift(x)
+        node_attr_embedded = self.node_embedder(torch.min(node_attr,dim=-1)[0].to(dtype=torch.int64)).squeeze()
+        y = self.PU.inverse(x)
+
+        ndimx = x.shape[-1]
+        ndimy = y.shape[-1]
+
         y_old = y
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
@@ -138,27 +145,36 @@ class neural_network_equivariant(torch.nn.Module):
             y_new = gate(y_new)
             y_new2 = self.self_interaction[i](y.clone())
             tmp = y.clone()
-            y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2)
-            y_old = tmp
+
+            if self.con_type == 'stabhigh':
+                dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1,-1,ndimy),self.PU.project,self.PU.uplift,weight)
+                dy = dy.view(-1,ndimy)
+            else:
+                dy = 0
+
+            if self.discretization == 'leapfrog':
+                y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2 + self.gamma*dy)
+                y_old = tmp
+            elif self.discretization == 'euler':
+                y = y + self.h[i] ** 2 * (y_new + (self.mix[i]-1) * y_new2 + self.gamma * dy)
+            else:
+                raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
+
             if self.con_fnc is not None and self.con_type == 'high':
-                # y_old2 = y.clone()
-                data = self.con_fnc({'y':y,'batch':batch,'z':node_attr})
-                y = data['y']
-                # self.get_water_viz(y,y_old2,batch)
+                y = self.con_fnc(y.view(batch.max() + 1, -1, ndimy), self.PU.project, self.PU.uplift,weight)
+                y = y.view(-1,ndimy)
 
             x = self.PU.project(y)
         if self.con_fnc is not None and self.con_type == 'low':
-            # x_old = x.clone()
-            data = self.con_fnc({'x':x,'batch':batch,'z':node_attr})
-            x = data['x']
-            # self.get_water_viz_low(x,x_old,x_org,batch)
-        if self.con_fnc is not None and self.con_type == 'reg':
-            data = self.con_fnc({'x':x,'batch':batch,'z':node_attr})
-            reg = data['c']
-        else:
-            reg = 0
+            x = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x = x.view(-1,ndimx)
 
-        return x,reg#,x_old
+        if self.con_fnc is not None:
+            _, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+        else:
+            cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
+
+        return x, cv_mean, cv_max
 
     def get_water_viz(self, y_new, y_old, batch):
         x_new = self.PU.project(y_new)

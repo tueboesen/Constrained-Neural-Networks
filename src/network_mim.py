@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter
 
-from src.utils import smooth_cutoff
+from src.utils import smooth_cutoff, atomic_masses
 
 
 class Mixing(nn.Module):
@@ -160,12 +160,11 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=1):
+    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=1):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
         nlayers:            The number of propagationBlocks to include in the network 
-        PU:                 A handler to a projection uplifting class instance
         nmax_atom_types:    Max number of particle types to handle, for proteins this should be the types of amino acids
         atom_type_embed_dim: The out dimension of the embedding done to the atom_types
         max_radius:         The maximum radius used when building the edges in the graph between the particles
@@ -174,7 +173,6 @@ class neural_network_mimetic(nn.Module):
         dim:                The dimension that the data lives in (default 3)
         """
         self.nlayers = nlayers
-        self.PU = PU
         self.gamma = gamma
         self.dim = dim
         self.low_dim = node_dim_in
@@ -190,8 +188,8 @@ class neural_network_mimetic(nn.Module):
         self.con_fnc = con_fnc
         self.con_type = con_type
         self.embed_node_attr = embed_node_attr
-        self.discritization = discretization
-        assert self.discritization in ['leapfrog','euler']
+        self.discretization = discretization
+        assert self.discretization in ['leapfrog', 'euler']
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
@@ -199,21 +197,30 @@ class neural_network_mimetic(nn.Module):
             self.PropagationBlocks.append(block)
         return
 
-    def uplift(self,x):
+    def inverse(self,x):
         # y = x @ self.K.T @ torch.inverse(self.K @ self.K.T) #This is for the right side
         y = x @ torch.inverse(self.K.T @ self.K) @ self.K.T
         return y
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,ignore_con=False):
+    def uplift(self,x):
+        y = x @ self.K.T
+        return y
 
+    def project(self,y):
+        x = y @ self.K
+        return x
+
+    def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,ignore_con=False,weight=1):
         if x.isnan().any():
             raise ValueError("NaN detected")
 
         if self.embed_node_attr:
-            node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
+            node_attr_embedded = self.node_attr_embedder(node_attr.min(dim=-1)[0].to(dtype=torch.int64)).squeeze()
         else:
             node_attr_embedded = node_attr
         y = self.uplift(x)
+        ndimx = x.shape[-1]
+        ndimy = y.shape[-1]
         y_old = y
         for i in range(self.nlayers):
             if x.isnan().any():
@@ -230,42 +237,37 @@ class neural_network_mimetic(nn.Module):
             tmp = y.clone()
 
             if self.con_type == 'stabhigh':
-                data = self.con_fnc({'y': y, 'batch': batch, 'z': node_attr, 'K':self.K})
-                lam_y = data['lam_y']
+                dy = self.con_fnc.constrain_stabilization(y_new.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                dy = dy.view(-1,ndimy)
             else:
-                lam_y = 0
-            if self.discritization == 'leapfrog':
-                y = 2*y - y_old - self.h[i]**2 * (y_new + self.gamma*lam_y)
+                dy = 0
+            if self.discretization == 'leapfrog':
+                y = 2*y - y_old - self.h[i]**2 * (y_new + self.gamma*dy)
                 y_old = tmp
-            elif self.discritization == 'euler':
-                y = y + self.h[i]**2 * (y_new + self.gamma*lam_y)
+            elif self.discretization == 'euler':
+                y = y + self.h[i]**2 * (y_new + self.gamma*dy)
             else:
-                raise NotImplementedError(f"Discretization method {self.discritization} not implemented.")
+                raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
 
             if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
-                data = self.con_fnc({'y': y, 'batch': batch,'z':node_attr,'K':self.K})
-                y = data['y']
+                y = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                y = y.view(-1,ndimy)
                 if y.isnan().any():
                     raise ValueError("NaN detected")
 
-            x = y @ self.K
+            x = self.project(y)
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
-            data = self.con_fnc({'x': x, 'batch': batch,'z':node_attr,'K':self.K})
-            x = data['x']
-        if self.con_fnc is not None and self.con_type == 'reg' and ignore_con is False:
-            data = self.con_fnc({'x': x, 'batch': batch, 'z': node_attr,'K':self.K})
-            reg = data['c']
-        else:
-            reg = 0
+            x = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x = x.view(-1,ndimx)
         if x.isnan().any():
             raise ValueError("NaN detected")
 
         if self.con_fnc is not None:
-            cv_mean,cv_max = self.con_fnc[0].compute_constraint_violation({'x': x, 'batch': batch, 'z': node_attr,'K':self.K})
+            _, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        return x, reg, cv_mean, cv_max
+        return x, cv_mean, cv_max

@@ -4,7 +4,6 @@ import os
 import torch
 
 from src.batch_jobs import job_planner, job_runner
-
 if __name__ == '__main__':
     torch.set_default_dtype(torch.float32)
     parser = argparse.ArgumentParser(description='Constrained MD')
@@ -12,7 +11,7 @@ if __name__ == '__main__':
     args.n_train = 100
     args.n_val = 1000
     args.batch_size = 10
-    args.nskip = 100
+    args.nskip = 50
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8
     args.use_training = True
@@ -38,8 +37,8 @@ if __name__ == '__main__':
     # args.con = ['n-pendulum','n-pendulum-seq','n-pendulum-seq-start']
     args.ignore_cons = False
     # args.con_type = ['stabhigh']
-    args.con_type = ['stabhigh']
-    # args.con_type = ['high','low','reg']
+    # args.con_type = ['stabhigh']
+    args.con_type = ['high']
     args.model_specific = {'n': 5,
                            'dt': 0.01,
                            'L': [1,1,1,1,1],

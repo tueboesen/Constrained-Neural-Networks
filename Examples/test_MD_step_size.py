@@ -11,7 +11,7 @@ from src.batch_jobs import job_planner, job_runner
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
-    args.n_train = 1000
+    args.n_train = 100
     args.n_val = 1000
     args.batch_size = 5
     args.nskip = 999
@@ -32,7 +32,7 @@ if __name__ == '__main__':
     args.data = './../Data/water.npz'
     args.data_type = 'water'
     # args.con = ['triangle']
-    args.con = ['','triangle']
+    args.con = ['water']
     args.con_type = ['high','low']
     args.con_data = ''
     args.use_double = True

@@ -1,7 +1,7 @@
 import math
 import torch
-
-from src.vizualization import plot_pendulum_snapshot
+import numpy as np
+from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshots
 
 torch.set_default_dtype(torch.float64)
 import time
@@ -10,9 +10,9 @@ import time
 class NPendulum:
     def __init__(self,n,dt):
         """
-        Initiates an n-pendulum class for simulating pendulums
-        :param n:
-        :param dt:
+        Initiates an n-pendulum class for simulating multi-body pendulums
+        :param n: number of pendulums
+        :param dt: time stepping size
         """
         self.n = n
         self.A = torch.zeros((n,n))
@@ -32,9 +32,12 @@ class NPendulum:
 
     def npendulum(self,theta,dtheta):
         """
-        Sets up and solves the n-pendulum linear system of equations
-        :param theta:
-        :param dtheta:
+        Sets up and solves the n-pendulum linear system of equations in angular coordinates where the constraints are naturally obeyed.
+
+        Note this function should not be used. Use npendulum_fast instead since it is an optimized version of this. This function is still here for comparison and to easily understand the calculations.
+
+        :param theta: angular coordinate
+        :param dtheta: angular velocity
         :return:
         """
         n = self.n
@@ -58,9 +61,6 @@ class NPendulum:
     def npendulum_fast(self,theta,dtheta):
         """
         Faster version of npendulum
-        :param theta:
-        :param dtheta:
-        :return:
         """
         n = self.n
         g = self.g
@@ -216,14 +216,16 @@ if __name__ == '__main__':
     # vy = vy[:,100:]
     # filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train == True else 'val'}_.png"
     # plot_pendulum_snapshot(Rin_xy[j], Rout_xy[j], Vin_xy[j], Vout_xy[j], Rpred_xy[j], Vpred_xy[j], file=filename)
-    i = 5100
-    k = 20
-    Rin = torch.cat((x.T[i,1:,None],y.T[i,1:,None]),dim=-1)
-    Rout = torch.cat((x.T[i+k,1:,None],y.T[i+k,1:,None]),dim=-1)
-    Vin = torch.cat((vx.T[i,1:,None],vy.T[i,1:,None]),dim=-1)
-    Vout = torch.cat((vx.T[i+k,1:,None],vy.T[i+k,1:,None]),dim=-1)
-    file = f'/home/tue/npendulum/test.png'
-    plot_pendulum_snapshot(Rin, Rout, Vin, Vout, Rpred=None, Vpred=None, file=file)
+    ii = [5100,5600,5800,1230,3245]
+    # k = np.asarray([20,50,100])
+    k = np.asarray([2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50])
+    for i in ii:
+        Rin = torch.cat((x.T[i,1:,None],y.T[i,1:,None]),dim=-1)
+        Rout = torch.cat((x.T[i+k,1:,None],y.T[i+k,1:,None]),dim=-1)
+        Vin = torch.cat((vx.T[i,1:,None],vy.T[i,1:,None]),dim=-1)
+        Vout = torch.cat((vx.T[i+k,1:,None],vy.T[i+k,1:,None]),dim=-1)
+        file = f'/home/tue/npendulum/npendulum_{i}_{k}.png'
+        plot_pendulum_snapshots(Rin, Rout, Vin, Vout, Rpred=None, Vpred=None, file=file)
 
 
     # animate_pendulum(x.numpy(), y.numpy(),vx.numpy(),vy.numpy())

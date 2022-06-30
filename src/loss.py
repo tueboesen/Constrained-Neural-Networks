@@ -26,8 +26,6 @@ def find_relevant_loss(loss_t,lossD_t,loss_v,lossD_v,use_validation,loss_fnc):
         raise NotImplementedError("Loss function not implemented.")
     return loss
 
-
-
 def loss_eq(x_pred, x_out, x_in):
     """
     Computes the relative MSE coordinate loss, which can be used by equivariant networks
