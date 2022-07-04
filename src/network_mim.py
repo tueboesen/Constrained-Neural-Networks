@@ -237,7 +237,7 @@ class neural_network_mimetic(nn.Module):
             tmp = y.clone()
 
             if self.con_type == 'stabhigh':
-                dy = self.con_fnc.constrain_stabilization(y_new.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
                 dy = dy.view(-1,ndimy)
             else:
                 dy = 0

@@ -37,8 +37,8 @@ if __name__ == '__main__':
     # args.con = ['n-pendulum','n-pendulum-seq','n-pendulum-seq-start']
     args.ignore_cons = False
     # args.con_type = ['stabhigh']
-    # args.con_type = ['stabhigh']
-    args.con_type = ['high']
+    args.con_type = ['stabhigh']
+    # args.con_type = ['high']
     args.model_specific = {'n': 5,
                            'dt': 0.01,
                            'L': [1,1,1,1,1],
@@ -47,7 +47,7 @@ if __name__ == '__main__':
                            }
     args.regularizationparameter = [1e-2]
     args.con_data = ""
-    args.gamma = [0,10,100,500,1000,1500]
+    args.gamma = [0,2,5,10,20,50]
     args.use_double = True
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)
