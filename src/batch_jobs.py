@@ -127,6 +127,35 @@ def job_planner(c):
 
 
 
+def job_planner2(c):
+    """
+    This function can plan out multiple jobs to be run
+    """
+    c['result_dir_base'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
+        root='results',
+        runner_name=c['basefolder'],
+        date=datetime.now(),
+    )
+    os.makedirs(c['result_dir_base'])
+    c_base = copy.deepcopy(c)
+    cs = []
+    legends = []
+    for i,seed in enumerate(c_base['seed']):
+        jobid = 0
+        for network_type,con_type,model_file in zip(c_base['network_type'],c_base['con_type'],c_base['load_previous_model_file']):
+            c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,c_base['con'],con_type,seed,c_base['use_same_data'],jobid,i,1)
+            c_new['load_previous_model_file']= model_file
+            cs.append(c_new)
+            if i == 0:
+                legends.append(legend)
+    results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
+    return cs, legends, results
+
+
+
+
+
+
 def job_runner(cs,legends, results):
     """
     This function runs a set of jobs, stores the results and plot the training and validation loss

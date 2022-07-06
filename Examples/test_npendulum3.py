@@ -11,7 +11,7 @@ if __name__ == '__main__':
     args.n_train = 100
     args.n_val = 1000
     args.batch_size = 10
-    args.nskip = 50
+    args.nskip = 100
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8
     args.use_training = True
@@ -47,7 +47,7 @@ if __name__ == '__main__':
                            }
     args.regularizationparameter = [1e-2]
     args.con_data = ""
-    args.gamma = [0,2,5,10,20,50]
+    args.gamma = [0,1,2,5,10,20,50]
     args.use_double = True
     args.basefolder = os.path.basename(__file__).split(".")[0]
     c = vars(args)

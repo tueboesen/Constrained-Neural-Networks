@@ -11,10 +11,11 @@ A simple file to load data from an already finished run, and plot it with custom
 # folders = ['/home/tue/remote_desktop/2022-03-21_09_47_05/']
 # folders = ['/home/tue/remote_desktop/2022-03-28_09_42_22/']
 folders = ['/home/tue/PycharmProjects/results/test_npendulum/2022-06-26_22_04_51/'] #train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum/2022-06-27_10_14_56/'] #train 100, skip 100
 # folders = ['/home/tue/remote_desktop/test_MD_step_size/2022-05-19_10_29_32/']
 
 
-output = ['train100_skip20']
+output = ['train100_skip100']
 
 # output_dir = '/home/tue/remote_desktop/regularization10/'
 # os.makedirs(output_dir,exist_ok=True)
@@ -39,7 +40,7 @@ results_numpy = np.concatenate(results,axis=1)
 
 
 base_output_dir = '/home/tue/npendulum/'
-
+output_dir = f"{base_output_dir}{output}"
 os.makedirs(output_dir,exist_ok=True)
 
 # selected_idx = [0,1,2,7,8,13,14]

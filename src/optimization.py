@@ -11,7 +11,7 @@ from src.utils import Distogram, define_data_keys, atomic_masses
 from src.vizualization import plot_pendulum_snapshot
 
 
-def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False):
+def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False,nviz=5):
     """
     A wrapper function for the different data types currently supported for training/inference
     """
@@ -22,14 +22,14 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max ,MAEr = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons)
+        loss_r, loss_v, cv,cv_max ,MAEr = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
     return loss_r, loss_v, drmsd, cv, cv_max,MAEr
 
 
-def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False):
+def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5):
     """
     A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -213,7 +213,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
                 Rin_xy, Vin_xy, Rout_xy, Vout_xy, Rpred_xy, Vpred_xy = Rin.detach().cpu(), Vin.detach().cpu(), Rout.detach().cpu(), Vout.detach().cpu(), Rpred.detach().cpu().view(
                     Rin.shape), Vpred.detach().cpu().view(Rin.shape)
 
-            for j in range(min(5,batch_size)):
+            for j in range(min(nviz,batch_size)):
                 filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_.png"
                 plot_pendulum_snapshot(Rin_xy[j],Rout_xy[j],Vin_xy[j],Vout_xy[j],Rpred_xy[j],Vpred_xy[j],file=filename)
 
@@ -225,7 +225,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
                     Rpred_no_con_xy = Rpred_no_con.detach().cpu().view(Rin.shape)
                     Vpred_no_con_xy = Vpred_no_con.detach().cpu().view(Vin.shape)
-                    for j in range(min(5,batch_size)):
+                    for j in range(min(nviz,batch_size)):
                         filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_ignore_con.png"
                         plot_pendulum_snapshot(Rin_xy[j],Rout_xy[j],Vin_xy[j],Vout_xy[j],Rpred_no_con_xy[j],Vpred_no_con_xy[j],file=filename)
 

@@ -90,7 +90,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
             loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t2 = time.time()
         if c['use_val']:
-            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'])
         else:
             loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t3 = time.time()

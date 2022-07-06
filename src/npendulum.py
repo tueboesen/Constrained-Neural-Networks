@@ -1,7 +1,7 @@
 import math
 import torch
 import numpy as np
-from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshots
+from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshots, plot_pendulum_snapshot_custom
 
 torch.set_default_dtype(torch.float64)
 import time
@@ -216,16 +216,20 @@ if __name__ == '__main__':
     # vy = vy[:,100:]
     # filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train == True else 'val'}_.png"
     # plot_pendulum_snapshot(Rin_xy[j], Rout_xy[j], Vin_xy[j], Vout_xy[j], Rpred_xy[j], Vpred_xy[j], file=filename)
-    ii = [5100,5600,5800,1230,3245]
+    ii = [150,250,400,500,900,5100,5600,5800,1230,3245]
     # k = np.asarray([20,50,100])
-    k = np.asarray([2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50])
+    k = np.asarray([20,50])
     for i in ii:
         Rin = torch.cat((x.T[i,1:,None],y.T[i,1:,None]),dim=-1)
         Rout = torch.cat((x.T[i+k,1:,None],y.T[i+k,1:,None]),dim=-1)
         Vin = torch.cat((vx.T[i,1:,None],vy.T[i,1:,None]),dim=-1)
         Vout = torch.cat((vx.T[i+k,1:,None],vy.T[i+k,1:,None]),dim=-1)
         file = f'/home/tue/npendulum/npendulum_{i}_{k}.png'
-        plot_pendulum_snapshots(Rin, Rout, Vin, Vout, Rpred=None, Vpred=None, file=file)
+        # plot_pendulum_snapshots(Rin, Rout, Vin, Vout, Rpred=None, Vpred=None, file=file)
+        fighandler = plot_pendulum_snapshot_custom(Rin,Vin,color='red')
+        fighandler = plot_pendulum_snapshot_custom(Rout[0],Vout[0],fighandler=fighandler,color='green')
+        fighandler = plot_pendulum_snapshot_custom(Rout[1],Vout[1],fighandler=fighandler,file=file,color='blue')
+        # plot_pendulum_snapshot_custom(Rin,Vin,fignum=1)
 
 
     # animate_pendulum(x.numpy(), y.numpy(),vx.numpy(),vy.numpy())

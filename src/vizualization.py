@@ -30,7 +30,7 @@ def plot_pendulum_snapshots(Rin,Routs,Vin,Vouts,Rpred=None,Vpred=None,file=None)
     Vouts = Vouts.numpy()
 
     v_origo =np.asarray([Rin[1:,0], Rin[1:,1]])
-    # plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color='r', scale=200,width=0.003, alpha=0.2)
+    plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color='r', scale=200,width=0.003, alpha=0.2)
 
     # l_in, = ax.plot(Rin[:,0], Rin[:,1],color='pink', alpha=0.1)
     # lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'ro',  alpha=0.5)
@@ -43,10 +43,10 @@ def plot_pendulum_snapshots(Rin,Routs,Vin,Vouts,Rpred=None,Vpred=None,file=None)
     for i in range(m):
         for j in range(0,n+1):
             Rout = Routs[i,j]
-            # Vout = Vouts[i,j]
+            Vout = Vouts[i,j]
             c = colorFader(c1, c2, j / n)
-            # v_origo =np.asarray([Rout[1:,0], Rout[1:,1]])
-            # plt.quiver(*v_origo, Vout[:, 0], Vout[:, 1], color=c, scale=200,width=0.003,alpha=0.2)
+            v_origo =np.asarray([Rout[1:,0], Rout[1:,1]])
+            plt.quiver(*v_origo, Vout[:, 0], Vout[:, 1], color=c, scale=200,width=0.003,alpha=0.2)
 
             l_out, = ax.plot(Routs[i,:,0], Routs[i,:,1],color='gray',  alpha=0.03)
             lm_out, = ax.plot(Rout[0], Rout[1], 'o', color=c,  alpha=0.5)
@@ -87,24 +87,24 @@ def plot_pendulum_snapshot(Rin,Rout,Vin,Vout,Rpred=None,Vpred=None,file=None):
     Vout = Vout.numpy()
 
     v_origo =np.asarray([Rin[1:,0], Rin[1:,1]])
-    plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color='r', scale=200,width=0.003)
+    plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color='r', scale=100,width=0.003)
 
     v_origo =np.asarray([Rout[1:,0], Rout[1:,1]])
-    plt.quiver(*v_origo, Vout[:, 0], Vout[:, 1], color='b', scale=200,width=0.003)
+    plt.quiver(*v_origo, Vout[:, 0], Vout[:, 1], color='b', scale=100,width=0.003)
 
+    l_in, = ax.plot(Rin[:,0], Rin[:,1],color='grey', alpha=0.2)
+    lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'ro',  alpha=0.7, ms=20)
 
-    l_in, = ax.plot(Rin[:,0], Rin[:,1],color='pink', alpha=0.7)
-    lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'ro',  alpha=0.7)
-
-    l_out, = ax.plot(Rout[:,0], Rout[:,1],color='lightblue',  alpha=0.7)
-    lm_out, = ax.plot(Rout[:,0], Rout[:,1], 'bo',  alpha=0.7)
+    l_out, = ax.plot(Rout[:,0], Rout[:,1],color='grey',  alpha=0.2)
+    lm_out, = ax.plot(Rout[:,0], Rout[:,1], 'bo',  alpha=0.7, ms=20)
 
     if Rpred is not None:
-        l_p, = ax.plot(Rpred[:,0], Rpred[:,1], '--', color='lime', alpha=0.7)
-        lm_p, = ax.plot(Rpred[:,0], Rpred[:,1], 'go', alpha=0.7)
+        l_p, = ax.plot(Rpred[:,0], Rpred[:,1], '--', color='grey', alpha=0.2)
+        lm_p, = ax.plot(Rpred[:,0], Rpred[:,1], 'go', alpha=0.7, ms=20)
 
-    ax.set_xlim(-n,n)
-    ax.set_ylim(-n,n)
+    # ax.set_xlim(-n,n)
+    # ax.set_ylim(-n,n)
+    plt.axis('off')
     if file is None:
         plt.show()
         plt.pause(1)
@@ -113,6 +113,34 @@ def plot_pendulum_snapshot(Rin,Rout,Vin,Vout,Rpred=None,Vpred=None,file=None):
         plt.savefig(file, bbox_inches="tight", pad_inches=0)
     plt.close()
     return
+
+
+def plot_pendulum_snapshot_custom(Rin,Vin,file=None,fighandler=None,color='red'):
+    n = Rin.shape[0]
+    if fighandler is None:
+        fig, ax = plt.subplots(figsize=(15,15))
+    else:
+        fig, ax = fighandler
+    origo = torch.tensor([[0.0,0.0]])
+
+    Rin = torch.cat((origo,Rin),dim=0)
+
+    Rin = Rin.numpy()
+    Vin = Vin.numpy()
+
+    v_origo =np.asarray([Rin[1:,0], Rin[1:,1]])
+    plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color=color, scale=100,width=0.003)
+
+    l_in, = ax.plot(Rin[:,0], Rin[:,1],color='grey', alpha=0.2)
+    lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'o', color=color, alpha=0.7, ms=20)
+
+    # plt.axis('square')
+    plt.axis('off')
+    if file is not None:
+        os.makedirs(os.path.dirname(file),exist_ok=True)
+        plt.savefig(file, bbox_inches="tight", pad_inches=0)
+    # plt.close()
+    return (fig,ax)
 
 
 
