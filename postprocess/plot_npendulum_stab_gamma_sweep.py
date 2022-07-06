@@ -299,13 +299,16 @@ folders = '/home/tue/PycharmProjects/results/test_npendulum2/2022-06-25_22_47_23
 folders = ['/home/tue/PycharmProjects/results/test_npendulum3/2022-06-27_16_47_25/']
 folders = ['/home/tue/PycharmProjects/results/test_npendulum3/2022-07-04_09_51_12/']
 folders = ['//home/tue/PycharmProjects/results/test_npendulum3/2022-07-04_11_43_57/']
+folders = ['/home/tue/remote_desktop/test_npendulum/2022-07-05_22_21_24/'] #RK4 train 100, skip 20
+# folders = ['/home/tue/remote_desktop/test_npendulum/2022-07-05_22_37_38/'] #Euler train 100, skip 20
 
 
 # subfolders = get_immediate_subdirectories(folders)
 
 # output_dir = '/home/tue/remote_desktop/regularization10/'
 # os.makedirs(output_dir,exist_ok=True)
-legends = [r'$\gamma=0$',r'$\gamma=1$',r'$\gamma=2$',r'$\gamma=5$',r'$\gamma=10$',r'$\gamma=20$',r'$\gamma=50$']
+# legends = [r'$\gamma=0$',r'$\gamma=1$',r'$\gamma=2$',r'$\gamma=5$',r'$\gamma=10$',r'$\gamma=20$',r'$\gamma=50$']
+legends = [r'$\gamma=0$',r'$\gamma=10$',r'$\gamma=50$',r'$\gamma=100$',r'$\gamma=200$',r'$\gamma=500$',r'$\gamma=1000$']
 # legends = [r'$\gamma=0$',r'$\gamma=10$',r'$\gamma=100$',r'$\gamma=500$',r'$\gamma=1000$',r'$\gamma=1500$']
 # legends = [r'$\gamma=0$',r'$\gamma=100$',r'$\gamma=500$',r'$\gamma=1000$',r'$\gamma=1500$',r'$\gamma=2000$',r'$\gamma=3000$',r'$\gamma=5000$']
 colors = ['black', 'orange','blue', 'red', 'green','purple','brown','grey']
@@ -371,7 +374,7 @@ results_numpy = np.concatenate(results,axis=1)
 # plot_training_and_validation_accumulated_custom(results_selected,legends,output_dir,colors,semilogy=True,fill_between=True)
 
 
-output_dir = '/home/tue/npendulum/stab_test_100'
+output_dir = '/home/tue/npendulum/stab_test_100_rk4'
 os.makedirs(output_dir,exist_ok=True)
 
 # selected_idx = [0,1,2,7,8,13,14]

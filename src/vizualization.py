@@ -139,7 +139,7 @@ def plot_pendulum_snapshot_custom(Rin,Vin,file=None,fighandler=None,color='red')
     if file is not None:
         os.makedirs(os.path.dirname(file),exist_ok=True)
         plt.savefig(file, bbox_inches="tight", pad_inches=0)
-    # plt.close()
+        plt.close()
     return (fig,ax)
 
 

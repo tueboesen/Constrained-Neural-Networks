@@ -218,10 +218,11 @@ class neural_network_mimetic(nn.Module):
             node_attr_embedded = self.node_attr_embedder(node_attr.min(dim=-1)[0].to(dtype=torch.int64)).squeeze()
         else:
             node_attr_embedded = node_attr
-        y = self.uplift(x)
+        y = self.inverse(x)
         ndimx = x.shape[-1]
         ndimy = y.shape[-1]
         y_old = y
+
         for i in range(self.nlayers):
             if x.isnan().any():
                 raise ValueError("NaN detected")

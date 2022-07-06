@@ -36,6 +36,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     model_name_best = "{}/{}.pt".format(c['result_dir'], 'model_best')
     os.makedirs(c['result_dir'])
     logfile_loc = "{}/{}.log".format(c['result_dir'], 'output')
+    debug_folder = f"{c['result_dir']}/debug"
     LOG = log.setup_custom_logger('runner', logfile_loc, c['debug'])
     log_all_parameters(LOG, c)
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -50,7 +51,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
 
     cv = load_constraint_parameters(c['con'], c['con_type'], c['data_type'], con_data=c['con_data'],model_specific=c['model_specific'])
 
-    con_fnc = load_constraints(c['con'], c['con_type'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,device=device)
+    con_fnc = load_constraints(c['con'], c['con_type'], con_variables=cv,rscale=ds.rscale,vscale=ds.vscale,device=device,debug_folder=debug_folder)
 
     if c['network_type'].lower() == 'eq':
         model = neural_network_equivariant(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
@@ -85,7 +86,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     while epoch < c['epochs']:
         t1 = time.time()
         if c['use_training']:
-            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'])
+            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'])
         else:
             loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t2 = time.time()

@@ -1,14 +1,15 @@
 import inspect
 import time
+from datetime import datetime
 
 import torch
 import torch.nn as nn
 from torch.autograd import grad
 
-from src.vizualization import plot_water
+from src.vizualization import plot_water, plot_pendulum_snapshot_custom
 
 
-def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='cpu'):
+def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='cpu',debug_folder=None):
     """
     This is a wrapper function for loading constraints.
     """
@@ -22,10 +23,10 @@ def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='c
         if con_type == 'stabhigh':
             niter = 1
         else:
-            niter = 2000
-        converged_acc = 1e-5
+            niter = 200
+        converged_acc = 1e-4
         L = torch.tensor(con_variables['L'][0])
-        con_fnc = MultiPendulum(L,niter=niter,tol=converged_acc)
+        con_fnc = MultiPendulum(L,niter=niter,tol=converged_acc,debug_folder=debug_folder)
     elif con == '':
         con_fnc = None
     else:
@@ -83,12 +84,18 @@ class ConstraintTemplate(nn.Module):
         niter: Maximum number of gradient descent steps taken.
     """
 
-    def __init__(self, tol,niter,sanity_check_upon_first_run=True):
+    def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None):
         super(ConstraintTemplate, self).__init__()
         self.tol = tol
         self.n = niter
         self.sanity_check = sanity_check_upon_first_run
+        self.debug_folder=debug_folder
         return
+
+    def debug(self,x):
+        raise NotImplementedError(
+            "Debug function has not been implemented for {:}".format(self._get_name()))
+
 
     def constraint(self,x):
         raise NotImplementedError(
@@ -110,29 +117,48 @@ class ConstraintTemplate(nn.Module):
         return dy
 
     def gradient_descent(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1):
+        nb = y.shape[0]
+        alpha = torch.ones(nb,device=y.device)
+
         for j in range(self.n):
+            idx_all = torch.arange(nb)
             x = project(y)
             c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
-            if c_error_mean < self.tol:
+            cm = c.abs().max(dim=1)[0]
+            M = cm > self.tol
+            idx = idx_all[M]
+            if len(idx) == 0:
                 break
-            dx = self.jacobian_transpose_times_constraint(x,c)
-            dx = weight * dx
+            dx = self.jacobian_transpose_times_constraint(x[idx],c[idx])
+            dx = weight[idx] * dx
             dy = uplift(dx)
-            if j == 0:
-                alpha = 1.0 / dy.norm(dim=-1).mean()
-            lsiter = 0
+            lsiter = torch.zeros(len(idx))
             while True:
-                y_try = y - alpha * dy
+                y_try = y[idx] - alpha[idx,None,None] * dy
                 x_try = project(y_try)
                 c_try, c_error_mean_try, c_error_max = self.compute_constraint_violation(x_try)
-                if c_error_mean_try < c_error_mean:
+                cm_try = c_try.abs().max(dim=1)[0]
+                M_try = cm_try <= cm[idx]
+                if M_try.all():
                     break
-                alpha = alpha / 2
-                lsiter = lsiter + 1
-            if lsiter == 0 and c_error_mean_try > self.tol:
-                alpha = alpha * 1.5
-            if c_error_mean_try < c_error_mean:
-                y = y - alpha * dy
+                idx_sel = idx[~M_try]
+                alpha[idx_sel] = alpha[idx_sel] / 2
+                lsiter[~M_try] = lsiter[~M_try] + 1
+                if lsiter.max() > 100:
+                    break
+            M_increase = lsiter == 0
+            idx_sel = idx[M_increase]
+            alpha[idx_sel] = alpha[idx_sel] * 1.5
+            ysel = y[idx] - alpha[idx,None,None] * dy
+            yall = []
+            count = 0
+            for i in range(nb):
+                if M[i]:
+                    yall.append(ysel[count])
+                    count = count + 1
+                else:
+                    yall.append(y[i])
+            y = torch.stack(yall,dim=0)
         return y
 
     def compute_constraint_violation(self, x):
@@ -158,10 +184,11 @@ class MultiPendulum(ConstraintTemplate):
         l: A torch tensor with the length of the different pendulums, can also be a single number if all pendulums have the same length.
         position_idx: gives the indices for x and y coordinates in ndims.
     """
-    def __init__(self,l,tol,niter,position_idx=[0,1]):
-        super(MultiPendulum, self).__init__(tol,niter)
+    def __init__(self,l,tol,niter,position_idx=[0,1],velocity_idx=[2,3],debug_folder=None):
+        super(MultiPendulum, self).__init__(tol,niter,debug_folder=debug_folder)
         self.l = l
         self.position_idx = position_idx
+        self.velocity_idx = velocity_idx
         return
 
     def delta_r(self,r):
@@ -180,6 +207,14 @@ class MultiPendulum(ConstraintTemplate):
         r = x[:,:,self.position_idx]
         return r
 
+    def extract_velocity(self,x):
+        """
+        Extracts velocities, v, from x
+        """
+        v = x[:,:,self.velocity_idx]
+        return v
+
+
     def insert_positions(self,r,x_template):
         """
         Inserts, r, back into a zero torch tensor similar to x_template at the appropriate spot.
@@ -187,6 +222,14 @@ class MultiPendulum(ConstraintTemplate):
         x = torch.zeros_like(x_template)
         x[:,:,self.position_idx] = r
         return x
+
+    def debug(self, x,c):
+        r = self.extract_positions(x)
+        v = self.extract_velocity(x)
+        idx = torch.argmax(c.mean(dim=1))
+        debug_file = f"{self.debug_folder}/{datetime.now():%H_%M_%S.%f}.png"
+        plot_pendulum_snapshot_custom(r[idx].detach().cpu(), v[idx].detach().cpu(), file=debug_file, fighandler=None, color='red')
+
 
     def constraint(self,x):
         """
