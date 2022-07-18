@@ -14,11 +14,18 @@ if __name__ == '__main__':
     #     'regularization': [0,0,0,0,0,0,1,1,1]
     # }
 
-    #Penalty sweep high
+    # #Penalty sweep high
+    # mutable_parameters = {
+    #     'con_type': ['high','high','high','high','high','high'],
+    #     'penalty': [0,1,10,50,100,200],
+    # }
+
+    #Reg sweep high
     mutable_parameters = {
         'con_type': ['high','high','high','high','high','high'],
-        'penalty': [0,1,10,50,100,200],
+        'regularization': [0,0.0001,0.001,0.01,0.1,1],
     }
+
 
     # #Penalty sweep low
     # mutable_parameters = {
@@ -70,6 +77,7 @@ if __name__ == '__main__':
                            'angles': False
                            }
     args.regularization = 0
+    args.penalty = 0
     args.con_data = ""
     # args.gamma = [100]
     # args.gamma = [500]

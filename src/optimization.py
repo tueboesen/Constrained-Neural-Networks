@@ -17,17 +17,17 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
     A wrapper function for the different data types currently supported for training/inference
     """
     if data_type == 'water':
-        loss_r, loss_v, cv, cv_max, MAEr = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        loss_r, loss_v, cv, cv_max, MAEr, reg = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
         drmsd = 0
     elif data_type == 'protein':
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max ,MAEr = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz)
+        loss_r, loss_v, cv,cv_max ,MAEr, reg = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v, drmsd, cv, cv_max,MAEr
+    return loss_r, loss_v, drmsd, cv, cv_max,MAEr,reg
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5):
@@ -50,6 +50,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     vscale = ds.vscale
     aloss_r = 0.0
     aloss_v = 0.0
+    areg = 0.0
     acv = 0.0
     acv_max = 0.0
     aMAEr = 0.0
@@ -199,6 +200,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         aloss_v += loss_v.item()
         acv += (cv_mean*rscale).item()
         acv_max = max((cv_max*rscale).item(),acv_max)
+        areg += reg.item()
         aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
 
@@ -260,9 +262,10 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     aloss_v /= (i + 1)
     acv /= (i + 1)
     aMAEr /= (i + 1)
+    areg /= (i + 1)
     # aMAEv /= (i + 1)
 
-    return aloss_r, aloss_v, acv, acv_max, aMAEr#, aMAEv
+    return aloss_r, aloss_v, acv, acv_max, aMAEr, areg#, aMAEv
 
 
 #

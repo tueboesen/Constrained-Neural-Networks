@@ -136,7 +136,6 @@ class ConstraintTemplate(nn.Module):
             dx = weight * dx
             dy = uplift(dx)
             if j == 0:
-                reg = c_error_mean
                 alpha = 1.0 / dy.norm(dim=-1).mean()
             lsiter = 0
             while True:
