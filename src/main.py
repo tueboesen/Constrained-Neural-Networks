@@ -57,10 +57,10 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         model = neural_network_equivariant(irreps_inout=cn['irreps_inout'], irreps_hidden=cn['irreps_hidden'], layers=cn['layers'],
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
-                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node,discretization=c['network_discretization'],gamma=c['gamma'])
+                                    num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node,discretization=c['network_discretization'],gamma=c['penalty'])
     elif c['network_type'] == 'mim':
         node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in'] * 2
-        model = neural_network_mimetic(node_dim_in,cn['node_dim_latent'], cn['nlayers'], con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'],gamma=c['gamma'])
+        model = neural_network_mimetic(node_dim_in,cn['node_dim_latent'], cn['nlayers'], con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'],gamma=c['penalty'],regularization=c['regularization'])
     else:
         raise NotImplementedError("Network type is not implemented")
 

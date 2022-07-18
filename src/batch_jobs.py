@@ -153,6 +153,99 @@ def job_planner2(c):
 
 
 
+def job_planner3(c,mutable_parameters):
+    """
+    This function can plan out multiple jobs to be run
+    """
+    c['result_dir_base'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
+        root='results',
+        runner_name=c['basefolder'],
+        date=datetime.now(),
+    )
+    os.makedirs(c['result_dir_base'])
+    c_base = copy.deepcopy(c)
+    cs = []
+    legends = []
+
+    for i,(key, val) in enumerate(mutable_parameters.items()):
+        if i == 0 :
+            njobs = len(val)
+        else:
+            assert len(val) == njobs, f'the number of jobs differ in the mutable parameters, njobs={njobs}, while {key} has {len(val)} jobs.'
+    for i,seed in enumerate(c_base['seed']):
+        jobid = 0
+        for j in range(njobs):
+            c_new = copy.deepcopy(c)
+            legend = ''
+            for (key, val) in mutable_parameters.items():
+                c_new[key] = val[j]
+                legend = f"{legend}{key}={val[j]}_"
+            c_new['repetition'] = i
+            c_new['result_dir'] = f"{c['result_dir_base']}/{legend}{i}"
+            c_new['seed'] = seed
+            c_new['jobid'] = jobid
+            if not ('network' in c):
+                c_new = standard_network_sizes(c_new, c_new['network_type'])
+            if c_new['loss'] == '':
+                c_new['loss'] = c_new['network_type']
+            if jobid > 0:
+                c_new['use_same_data'] = True
+            else:
+                c_new['use_same_data'] = False
+            if i == 0:
+                legends.append(legend)
+            cs.append(c_new)
+            jobid += 1
+
+
+
+
+
+            # for (key, val) in mutable_parameters.items():
+        #
+        #
+        # for network_type in c_base['network_type']:
+        #     for con in c_base['con']:
+        #         if con == '' or con == 'angles':
+        #             con_type = ''
+        #             c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i,1)
+        #             cs.append(c_new)
+        #             if i == 0:
+        #                 legends.append(legend)
+        #         else:
+        #             for con_type in c_base['con_type']:
+        #                 if con_type == 'reg':
+        #                     for regularizationparameter in c_base['regularizationparameter']:
+        #                         c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,regularizationparameter)
+        #                         cs.append(c_new)
+        #                         if i == 0:
+        #                             legends.append(legend)
+        #                 elif con_type == 'stabhigh':
+        #                     for gamma in c_base['gamma']:
+        #                         c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,gamma=gamma)
+        #                         cs.append(c_new)
+        #                         if i == 0:
+        #                             legends.append(legend)
+        #
+        #                 else:
+        #                     c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid, i, 1)
+        #                     cs.append(c_new)
+        #                     if i == 0:
+        #                         legends.append(legend)
+
+    # results = {}
+    # keys = define_data_keys()
+    # for key in keys:
+    #     results[key] = np.zeros((len(legends),len(c_base['seed']),c['epochs']))
+    results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
+    assert len(set(legends)) == len(legends), "Some of the mutable parameter combinations used are identical, remove those"
+
+    return cs, legends, results
+
+
+
+
+
 
 
 

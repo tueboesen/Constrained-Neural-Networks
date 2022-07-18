@@ -134,8 +134,8 @@ def plot_pendulum_snapshot_custom(Rin,Vin,file=None,fighandler=None,color='red')
     l_in, = ax.plot(Rin[:,0], Rin[:,1],color='grey', alpha=0.2)
     lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'o', color=color, alpha=0.7, ms=20)
 
-    # plt.axis('square')
-    plt.axis('off')
+    plt.axis('square')
+    # plt.axis('off')
     if file is not None:
         os.makedirs(os.path.dirname(file),exist_ok=True)
         plt.savefig(file, bbox_inches="tight", pad_inches=0)

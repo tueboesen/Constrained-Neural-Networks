@@ -105,6 +105,10 @@ class ConstraintTemplate(nn.Module):
         _, JTc = torch.autograd.functional.vjp(self.constraint,x,c)
         return JTc
 
+    def jacobian_transpose_times_constraint_backup(self,x,c):
+        _, JTc = torch.autograd.functional.vjp(self.constraint,x,c)
+        return JTc
+
     def constrain_stabilization(self, y,project=nn.Identity(),uplift=nn.Identity(),weight=1):
         """
         Calculates constraint stabilization as dy = J^T c
@@ -116,19 +120,69 @@ class ConstraintTemplate(nn.Module):
         dy = uplift(dx)
         return dy
 
-    def gradient_descent(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1):
+
+    def gradient_descent(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1,debug=False):
+        y_org = y.clone()
+        for j in range(self.n):
+            x = project(y)
+            c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
+            if j == 0:
+                reg = c_error_mean
+            if c_error_max < self.tol:
+                break
+            if debug:
+                self.debug(x, c, extra=j)
+            dx = self.jacobian_transpose_times_constraint(x,c)
+            dx = weight * dx
+            dy = uplift(dx)
+            if j == 0:
+                reg = c_error_mean
+                alpha = 1.0 / dy.norm(dim=-1).mean()
+            lsiter = 0
+            while True:
+                y_try = y - alpha * dy
+                x_try = project(y_try)
+                # y_try2 = uplift(x_try)
+                # x_try2 = project(y_try2)
+                c_try, c_error_mean_try, c_error_max_try = self.compute_constraint_violation(x_try)
+                if c_error_max_try < c_error_max:
+                    break
+                alpha = alpha / 2
+                lsiter = lsiter + 1
+                if alpha == 0:
+                    if c_error_max > 1e-2 and debug is False:
+                        self.gradient_descent(y_org, project, uplift, weight, debug=True)
+                    return y
+            if lsiter == 0 and c_error_max_try > self.tol:
+                alpha = alpha * 1.5
+            if c_error_max_try < c_error_max:
+                y = y - alpha * dy
+        if j+1 >= self.n:
+            print("problems detected!")
+            # self.gradient_descent(y_org, project, uplift, weight, extra='n_exceeded', debug=True)
+        # print(j)
+        return y, reg
+
+
+    def gradient_descent_batch(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1,debug_idx=None):
+        y_org = y.clone()
         nb = y.shape[0]
         alpha = torch.ones(nb,device=y.device)
-
-        for j in range(self.n):
+        j = 0
+        while True:
+        # for j in range(self.n):
             idx_all = torch.arange(nb)
             x = project(y)
             c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
+            if j == 0:
+                reg = c_error_mean
             cm = c.abs().max(dim=1)[0]
             M = cm > self.tol
             idx = idx_all[M]
             if len(idx) == 0:
                 break
+            if debug_idx is not None:
+                self.debug(x, c, extra=j, idx=debug_idx)
             dx = self.jacobian_transpose_times_constraint(x[idx],c[idx])
             dx = weight[idx] * dx
             dy = uplift(dx)
@@ -159,7 +213,23 @@ class ConstraintTemplate(nn.Module):
                 else:
                     yall.append(y[i])
             y = torch.stack(yall,dim=0)
-        return y
+            j += 1
+            if j > self.n:
+                # print(f"{cm.max()}")
+                # if debug_idx is None:
+                #     self.gradient_descent_batch(y_org,project,uplift,weight,debug_idx=cm.argmax())
+                # x = project(y)
+                # x_org = project(y_org)
+                # c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
+                # c_org, c_org_error_mean, c_org_error_max = self.compute_constraint_violation(x_org)
+                # dx = self.jacobian_transpose_times_constraint(x, c)
+                # dx2 = self.jacobian_transpose_times_constraint_backup(x, c)
+                # self.debug(x,c)
+                # self.debug(x_org,c_org,extra='org')
+                # assert torch.allclose(dx,dx2,rtol=1e-7), "The jacobian is wrong!"
+
+                break
+        return y, reg
 
     def compute_constraint_violation(self, x):
         """
@@ -171,9 +241,19 @@ class ConstraintTemplate(nn.Module):
         c_error_max = torch.max(torch.abs(cabs))
         return c,c_error_mean, c_error_max
 
-    def forward(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1):
-        y = self.gradient_descent(y, project, uplift, weight)
-        return y
+    def forward(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True):
+        if use_batch:
+            y, reg = self.gradient_descent_batch(y,project,uplift,weight)
+        else:
+            nb = y.shape[0]
+            y_new = []
+            reg = 0
+            for i in range(nb):
+                tmp, regi = self.gradient_descent(y[i:i+1], project, uplift, weight[i:i+1])
+                y_new.append(tmp)
+                reg = reg + regi
+            y = torch.cat(y_new, dim=0)
+        return y, reg
 
 class MultiPendulum(ConstraintTemplate):
     """
@@ -223,11 +303,12 @@ class MultiPendulum(ConstraintTemplate):
         x[:,:,self.position_idx] = r
         return x
 
-    def debug(self, x,c):
+    def debug(self, x,c,extra='',idx=None):
         r = self.extract_positions(x)
         v = self.extract_velocity(x)
-        idx = torch.argmax(c.mean(dim=1))
-        debug_file = f"{self.debug_folder}/{datetime.now():%H_%M_%S.%f}.png"
+        if idx is None:
+            idx = torch.argmax(c.mean(dim=1))
+        debug_file = f"{self.debug_folder}/{datetime.now():%H_%M_%S.%f}_{extra}.png"
         plot_pendulum_snapshot_custom(r[idx].detach().cpu(), v[idx].detach().cpu(), file=debug_file, fighandler=None, color='red')
 
 

@@ -160,7 +160,7 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=1):
+    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=0,regularization=0):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
@@ -177,10 +177,18 @@ class neural_network_mimetic(nn.Module):
         self.dim = dim
         self.low_dim = node_dim_in
         self.high_dim = node_dim_latent
+        self.regularization = regularization
+        device = 'cuda:0'
         # self.PU.make_matrix_semi_unitary()
-        w = torch.empty((self.high_dim,self.low_dim))
-        torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        self.K = torch.nn.Parameter(w)
+        # torch.nn.Linear
+        # w = torch.empty((self.high_dim,self.low_dim))
+        # torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
+        # self.K = torch.nn.Parameter(w)
+        self.lin = torch.nn.Linear(self.low_dim,self.high_dim)
+        self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
+        # self.register_buffer("K", self.lin.weight)
+        # self.ortho = torch.nn.utils.parametrizations.orthogonal(torch.nn.Linear(self.high_dim,self.low_dim))
+        # self.K = self.lin.weight
 
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
@@ -197,17 +205,19 @@ class neural_network_mimetic(nn.Module):
             self.PropagationBlocks.append(block)
         return
 
-    def inverse(self,x):
-        # y = x @ self.K.T @ torch.inverse(self.K @ self.K.T) #This is for the right side
-        y = x @ torch.inverse(self.K.T @ self.K) @ self.K.T
-        return y
+    # def inverse(self,x):
+    #     y = x @ self.K.T @ torch.inverse(self.K @ self.K.T) #This is for the right side
+        # y = x @ torch.inverse(self.K.T @ self.K) @ self.K.T
+        # return y
 
     def uplift(self,x):
-        y = x @ self.K.T
+        y = x @ self.lin.weight.T
+        # y = x @ self.K.T
         return y
 
     def project(self,y):
-        x = y @ self.K
+        x = y @ self.lin.weight
+        # x = y @ self.K
         return x
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,ignore_con=False,weight=1):
@@ -218,10 +228,11 @@ class neural_network_mimetic(nn.Module):
             node_attr_embedded = self.node_attr_embedder(node_attr.min(dim=-1)[0].to(dtype=torch.int64)).squeeze()
         else:
             node_attr_embedded = node_attr
-        y = self.inverse(x)
+        y = self.uplift(x)
         ndimx = x.shape[-1]
         ndimy = y.shape[-1]
         y_old = y
+        reg = 0
 
         for i in range(self.nlayers):
             if x.isnan().any():
@@ -237,8 +248,8 @@ class neural_network_mimetic(nn.Module):
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
             tmp = y.clone()
 
-            if self.con_type == 'stabhigh':
-                if self.con_type == 'stabhigh':
+            if self.gamma > 0:
+                if self.discretization == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
                     q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
                     q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
@@ -261,22 +272,22 @@ class neural_network_mimetic(nn.Module):
                 k4 = self.PropagationBlocks[i](y.clone() + k3 * self.h[i] ** 2, edge_attr, edge_src, edge_dst)
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
                 y = y + self.h[i]**2 * (y_new - self.gamma*dy)
-
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
 
             if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
-                y = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                y, regi = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
                 y = y.view(-1,ndimy)
+                reg = reg + regi
                 if y.isnan().any():
                     raise ValueError("NaN detected")
 
             x = self.project(y)
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
-            x = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
             x = x.view(-1,ndimx)
         if x.isnan().any():
             raise ValueError("NaN detected")
@@ -286,4 +297,5 @@ class neural_network_mimetic(nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        return x, cv_mean, cv_max
+        reg = reg * self.regularization
+        return x, cv_mean, cv_max, reg

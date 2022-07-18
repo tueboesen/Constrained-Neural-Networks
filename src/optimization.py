@@ -1,5 +1,6 @@
 import inspect
 import torch.nn.functional as F
+import torch.nn.utils.parametrize as P
 
 import torch
 from e3nn import o3
@@ -105,7 +106,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             edge_dst = edge_index[1]
             wstatic = None
 
-        output, cv_mean,cv_max = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
+        with P.cached():
+            output, cv_mean,cv_max, reg = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
@@ -149,15 +151,15 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         if loss_type.lower() == 'eq':
             loss_r, loss_v = lossE_rel_r, lossE_rel_v
             if predict_pos_only:
-                loss = lossE_rel_r
+                loss = lossE_rel_r + reg
             else:
-                loss = lossE_rel
+                loss = lossE_rel + reg
         elif loss_type.lower() == 'mim':
             loss_r, loss_v = lossD_rel_r, lossD_rel_v
             if predict_pos_only:
-                loss = lossD_rel_r
+                loss = lossD_rel_r + reg
             else:
-                loss = lossD_rel
+                loss = lossD_rel + reg
         else:
             raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
