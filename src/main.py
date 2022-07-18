@@ -122,7 +122,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         # LOG.info(f'{epoch:2d}  DRMSD(train){drmsd_t:.2e}  DRMSD(val){drmsd_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
         #          f'Time(total) {(time.time() - t0)/3600:.1f}h')
 
-        LOG.info(f'{epoch:2d}  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v})  MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
+        LOG.info(f'{epoch:2d}  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
 
