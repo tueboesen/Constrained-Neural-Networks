@@ -21,11 +21,22 @@ if __name__ == '__main__':
     # }
 
     #Penalty sweep low
-    mutable_parameters = {
-        'con_type': ['low','low','low','low','low','low'],
-        'penalty': [0,1,10,50,100,200],
-    }
+    # mutable_parameters = {
+    #     'con_type': ['low','low','low','low','low','low'],
+    #     'penalty': [0,1,10,50,100,200],
+    # }
 
+    # #regularization sweep low
+    # mutable_parameters = {
+    #     'con_type': ['low','low','low','low','low'],
+    #     'regularization': [0,0.001,0.01,0.1,1],
+    # }
+    #
+
+    mutable_parameters = {
+        'con_type': ['low','low','low'],
+        'regularization': [0,0.5,1],
+    }
 
 
     parser = argparse.ArgumentParser(description='Constrained MD')
@@ -47,7 +58,7 @@ if __name__ == '__main__':
     # args.seed = [1234,1235]
     args.seed = [1234,1235,1236,1237,1238]
     args.use_same_data = True
-    args.epochs = 150
+    args.epochs = 40
     args.load_previous_model_file = ''
     args.network_type = 'mim'  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.
     args.network_discretization = 'rk4'
@@ -71,6 +82,7 @@ if __name__ == '__main__':
                            }
     args.regularization = 0
     args.con_data = ""
+    args.penalty = 0
     # args.gamma = [100]
     # args.gamma = [500]
     args.use_double = True

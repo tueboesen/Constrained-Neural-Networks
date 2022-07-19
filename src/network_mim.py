@@ -177,7 +177,7 @@ class neural_network_mimetic(nn.Module):
         self.dim = dim
         self.low_dim = node_dim_in
         self.high_dim = node_dim_latent
-        self.regularization = regularization
+        # self.regularization = regularization
         device = 'cuda:0'
         # self.PU.make_matrix_semi_unitary()
         # torch.nn.Linear
@@ -297,5 +297,5 @@ class neural_network_mimetic(nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        reg = reg * self.regularization
+        reg = reg
         return x, cv_mean, cv_max, reg

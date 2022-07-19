@@ -11,7 +11,7 @@ if __name__ == '__main__':
     args.n_train = 100
     args.n_val = 500
     args.batch_size = 5
-    args.nskip = 99
+    args.nskip = 49
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8
     args.use_training = True
@@ -30,7 +30,8 @@ if __name__ == '__main__':
     args.loss = ''
     # args.data = ''
     args.data_val = ''
-    args.data = './../Data/water.npz'
+    # args.data = './../Data/water.npz'
+    args.data = './../../../data/MD/water_jones/water.npz'
     args.data_type = 'water'
     args.data_dim = 3
     args.con = ['water']
@@ -47,7 +48,7 @@ if __name__ == '__main__':
                            }
     args.regularizationparameter = [1e-2]
     args.con_data = ""
-    args.gamma = [0,100,500,1000,5000,10000]
+    args.gamma = [0,0.1,0.5,1,2,5]
     # args.gamma = [100]
     args.use_double = True
     args.basefolder = os.path.basename(__file__).split(".")[0]

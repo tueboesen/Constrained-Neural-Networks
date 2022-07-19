@@ -6,7 +6,6 @@ import matplotlib as mpl
 from mpl_toolkits import mplot3d
 import torch
 
-from colour import Color
 
 def colorFader(c1,c2,mix=0): #fade (linear interpolate) from color c1 (at mix=0) to c2 (mix=1)
     c1=np.array(mpl.colors.to_rgb(c1))

@@ -12,7 +12,7 @@ from src.utils import Distogram, define_data_keys, atomic_masses
 from src.vizualization import plot_pendulum_snapshot
 
 
-def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False,nviz=5):
+def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False,nviz=5,regularization=0):
     """
     A wrapper function for the different data types currently supported for training/inference
     """
@@ -23,14 +23,14 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max ,MAEr, reg = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz)
+        loss_r, loss_v, cv,cv_max ,MAEr, reg = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
     return loss_r, loss_v, drmsd, cv, cv_max,MAEr,reg
 
 
-def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5):
+def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0):
     """
     A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -152,15 +152,15 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         if loss_type.lower() == 'eq':
             loss_r, loss_v = lossE_rel_r, lossE_rel_v
             if predict_pos_only:
-                loss = lossE_rel_r + reg
+                loss = lossE_rel_r + reg * regularization
             else:
-                loss = lossE_rel + reg
+                loss = lossE_rel + reg * regularization
         elif loss_type.lower() == 'mim':
             loss_r, loss_v = lossD_rel_r, lossD_rel_v
             if predict_pos_only:
-                loss = lossD_rel_r + reg
+                loss = lossD_rel_r + reg * regularization
             else:
-                loss = lossD_rel + reg
+                loss = lossD_rel + reg * regularization
         else:
             raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
