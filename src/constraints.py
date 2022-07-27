@@ -175,6 +175,7 @@ class ConstraintTemplate(nn.Module):
             c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
             if j == 0:
                 reg = c_error_mean
+                reg2 = (c*c).mean()
             cm = c.abs().max(dim=1)[0]
             M = cm > self.tol
             idx = idx_all[M]
@@ -228,7 +229,7 @@ class ConstraintTemplate(nn.Module):
                 # assert torch.allclose(dx,dx2,rtol=1e-7), "The jacobian is wrong!"
 
                 break
-        return y, reg
+        return y, reg, reg2
 
     def compute_constraint_violation(self, x):
         """
@@ -242,7 +243,7 @@ class ConstraintTemplate(nn.Module):
 
     def forward(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True):
         if use_batch:
-            y, reg = self.gradient_descent_batch(y,project,uplift,weight)
+            y, reg, reg2 = self.gradient_descent_batch(y,project,uplift,weight)
         else:
             nb = y.shape[0]
             y_new = []
@@ -252,7 +253,7 @@ class ConstraintTemplate(nn.Module):
                 y_new.append(tmp)
                 reg = reg + regi
             y = torch.cat(y_new, dim=0)
-        return y, reg
+        return y, reg, reg2
 
 class MultiPendulum(ConstraintTemplate):
     """

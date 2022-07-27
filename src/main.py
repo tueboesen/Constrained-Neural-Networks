@@ -86,14 +86,14 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     while epoch < c['epochs']:
         t1 = time.time()
         if c['use_training']:
-            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t,reg_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
+            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t,reg_t, reg2_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
         else:
-            loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t, reg_t = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+            loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t, reg_t, reg2_t = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t2 = time.time()
         if c['use_val']:
-            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
         else:
-            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v = torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t3 = time.time()
         if c['ignore_cons']:
             _,_,_,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
@@ -122,7 +122,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         # LOG.info(f'{epoch:2d}  DRMSD(train){drmsd_t:.2e}  DRMSD(val){drmsd_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
         #          f'Time(total) {(time.time() - t0)/3600:.1f}h')
 
-        LOG.info(f'{epoch:2d}  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
+        LOG.info(f'{epoch:2d}  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  reg2={reg2_t:.2e} ({reg2_v:.2e})  MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
 

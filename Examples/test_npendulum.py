@@ -27,10 +27,23 @@ if __name__ == '__main__':
     }
 
 
+    # #Reg sweep high
+    # mutable_parameters = {
+    #     'con_type': ['high','high'],
+    #     'regularization': [1,0],
+    # }
+
+
     # #Penalty sweep low
     # mutable_parameters = {
     #     'con_type': ['low','low','low','low','low','low'],
     #     'penalty': [0,1,10,50,100,200],
+    # }
+
+    # mutable_parameters = {
+    #     'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler'],
+    #     'regularization': [0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1],
+    #     'penalty': [0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200],
     # }
 
 
@@ -44,7 +57,7 @@ if __name__ == '__main__':
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8
     args.use_training = True
-    args.nviz = 2
+    args.nviz = 0
     args.use_val = True
     args.use_test = False
     args.perform_endstep_MD_propagation = False
@@ -54,7 +67,7 @@ if __name__ == '__main__':
     # args.seed = [1234,1235]
     args.seed = [1234,1235,1236,1237,1238]
     args.use_same_data = True
-    args.epochs = 150
+    args.epochs = 50
     args.load_previous_model_file = ''
     args.network_type = 'mim'  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.
     args.network_discretization = 'rk4'

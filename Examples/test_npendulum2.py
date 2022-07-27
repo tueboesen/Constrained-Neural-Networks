@@ -59,7 +59,7 @@ if __name__ == '__main__':
     # args.seed = [1234,1235]
     args.seed = [1234,1235,1236,1237,1238]
     args.use_same_data = True
-    args.epochs = 2
+    args.epochs = 150
     args.load_previous_model_file = ''
     args.network_type = 'mim'  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.
     args.network_discretization = 'rk4'
@@ -72,7 +72,7 @@ if __name__ == '__main__':
     args.con = 'n-pendulum'
     # args.con = ['n-pendulum','n-pendulum-seq','n-pendulum-seq-start']
     args.ignore_cons = False
-    args.con_type = 'low'
+    args.con_type = 'high'
     # args.con_type = ['stabhigh','high','low','']
     # args.con_type = ['high','low','reg']
     args.model_specific = {'n': 5,

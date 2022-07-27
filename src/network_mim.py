@@ -233,6 +233,7 @@ class neural_network_mimetic(nn.Module):
         ndimy = y.shape[-1]
         y_old = y
         reg = 0
+        reg2 = 0
 
         for i in range(self.nlayers):
             if x.isnan().any():
@@ -278,16 +279,17 @@ class neural_network_mimetic(nn.Module):
             if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
-                y, regi = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
                 y = y.view(-1,ndimy)
                 reg = reg + regi
+                reg2 = reg2 + regi2
                 if y.isnan().any():
                     raise ValueError("NaN detected")
 
             x = self.project(y)
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
-            x, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x, reg, reg2 = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
             x = x.view(-1,ndimx)
         if x.isnan().any():
             raise ValueError("NaN detected")
@@ -297,5 +299,4 @@ class neural_network_mimetic(nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        reg = reg
-        return x, cv_mean, cv_max, reg
+        return x, cv_mean, cv_max, reg, reg2

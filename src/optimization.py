@@ -23,11 +23,11 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max ,MAEr, reg = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization)
+        loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v, drmsd, cv, cv_max,MAEr,reg
+    return loss_r, loss_v, drmsd, cv, cv_max,MAEr,reg, reg2
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0):
@@ -51,6 +51,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     aloss_r = 0.0
     aloss_v = 0.0
     areg = 0.0
+    areg2 = 0.0
     acv = 0.0
     acv_max = 0.0
     aMAEr = 0.0
@@ -108,7 +109,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
             wstatic = None
 
         with P.cached():
-            output, cv_mean,cv_max, reg = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
+            output, cv_mean,cv_max, reg, reg2 = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
@@ -142,25 +143,30 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
 
 
         lossE_r, lossE_ref_r, lossE_rel_r = loss_eq(Rpred, Rout_vec, Rin_vec)
-        lossE_v, lossE_ref_v, lossE_rel_v = loss_eq(Vpred, Vout_vec, Vin_vec)
-        lossE_rel = (lossE_rel_r + lossE_rel_v)/2
-
         lossD_r, lossD_ref_r, lossD_rel_r = loss_mim(Rpred, Rout_vec, Rin_vec, edge_src, edge_dst)
+        lossE_v, lossE_ref_v, lossE_rel_v = loss_eq(Vpred, Vout_vec, Vin_vec)
         lossD_v, lossD_ref_v, lossD_rel_v = loss_mim(Vpred, Vout_vec, Vin_vec, edge_src, edge_dst)
-        lossD_rel = (lossD_rel_r + lossD_rel_v)/2
+        if predict_pos_only:
+            lossE_rel = lossE_rel_r
+            lossD_rel = lossD_rel_r
+
+        else:
+            lossE_rel = (lossE_rel_r + lossE_rel_v)/2
+            lossD_rel = (lossD_rel_r + lossD_rel_v)/2
+
 
         if loss_type.lower() == 'eq':
             loss_r, loss_v = lossE_rel_r, lossE_rel_v
             if predict_pos_only:
-                loss = lossE_rel_r + reg * regularization
+                loss = lossE_rel_r + reg2 * regularization
             else:
-                loss = lossE_rel + reg * regularization
+                loss = lossE_rel + reg2 * regularization
         elif loss_type.lower() == 'mim':
             loss_r, loss_v = lossD_rel_r, lossD_rel_v
             if predict_pos_only:
-                loss = lossD_rel_r + reg * regularization
+                loss = lossD_rel_r + reg2 * regularization
             else:
-                loss = lossD_rel + reg * regularization
+                loss = lossD_rel + reg2 * regularization
         else:
             raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
@@ -201,6 +207,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
         acv += (cv_mean*rscale).item()
         acv_max = max((cv_max*rscale).item(),acv_max)
         areg += reg.item()
+        areg2 += reg2.item()
         aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
 
@@ -263,9 +270,10 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     acv /= (i + 1)
     aMAEr /= (i + 1)
     areg /= (i + 1)
+    areg2 /= (i + 1)
     # aMAEv /= (i + 1)
 
-    return aloss_r, aloss_v, acv, acv_max, aMAEr, areg#, aMAEv
+    return aloss_r, aloss_v, acv, acv_max, aMAEr, areg, areg2#, aMAEv
 
 
 #
