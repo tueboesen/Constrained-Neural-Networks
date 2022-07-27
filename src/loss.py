@@ -32,10 +32,28 @@ def loss_eq(x_pred, x_out, x_in):
     Note that loss and loss_ref should be divided by the batch size if you intend to use either of those numbers.
     assumes that x has the shape [particles,spatial dims]
     """
-    loss = torch.sum(torch.norm(x_pred - x_out, p=2, dim=1))
-    loss_ref = torch.sum(torch.norm(x_in - x_out, p=2, dim=1))
+    # loss = torch.sum(torch.norm(x_pred - x_out, p=2, dim=1))
+    # aa=torch.norm(x_pred - x_out, p=2, dim=1)
+    loss = torch.mean(torch.sum((x_pred - x_out)**2,dim=1))
+    loss_ref = torch.mean(torch.sum((x_in - x_out)**2,dim=1))
+    # loss = F.mse_loss(x_pred, x_out)
+    # loss_ref =
+    # loss_ref = F.mse_loss(x_in, x_out)
+    # loss_ref = torch.sum(torch.norm(x_in - x_out, p=2, dim=1))
     loss_rel = loss / loss_ref
     return loss, loss_ref, loss_rel
+
+# def loss_eq(x_pred, x_out, x_in):
+#     """
+#     Computes the relative MSE coordinate loss, which can be used by equivariant networks
+#     Note that loss and loss_ref should be divided by the batch size if you intend to use either of those numbers.
+#     assumes that x has the shape [particles,spatial dims]
+#     """
+#     loss = torch.sum(torch.norm(x_pred - x_out, p=2, dim=1))
+#     loss_ref = torch.sum(torch.norm(x_in - x_out, p=2, dim=1))
+#     loss_rel = loss / loss_ref
+#     return loss, loss_ref, loss_rel
+
 
 def loss_mim(x_pred, x_out, x_in, edge_src, edge_dst):
     """

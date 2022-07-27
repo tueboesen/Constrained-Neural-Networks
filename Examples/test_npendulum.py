@@ -22,8 +22,8 @@ if __name__ == '__main__':
 
     #Reg sweep high
     mutable_parameters = {
-        'con_type': ['high','high','high','high','high','high'],
-        'regularization': [0,0.0001,0.001,0.01,0.1,1],
+        'con_type': ['high','high','high'],
+        'regularization': [0,0.1,1],
     }
 
 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # args.seed = [1234,1235]
     args.seed = [1234,1235,1236,1237,1238]
     args.use_same_data = True
-    args.epochs = 50
+    args.epochs = 150
     args.load_previous_model_file = ''
     args.network_type = 'mim'  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.
     args.network_discretization = 'rk4'
