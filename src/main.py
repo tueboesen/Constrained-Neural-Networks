@@ -72,8 +72,10 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     LOG.info('Number of parameters {:}'.format(total_params))
 
     lr = c['lr']
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
+                                  {"params": model.params.h.parameters()},
+                                  {'params': model.params.close.parameters(), 'lr': 1e-4}], lr=1e-3)
     lossBest = 1e6
     epochs_since_best = 0
     results=None

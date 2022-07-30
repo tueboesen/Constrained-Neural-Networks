@@ -203,6 +203,11 @@ class neural_network_mimetic(nn.Module):
         for i in range(nlayers):
             block = PropagationBlock(xn_dim=node_dim_latent, xn_attr_dim=atom_type_embed_dim)
             self.PropagationBlocks.append(block)
+        self.params = nn.ModuleDict({
+            "base": self.PropagationBlocks,
+            "h": nn.ParameterList([self.h]),
+            "close": nn.ModuleList([self.lin])
+        })
         return
 
     # def inverse(self,x):
@@ -232,8 +237,8 @@ class neural_network_mimetic(nn.Module):
         ndimx = x.shape[-1]
         ndimy = y.shape[-1]
         y_old = y
-        reg = 0
-        reg2 = 0
+        reg = torch.tensor(0.0)
+        reg2 =  torch.tensor(0.0)
 
         for i in range(self.nlayers):
             if x.isnan().any():

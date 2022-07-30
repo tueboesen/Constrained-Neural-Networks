@@ -21,10 +21,10 @@ if __name__ == '__main__':
     # }
 
     #Reg sweep high
-    mutable_parameters = {
-        'con_type': ['high','high','high'],
-        'regularization': [0,0.1,1],
-    }
+    # mutable_parameters = {
+    #     'con_type': ['high','high','high','high'],
+    #     'regularization': [0,0.1,1,10],
+    # }
 
 
     # #Reg sweep high
@@ -34,10 +34,16 @@ if __name__ == '__main__':
     # }
 
 
-    # #Penalty sweep low
+    #Penalty sweep low
+    mutable_parameters = {
+        # 'con_type': ['low','low','low','low','low','low'],
+        'penalty': [0,1,10,50,100,200],
+    }
+
     # mutable_parameters = {
-    #     'con_type': ['low','low','low','low','low','low'],
-    #     'penalty': [0,1,10,50,100,200],
+    #     # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler'],
+    #     'regularization': [1,1,1],
+    #     'penalty': [10,50,100],
     # }
 
     # mutable_parameters = {
@@ -45,7 +51,6 @@ if __name__ == '__main__':
     #     'regularization': [0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1],
     #     'penalty': [0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200],
     # }
-
 
 
     parser = argparse.ArgumentParser(description='Constrained MD')
@@ -80,7 +85,7 @@ if __name__ == '__main__':
     args.con = 'n-pendulum'
     # args.con = ['n-pendulum','n-pendulum-seq','n-pendulum-seq-start']
     args.ignore_cons = False
-    # args.con_type = ['high']
+    args.con_type = ''
     # args.con_type = ['stabhigh','high','low','']
     # args.con_type = ['high','low','reg']
     args.model_specific = {'n': 5,

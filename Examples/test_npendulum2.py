@@ -16,28 +16,41 @@ if __name__ == '__main__':
 
     # #Penalty sweep high
     # mutable_parameters = {
-    #     'con_type': ['high','high','high','high','high','high'],
+    #     # 'con_type': ['high','high','high','high','high','high'],
     #     'penalty': [0,1,10,50,100,200],
     # }
+
+    # #Reg sweep high
+    mutable_parameters = {
+        # 'con_type': ['high','high','high','high'],
+        'regularization': [20,50],
+    }
+
+
+    # #Reg sweep high
+    # mutable_parameters = {
+    #     'con_type': ['high','high'],
+    #     'regularization': [1,0],
+    # }
+
 
     #Penalty sweep low
-    # mutable_parameters = {
-    #     'con_type': ['low','low','low','low','low','low'],
-    #     'penalty': [0,1,10,50,100,200],
-    # }
-
-    # #regularization sweep low
-    # mutable_parameters = {
-    #     'con_type': ['low','low','low','low','low'],
-    #     'regularization': [0,0.001,0.01,0.1,1],
-    # }
-    #
-
     mutable_parameters = {
-        'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler'],
-        'regularization': [0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1],
-        'penalty': [0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200],
+        'con_type': ['low','low','low','low','low','low'],
+        'penalty': [0,1,10,50,100,200],
     }
+    #
+    # mutable_parameters = {
+    #     # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler'],
+    #     'regularization': [1,1,1],
+    #     'penalty': [10,50,100],
+    # }
+
+    # mutable_parameters = {
+    #     'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler','euler'],
+    #     'regularization': [0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1],
+    #     'penalty': [0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200,0,1,10,50,100,200],
+    # }
 
 
     parser = argparse.ArgumentParser(description='Constrained MD')
@@ -49,7 +62,7 @@ if __name__ == '__main__':
     args.epochs_for_lr_adjustment = 1000
     args.lr_adjustment = 0.8
     args.use_training = True
-    args.nviz = 2
+    args.nviz = 0
     args.use_val = True
     args.use_test = False
     args.perform_endstep_MD_propagation = False
@@ -72,7 +85,7 @@ if __name__ == '__main__':
     args.con = 'n-pendulum'
     # args.con = ['n-pendulum','n-pendulum-seq','n-pendulum-seq-start']
     args.ignore_cons = False
-    args.con_type = 'high'
+    args.con_type = 'low'
     # args.con_type = ['stabhigh','high','low','']
     # args.con_type = ['high','low','reg']
     args.model_specific = {'n': 5,
@@ -82,8 +95,8 @@ if __name__ == '__main__':
                            'angles': False
                            }
     args.regularization = 0
-    args.con_data = ""
     args.penalty = 0
+    args.con_data = ""
     # args.gamma = [100]
     # args.gamma = [500]
     args.use_double = True
