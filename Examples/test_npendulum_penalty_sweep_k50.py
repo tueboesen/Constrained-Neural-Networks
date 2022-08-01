@@ -13,7 +13,8 @@ if __name__ == '__main__':
         'penalty': [0,1,10,50,100,200],
     }
     c = load_base_parameters_npendulum()
-
+    c['basefolder'] = os.path.basename(__file__).split(".")[0]
+    c['nskip'] = 50
 
     cs, legends, results = job_planner3(c,mutable_parameters)
 
