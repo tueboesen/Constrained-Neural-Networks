@@ -8,10 +8,10 @@ A simple file to load data from an already finished run, and plot it with custom
 
 """
 
-folders = ['/home/tue/PycharmProjects/results/test_npendulum_initial_test/2022-08-03_20_38_18/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_penalty_sweep/2022-08-03_12_15_54/']  # train 100, skip 20
 
 
-output = 'Initial_test_train100_skip100_lr_var'
+output = 'gamma_sweep'
 
 # output_dir = '/home/tue/remote_desktop/regularization10/'
 # os.makedirs(output_dir,exist_ok=True)
@@ -40,8 +40,8 @@ output_dir = f"{base_output_dir}{output}"
 os.makedirs(output_dir, exist_ok=True)
 
 # selected_idx = [0,1,2,7,8,13,14]
-legends = ['No constraints', 'Stabilized', 'End constraints', 'Smooth constraints']
-colors = ['black','orange', 'blue', 'red']
+legends = [r'$\gamma=0$', r'$\gamma=1$', r'$\gamma=10$', r'$\gamma=50$', r'$\gamma=100$', r'$\gamma=200$']
+colors = ['black','orange', 'blue', 'red','darkgreen','pink']
 # colors = ['black', 'darkred', 'pink', 'darkgreen', 'lime', 'darkblue', 'slateblue']
 # results_selected = results_numpy
 # permutation = [0, 1, 4, 7, 2, 5, 8, 3, 6, 9] #The data was ordered as: ['No constraints' 'chain high' 'chain low' 'chain reg', 'triangle high' 'triangle low' 'triangle reg' 'chaintriangle high' 'chaintriangle low' 'chaintriangle reg'], but we wish a different ordering

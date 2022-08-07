@@ -252,7 +252,6 @@ class neural_network_mimetic(nn.Module):
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)
 
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
-            tmp = y.clone()
 
             if self.gamma > 0:
                 if self.discretization == 'rk4':
@@ -267,6 +266,7 @@ class neural_network_mimetic(nn.Module):
             else:
                 dy = 0
             if self.discretization == 'leapfrog':
+                tmp = y.clone()
                 y = 2*y - y_old - self.h[i]**2 * (y_new + self.gamma*dy)
                 y_old = tmp
             elif self.discretization == 'euler':

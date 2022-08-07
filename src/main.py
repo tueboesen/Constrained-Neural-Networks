@@ -43,7 +43,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
 
     # load training data
     if dataloader_train is None:
-        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'],file_val=c['data_val'],model_specific=c['model_specific'])
+        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep = load_data(c['data'], c['data_type'], device, c['nskip'], c['n_train'], c['n_val'], c['n_test'], c['use_val'], c['use_test'], c['batch_size'], use_endstep=c['perform_endstep_MD_propagation'],file_val=c['data_val'],model_specific=c['model_specific'])
     ds = dataloader_train.dataset
 
     if c['network_type'].lower() == 'eq':
@@ -72,10 +72,9 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     LOG.info('Number of parameters {:}'.format(total_params))
 
     lr = c['lr']
-    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
                                   {"params": model.params.h.parameters()},
-                                  {'params': model.params.close.parameters(), 'lr': 1e-4}], lr=1e-3)
+                                  {'params': model.params.close.parameters(), 'lr': lr*0.1}], lr=lr)
     lossBest = 1e6
     epochs_since_best = 0
     results=None
@@ -83,22 +82,20 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     csv_file = f"{c['result_dir']}/training.csv"
 
     t0 = time.time()
-    # print(f"{torch.cuda.memory_allocated() / 1024 / 1024:2.2f}MB")
-    # print(f"{torch.cuda.max_memory_allocated() / 1024 / 1024:2.2f}MB")
     while epoch < c['epochs']:
         t1 = time.time()
         if c['use_training']:
-            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t,reg_t, reg2_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
+            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t,reg_t, reg2_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
         else:
             loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t, reg_t, reg2_t = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t2 = time.time()
         if c['use_val']:
-            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size']*100, max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
         else:
             loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t3 = time.time()
         if c['ignore_cons']:
-            _,_,_,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
+            _,_,_,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
 
 
         # Next save results
@@ -115,11 +112,12 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
             torch.save(model.state_dict(), f"{model_name_best}")
         else:
             epochs_since_best += 1
-            if epochs_since_best >= c['epochs_for_lr_adjustment']:
-                for g in optimizer.param_groups:
-                    g['lr'] *= c['lr_adjustment']
-                    lr = g['lr']
-                epochs_since_best = 0
+            # if epochs_since_best >= c['epochs_for_lr_adjustment']:
+            #     for g in optimizer.param_groups:
+            #         g['lr'] *= c['lr_adjustment']
+            #         lr = g['lr']
+            #     epochs_since_best = 0
+        #
 
         # LOG.info(f'{epoch:2d}  DRMSD(train){drmsd_t:.2e}  DRMSD(val){drmsd_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
         #          f'Time(total) {(time.time() - t0)/3600:.1f}h')
@@ -127,12 +125,17 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         LOG.info(f'{epoch:2d}  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  reg2={reg2_t:.2e} ({reg2_v:.2e})  MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
+        if (epoch % c['epochs_for_lr_adjustment']) == 0:
+            for g in optimizer.param_groups:
+                g['lr'] *= c['lr_adjustment']
+                lr = g['lr']
 
     model.load_state_dict(torch.load(model_name_best))  # We load the best performing model
     if c['use_test']:
         t4 = time.time()
-        loss_test, lossD_test = run_model(c['data_type'], model, dataloader_test, train=False, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], batch_size=c['batch_size'] * 5, max_radius=cn['max_radius'], debug=c['debug'])
-        LOG.info(f'Testing...  Loss: {loss_test:.2e}  LossD: {lossD_test:.2e} Time(test) {time.time() - t4:.1f}s')
+        loss_r_v, loss_v_v, drmsd_v, cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_test, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'],
+                                                                                        max_radius=cn['max_radius'], debug=c['debug'], epoch=epoch,
+                                                                                        output_folder=c['result_dir'], nviz=c['nviz'], regularization=c['regularization'],viz_paper=True)
 
     if c['viz']:
         plot_training_and_validation(results,c['result_dir'])

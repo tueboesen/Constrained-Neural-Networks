@@ -3,7 +3,7 @@ Exact equivariance to :math:`E(3)`
 version of february 2021
 """
 import torch
-import torch.nn
+import torch.nn as nn
 import torch.nn.functional as F
 from e3nn import o3
 from e3nn.math import soft_one_hot_linspace
@@ -49,6 +49,8 @@ class neural_network_equivariant(torch.nn.Module):
         self.con_fnc = con_fnc
         self.con_type = con_type
         self.PU = PU
+        self.project = self.PU.project
+        self.uplift = self.PU.uplift
         self.discretization = discretization
         self.gamma = gamma
         self.particles_pr_nodes = particles_pr_node
@@ -100,6 +102,11 @@ class neural_network_equivariant(torch.nn.Module):
             irreps = gate.irreps_out
             self.convolutions.append(conv)
             self.gates.append(gate)
+        self.params = nn.ModuleDict({
+            "base": nn.ModuleList([self.convolutions, self.gates, self.self_interaction]),
+            "h": nn.ParameterList([self.h,self.mix]),
+            "close": nn.ModuleList([self.PU.lin])
+        })
         return
 
     def get_edge_info(self,x,edge_src,edge_dst):
@@ -125,48 +132,71 @@ class neural_network_equivariant(torch.nn.Module):
         edge_features = torch.cat(edge_features, dim=-1)
         return edge_features, edge_attrs
 
+    def forward_propagation(self,y,node_attr_embedded,edge_src,edge_dst,edge_attr,edge_features,num_neighbors,i):
+        y_new = self.convolutions[i](y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, num_neighbors)
+        y_new = self.gates[i](y_new)
+        y_new2 = self.self_interaction[i](y.clone())
+        y_out = self.mix[i] * y_new + (self.mix[i] - 1) * y_new2
+        return y_out
+
     def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,weight=1) -> torch.Tensor:
 
         if self.automatic_neighbors:
             self.num_neighbors = edge_dst.shape[0]/x.shape[0]
 
         node_attr_embedded = self.node_embedder(torch.min(node_attr,dim=-1)[0].to(dtype=torch.int64)).squeeze()
-        y = self.PU.inverse(x)
+        y = self.uplift(x)
 
         ndimx = x.shape[-1]
         ndimy = y.shape[-1]
-
         y_old = y
+        reg = torch.tensor(0.0)
+        reg2 =  torch.tensor(0.0)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
-            y_new = conv(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features,self.num_neighbors)
-            y_new = gate(y_new)
-            y_new2 = self.self_interaction[i](y.clone())
-            tmp = y.clone()
+            y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
 
-            if self.con_type == 'stabhigh':
-                dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1,-1,ndimy),self.PU.project,self.PU.uplift,weight)
-                dy = dy.view(-1,ndimy)
+            if self.gamma > 0:
+                if self.discretization == 'rk4':
+                    q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
+                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
+                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * self.h[i] ** 2, self.project, self.uplift, weight)
+                    dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
+                else:
+                    dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                dy = dy.view(-1, ndimy)
             else:
                 dy = 0
-
             if self.discretization == 'leapfrog':
-                y = 2*y - y_old + self.h[i]**2 *(self.mix[i]*y_new + (self.mix[i]-1) * y_new2 + self.gamma*dy)
+                tmp = y.clone()
+                y = 2*y - y_old + self.h[i]**2 *(y_new + self.gamma*dy)
                 y_old = tmp
             elif self.discretization == 'euler':
-                y = y + self.h[i] ** 2 * (y_new + (self.mix[i]-1) * y_new2 + self.gamma * dy)
+                y = y + self.h[i] ** 2 * (y_new - self.gamma * dy)
+            elif self.discretization == 'rk4':
+                k1 = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                k2 = self.forward_propagation(y.clone() + k1 * self.h[i] ** 2 / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                k3 = self.forward_propagation(y.clone() + k2 * self.h[i] ** 2 / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                k4 = self.forward_propagation(y.clone() + k3 * self.h[i] ** 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                y_new = (k1 + 2*k2 + 2*k3 + k4)/6
+                y = y + self.h[i]**2 * (y_new - self.gamma*dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
 
-            if self.con_fnc is not None and self.con_type == 'high':
-                y = self.con_fnc(y.view(batch.max() + 1, -1, ndimy), self.PU.project, self.PU.uplift,weight)
-                y = y.view(-1,ndimy)
 
-            x = self.PU.project(y)
+            if self.con_fnc is not None and self.con_type == 'high':
+                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                y = y.view(-1,ndimy)
+                reg = reg + regi
+                reg2 = reg2 + regi2
+
+
+            x = self.project(y)
         if self.con_fnc is not None and self.con_type == 'low':
-            x = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x, reg, reg2 = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
             x = x.view(-1,ndimx)
 
         if self.con_fnc is not None:
@@ -174,7 +204,7 @@ class neural_network_equivariant(torch.nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        return x, cv_mean, cv_max
+        return x, cv_mean, cv_max, reg, reg2
 
     def get_water_viz(self, y_new, y_old, batch):
         x_new = self.PU.project(y_new)

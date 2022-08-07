@@ -12,7 +12,7 @@ from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset
 from src.npendulum import NPendulum, get_coordinates_from_angle, animate_pendulum
 
 
-def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False,file_val=None,model_specific=None):
+def load_data(file,data_type,device,nskip,n_train,n_val,n_test,use_val,use_test,batch_size, shuffle=True, use_endstep=False,file_val=None,model_specific=None):
     """
     Wrapper function that handles the different supported data_types.
     """
@@ -27,14 +27,21 @@ def load_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_s
         dataloader_endstep = None
         dataloader_test = None
     elif data_type == 'n-pendulum':
-        dataloader_train, dataloader_val, =load_npendulum_data(data_type, device, nskip, n_train, n_val, use_val, batch_size, shuffle=shuffle,n=model_specific['n'],dt=model_specific['dt'],M=model_specific['M'],L=model_specific['L'], use_angles=model_specific['angles'])
-        dataloader_test, dataloader_endstep = None, None
+        dataloader_train, dataloader_val, dataloader_test =load_npendulum_data(data_type, device, nskip, n_train, n_val, n_test, use_val, use_test, batch_size, shuffle=shuffle,n=model_specific['n'],dt=model_specific['dt'],M=model_specific['M'],L=model_specific['L'], use_angles=model_specific['angles'])
+        dataloader_endstep = None
     else:
         NotImplementedError("The data_type={:} has not been implemented in function {:}".format(data_type, inspect.currentframe().f_code.co_name))
     return dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
 
 
-def load_npendulum_data(data_type,device,nskip,n_train,n_val,use_val,batch_size,n,dt, M, L, shuffle=True,n_extra=1000,use_angles=False):
+def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_test,batch_size,n,dt, M, L, shuffle=True,n_extra=1000,use_angles=False):
+    def select_indices(idx,v_tuple,device):
+        v_tuple_sel = []
+        for vector in v_tuple:
+            vector_sel = vector[idx].to(device)
+            v_tuple_sel.append(vector_sel)
+        return v_tuple_sel
+
     assert len(L) == n
     assert len(M) == n
 
@@ -45,7 +52,7 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,use_val,batch_size,
 
     theta0 = 0.5*math.pi*torch.ones(n)
     dtheta0 = 0.0*torch.ones(n)
-    nsteps = n_train + use_val *n_val+nskip + n_extra
+    nsteps = n_train + use_val * n_val + use_test * n_test + nskip + n_extra
 
     Npend = NPendulum(n,dt)
 
@@ -81,61 +88,37 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,use_val,batch_size,
         np.random.shuffle(ndata_rand)
     train_idx = ndata_rand[:n_train]
     val_idx = ndata_rand[n_train:n_train + n_val]
-
-    Rin_train = Rin[train_idx]
-    Rout_train = Rout[train_idx]
-    Vin_train = Vin[train_idx]
-    Vout_train = Vout[train_idx]
-
-    Rina_train = Rina[train_idx]
-    Routa_train = Routa[train_idx]
-    Vina_train = Vina[train_idx]
-    Vouta_train = Vouta[train_idx]
-
-    if use_val:
-        Rina_val = Rina[val_idx]
-        Routa_val = Routa[val_idx]
-        Vina_val = Vina[val_idx]
-        Vouta_val = Vouta[val_idx]
-        Rin_val = Rin[val_idx]
-        Rout_val = Rout[val_idx]
-        Vin_val = Vin[val_idx]
-        Vout_val = Vout[val_idx]
+    test_idx = ndata_rand[n_train+n_val:n_train + n_val+n_test]
 
     z = torch.arange(1,n+1)
-
     z = z.to(device)
     M = M.to(device)
-    Rin_train = Rin_train.to(device)
-    Rout_train = Rout_train.to(device)
-    Vin_train = Vin_train.to(device)
-    Vout_train = Vout_train.to(device)
-    Rina_train = Rina_train.to(device)
-    Routa_train = Routa_train.to(device)
-    Vina_train = Vina_train.to(device)
-    Vouta_train = Vouta_train.to(device)
 
-    Rin_val = Rin_val.to(device)
-    Rout_val = Rout_val.to(device)
-    Vin_val = Vin_val.to(device)
-    Vout_val = Vout_val.to(device)
-    Rina_val = Rina_val.to(device)
-    Routa_val = Routa_val.to(device)
-    Vina_val = Vina_val.to(device)
-    Vouta_val = Vouta_val.to(device)
+    v_tuple = (Rin,Rout,Vin,Vout,Rina,Routa,Vina,Vouta)
+    Rin_sel,Rout_sel,Vin_sel,Vout_sel,Rina_sel,Routa_sel,Vina_sel,Vouta_sel = select_indices(train_idx,v_tuple,device)
 
-
-    dataset_train = DatasetFutureState(data_type,Rin_train, Rout_train, z, Vin_train, Vout_train, m=M,device=device,Rin2=Rina_train, Rout2=Routa_train, Vin2=Vina_train, Vout2=Vouta_train)
+    dataset_train = DatasetFutureState(data_type, Rin_sel, Rout_sel, z, Vin_sel, Vout_sel, m=M, device=device, Rin2=Rina_sel, Rout2=Routa_sel, Vin2=Vina_sel, Vout2=Vouta_sel)
     if use_angles:
         dataset_train.useprimary = False
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
+
     if use_val:
-        dataset_val = DatasetFutureState(data_type,Rin_val, Rout_val, z, Vin_val, Vout_val, m=M,device=device, Rin2=Rina_val, Rout2=Routa_val, Vin2=Vina_val, Vout2=Vouta_val)
+        Rin_sel, Rout_sel, Vin_sel, Vout_sel, Rina_sel, Routa_sel, Vina_sel, Vouta_sel = select_indices(val_idx, v_tuple, device)
+        dataset_val = DatasetFutureState(data_type, Rin_sel, Rout_sel, z, Vin_sel, Vout_sel, m=M, device=device, Rin2=Rina_sel, Rout2=Routa_sel, Vin2=Vina_sel, Vout2=Vouta_sel)
         if use_angles:
             dataset_val.useprimary = False
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=False)
-
-    return dataloader_train, dataloader_val
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size * 100, shuffle=False, drop_last=False)
+    else:
+        dataloader_val = None
+    if use_test:
+        Rin_sel, Rout_sel, Vin_sel, Vout_sel, Rina_sel, Routa_sel, Vina_sel, Vouta_sel = select_indices(test_idx, v_tuple, device)
+        dataset_test = DatasetFutureState(data_type, Rin_sel, Rout_sel, z, Vin_sel, Vout_sel, m=M, device=device, Rin2=Rina_sel, Rout2=Routa_sel, Vin2=Vina_sel, Vout2=Vouta_sel)
+        if use_angles:
+            dataset_test.useprimary = False
+        dataloader_test = DataLoader(dataset_test, batch_size=batch_size * 100, shuffle=False, drop_last=False)
+    else:
+        dataloader_test = None
+    return dataloader_train, dataloader_val, dataloader_test
 
 
 def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
@@ -265,14 +248,14 @@ def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batc
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
     if use_val:
         dataset_val = DatasetFutureState(data_type,Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size, shuffle=False, drop_last=False)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size*100, shuffle=False, drop_last=False)
     else:
         dataloader_val = None
 
 
     if use_test:
         dataset_test = DatasetFutureState(data_type,Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device, rscale=Rscale, vscale=Vscale)
-        dataloader_test = DataLoader(dataset_test, batch_size=batch_size, shuffle=False, drop_last=False)
+        dataloader_test = DataLoader(dataset_test, batch_size=batch_size*100, shuffle=False, drop_last=False)
     else:
         dataloader_test = None
 

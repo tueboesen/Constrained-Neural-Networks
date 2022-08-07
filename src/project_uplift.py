@@ -19,9 +19,13 @@ class ProjectUpliftEQ(torch.nn.Module):
         self.n_vec_low = ExtractIr(irreps_low, '1o').irreps_out.num_irreps
         self.n_vec_high = ExtractIr(irreps_high, '1o').irreps_out.num_irreps
 
-        w = torch.empty((self.n_vec_high, self.n_vec_low))
-        torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.n_vec_low)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        self.K = torch.nn.Parameter(w)
+        self.lin = torch.nn.Linear(self.n_vec_low,self.n_vec_high)
+        self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
+
+
+        # w = torch.empty((self.n_vec_high, self.n_vec_low))
+        # torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.n_vec_low)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
+        # self.K = torch.nn.Parameter(w)
         return
 
     def extract_reps(self,x,irreps_in,irreps_extract=o3.Irrep('1o')):
@@ -63,19 +67,19 @@ class ProjectUpliftEQ(torch.nn.Module):
         x_extract = x[:,idx0:idx1]
         return x_extract
 
-    def inverse(self,x):
-        """
-        Takes a low dimensional variable and transforms it into a high dimensional variable, designed to be used initially
-        """
-        # irreps_in = self.irreps_low
-        irreps_out = self.irreps_high
-
-        # x_vec = self.extract_reps(x,irreps_in)
-        x2 = x.view(x.shape[0], -1, 3).transpose(1, 2)
-        y2 = x2 @ torch.inverse(self.K.T @ self.K) @ self.K.T
-        y_vec = y2.transpose(1,2).reshape(x.shape[0],-1)
-        y = self.insert_reps(y_vec,irreps_out)
-        return y
+    # def inverse(self,x):
+    #     """
+    #     Takes a low dimensional variable and transforms it into a high dimensional variable, designed to be used initially
+    #     """
+    #     # irreps_in = self.irreps_low
+    #     irreps_out = self.irreps_high
+    #
+    #     # x_vec = self.extract_reps(x,irreps_in)
+    #     x2 = x.view(x.shape[0], -1, 3).transpose(1, 2)
+    #     y2 = x2 @ torch.inverse(self.K.T @ self.K) @ self.K.T
+    #     y_vec = y2.transpose(1,2).reshape(x.shape[0],-1)
+    #     y = self.insert_reps(y_vec,irreps_out)
+    #     return y
 
     def uplift(self,x):
         """
@@ -87,7 +91,7 @@ class ProjectUpliftEQ(torch.nn.Module):
         irreps_out = self.irreps_high
         x_vec = self.extract_reps(x, irreps_in)
         x2 = x_vec.view(x_vec.shape[0], -1, 3).transpose(1, 2)
-        y2 = x2 @ self.K.T
+        y2 = x2 @ self.lin.weight.T
         y_vec = y2.transpose(1,2).reshape(x.shape[0],-1)
         y = self.insert_reps(y_vec,irreps_out)
         if len(ndims) == 3:
@@ -103,7 +107,7 @@ class ProjectUpliftEQ(torch.nn.Module):
         irreps_in = self.irreps_high
         y_vec = self.extract_reps(y, irreps_in)
         y2 = y_vec.view(y.shape[0],-1,3).transpose(1,2)
-        x2 = y2 @ self.K
+        x2 = y2 @ self.lin.weight
         x = x2.transpose(1,2).reshape(y.shape[0],-1)
         if len(ndims) == 3:
             x = x.view(ndims[0],ndims[1],-1)

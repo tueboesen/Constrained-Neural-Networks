@@ -10,7 +10,8 @@ import time
 class NPendulum:
     def __init__(self,n,dt):
         """
-        Initiates an n-pendulum class for simulating multi-body pendulums
+        Initiates an n-pendulum class for simulating multi-body pendulums.
+        See https://travisdoesmath.github.io/pendulum-explainer/ or https://github.com/tueboesen/n-pendulum for the equations,
         :param n: number of pendulums
         :param dt: time stepping size
         """

@@ -8,10 +8,13 @@ A simple file to load data from an already finished run, and plot it with custom
 
 """
 
-folders = ['/home/tue/PycharmProjects/results/test_npendulum_initial_test/2022-08-03_20_38_18/']  # train 100, skip 20
+# folders = ['/home/tue/PycharmProjects/results/test_npendulum_final_test/2022-08-01_12_06_30/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_final_test/2022-08-01_18_24_57/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_final_test/2022-08-02_12_15_57/']  # train 100, skip 20
 
 
-output = 'Initial_test_train100_skip100_lr_var'
+# output = 'final_test_train100_skip100_lr1e-3'
+output = 'final_test_train100_skip100_lr_var'
 
 # output_dir = '/home/tue/remote_desktop/regularization10/'
 # os.makedirs(output_dir,exist_ok=True)
@@ -40,7 +43,8 @@ output_dir = f"{base_output_dir}{output}"
 os.makedirs(output_dir, exist_ok=True)
 
 # selected_idx = [0,1,2,7,8,13,14]
-legends = ['No constraints', 'Stabilized', 'End constraints', 'Smooth constraints']
+# legends = ['No constraints', 'Stabilized', 'End constraints + Reg + Stabilized', 'Smooth constraints + Reg + Stabilized']
+legends = ['No constraints', r'$\gamma = 50$', r'End constraints, $ \gamma = 50, \eta = 5$', r'Smooth constraints, $ \gamma = 10, \eta = 1$']
 colors = ['black','orange', 'blue', 'red']
 # colors = ['black', 'darkred', 'pink', 'darkgreen', 'lime', 'darkblue', 'slateblue']
 # results_selected = results_numpy

@@ -114,7 +114,7 @@ def plot_pendulum_snapshot(Rin,Rout,Vin,Vout,Rpred=None,Vpred=None,file=None):
     return
 
 
-def plot_pendulum_snapshot_custom(Rin,Vin,file=None,fighandler=None,color='red'):
+def plot_pendulum_snapshot_custom(Rin,Vin=None,file=None,fighandler=None,color='red'):
     n = Rin.shape[0]
     if fighandler is None:
         fig, ax = plt.subplots(figsize=(15,15))
@@ -125,10 +125,12 @@ def plot_pendulum_snapshot_custom(Rin,Vin,file=None,fighandler=None,color='red')
     Rin = torch.cat((origo,Rin),dim=0)
 
     Rin = Rin.numpy()
-    Vin = Vin.numpy()
+    if Vin is not None:
+        Vin = Vin.numpy()
 
     v_origo =np.asarray([Rin[1:,0], Rin[1:,1]])
-    plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color=color, scale=100,width=0.003)
+    if Vin is not None:
+        plt.quiver(*v_origo, Vin[:, 0], Vin[:, 1], color=color, scale=100,width=0.003)
 
     l_in, = ax.plot(Rin[:,0], Rin[:,1],color='grey', alpha=0.2)
     lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'o', color=color, alpha=0.7, ms=20)
@@ -909,7 +911,7 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
 
     pngfile = "{:}/MAE_r.png".format(results_dir)
     ax.set_xlim(xmin=0, xmax=150)
-    # ax.set_ylim(ymax=0.3)
+    # ax.set_ylim(ymin=0.01,ymax=1)
     plt.savefig(pngfile)
     plt.close()
 

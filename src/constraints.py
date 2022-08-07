@@ -18,7 +18,7 @@ def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='c
         r1 = con_variables['r1']
         r2 = con_variables['r2']
         l = torch.tensor([r0/rscale,r1/rscale,r2/rscale],device=device)
-        con_fnc = Water(l,tol=1e-6/rscale,niter=100)
+        con_fnc = Water(l,tol=1e-3/rscale,niter=100)
     elif con == 'n-pendulum':
         if con_type == 'stabhigh':
             niter = 1
@@ -164,7 +164,7 @@ class ConstraintTemplate(nn.Module):
 
 
     def gradient_descent_batch(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1,debug_idx=None):
-        y_org = y.clone()
+        # y_org = y.clone()
         nb = y.shape[0]
         alpha = torch.ones(nb,device=y.device)
         j = 0
@@ -176,7 +176,7 @@ class ConstraintTemplate(nn.Module):
             if j == 0:
                 reg = c_error_mean
                 reg2 = (c*c).mean()
-            cm = c.abs().max(dim=1)[0]
+            cm = c.abs().sum(dim=2).max(dim=1)[0]
             M = cm > self.tol
             idx = idx_all[M]
             if len(idx) == 0:
@@ -191,7 +191,7 @@ class ConstraintTemplate(nn.Module):
                 y_try = y[idx] - alpha[idx,None,None] * dy
                 x_try = project(y_try)
                 c_try, c_error_mean_try, c_error_max = self.compute_constraint_violation(x_try)
-                cm_try = c_try.abs().max(dim=1)[0]
+                cm_try = c_try.abs().sum(dim=2).max(dim=1)[0]
                 M_try = cm_try <= cm[idx]
                 if M_try.all():
                     break
@@ -323,7 +323,7 @@ class MultiPendulum(ConstraintTemplate):
         dr = self.delta_r(r)
         drnorm = torch.norm(dr, dim=-1)
         c = drnorm - self.l
-        return c
+        return c[:,:,None]
 
     def jacobian_transpose_times_constraint(self,x,c):
         """
@@ -346,8 +346,8 @@ class MultiPendulum(ConstraintTemplate):
         rnorm = diffr / torch.norm(diffr,dim=-1,keepdim=True)
         dr = torch.zeros_like(r)
         for i in range(npend-1):
-            dr[:, i, :] = c[:, i][:, None] * rnorm[:, i, :] - c[:, i+1][:, None] * rnorm[:, i+1, :]
-        dr[:,-1,:] = c[:, -1][:, None] * rnorm[:, -1, :]
+            dr[:, i, :] = c[:, i,0][:, None] * rnorm[:, i, :] - c[:, i+1,0][:, None] * rnorm[:, i+1, :]
+        dr[:,-1,:] = c[:, -1,0][:, None] * rnorm[:, -1, :]
         dx = self.insert_positions(dr,x)
         return dx
 

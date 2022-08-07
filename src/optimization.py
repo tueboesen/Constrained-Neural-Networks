@@ -9,28 +9,28 @@ from torch_cluster import radius_graph
 from src.loss import loss_eq, loss_mim
 from src.npendulum import get_coordinates_from_angle
 from src.utils import Distogram, define_data_keys, atomic_masses
-from src.vizualization import plot_pendulum_snapshot
+from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshot_custom
 
 
-def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=1, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False,nviz=5,regularization=0):
+def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False,nviz=5,regularization=0,viz_paper=False):
     """
     A wrapper function for the different data types currently supported for training/inference
     """
     if data_type == 'water':
-        loss_r, loss_v, cv, cv_max, MAEr, reg = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug)
+        loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
         drmsd = 0
     elif data_type == 'protein':
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, batch_size=batch_size, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization)
+        loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
     return loss_r, loss_v, drmsd, cv, cv_max,MAEr,reg, reg2
 
 
-def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, batch_size=1, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0):
+def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0,viz_paper=False):
     """
     A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -46,6 +46,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
     debug:          Checks for NaNs and inf in the network while running.
     """
     ds = dataloader.dataset
+    batch_size = dataloader.batch_size
     rscale = ds.rscale
     vscale = ds.vscale
     aloss_r = 0.0
@@ -240,11 +241,27 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ba
                         filename = f"{output_folder}/viz/{epoch}_{j}_{'train' if train==True else 'val'}_ignore_con.png"
                         plot_pendulum_snapshot(Rin_xy[j],Rout_xy[j],Vin_xy[j],Vout_xy[j],Rpred_no_con_xy[j],Vpred_no_con_xy[j],file=filename)
 
+        if ds.data_type == 'n-pendulum' and viz_paper == True:
+            Rin_xy = Rin_vec.detach().cpu().view(nb, natoms, -1)
+            Rout_xy = Rout_vec.detach().cpu().view(nb, natoms, -1)
+            Rpred_xy = Rpred.detach().cpu().view(nb, natoms, -1)
+            Vin_xy = Vin_vec.detach().cpu().view(nb, natoms, -1)
+            Vout_xy = Vout_vec.detach().cpu().view(nb, natoms, -1)
+            Vpred_xy = Vpred.detach().cpu().view(nb, natoms, -1)
 
+            MAEr_xy = torch.norm((Rpred_xy - Rout_xy) * rscale, dim=-1)
 
+            # lossE_r, lossE_ref_r, lossE_rel_r = loss_eq(Rpred_xy, Rout_xy, Rin_xy,reduce=False)
+            # plot_pendulum_snapshots(Rin, Rout, Vin, Vout, Rpred=None, Vpred=None, file=file)
+            for j in range(min(nviz, batch_size)):
+                MAEj = MAEr_xy[j].mean()
+                filename = f"{output_folder}/viz_paper/{j}_{MAEr_xy[j].mean():2.4f}.png"
+                fighandler = plot_pendulum_snapshot_custom(Rin_xy[j], Vin_xy[j], color='red')
+                fighandler = plot_pendulum_snapshot_custom(Rout_xy[j], fighandler=fighandler, color='green')
+                fighandler = plot_pendulum_snapshot_custom(Rpred_xy[j], fighandler=fighandler, file=filename, color='blue')
 
-        if (i + 1) * batch_size >= max_samples:
-            break
+        # if (i + 1) * batch_size >= max_samples:
+        #     break
         # if i == 0:
         #     snapshot = tracemalloc.take_snapshot()
         #     top_stats = snapshot.statistics('lineno')
