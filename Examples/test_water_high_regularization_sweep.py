@@ -8,13 +8,20 @@ from src.batch_jobs import job_planner, job_runner, job_planner3, standard_netwo
 
 if __name__ == '__main__':
 
+    # mutable_parameters = {
+    #     # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
+    #     'con_type': ['','','low','high'],
+    #     'penalty': [0,50,50,50],
+    #     'regularization': [0, 0, 5, 5],
+    #     'lr': [1e-2,1e-2,1e-3,1e-3]
+    # }
+
     mutable_parameters = {
-        # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-        'con_type': ['','','low','high'],
-        'penalty': [0,50,50,50],
-        'regularization': [0, 0, 5000, 5000],
-        # 'lr': [1e-2,1e-2,1e-3,1e-3]
+        'con_type': ['high']*3,
+        'regularization': [2000,10000,100000],
     }
+
+
 
     c = load_base_parameters_npendulum()
     c['data'] = './../Data/water.npz'
@@ -26,8 +33,7 @@ if __name__ == '__main__':
     c['lr'] = 1e-2
     c['nskip'] = 49
     c['n_val'] = 100
-    c['n_train'] = 1000
-
+    c['epochs'] = 100
     # c['epochs'] = 2
     c['use_test'] = False
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
