@@ -136,13 +136,62 @@ def plot_pendulum_snapshot_custom(Rin,Vin=None,file=None,fighandler=None,color='
     lm_in, = ax.plot(Rin[:,0], Rin[:,1], 'o', color=color, alpha=0.7, ms=20)
 
     plt.axis('square')
-    # plt.axis('off')
+    plt.axis('off')
     if file is not None:
         os.makedirs(os.path.dirname(file),exist_ok=True)
         plt.savefig(file, bbox_inches="tight", pad_inches=0)
         plt.close()
     return (fig,ax)
 
+
+def plot_water_snapshot(R,R2=None,filename=None):
+    mpl.use('TkAgg')
+    mpl.rcParams['pdf.fonttype'] = 42
+    mpl.rcParams['ps.fonttype'] = 42
+    mpl.rcParams['ytick.labelsize'] = 25
+    mpl.rcParams['axes.labelsize'] = 25
+    mpl.rcParams['legend.fontsize'] = 25
+    mpl.rcParams['lines.markersize'] = 20
+    mpl.rcParams['lines.markeredgewidth'] = 5
+    mpl.rcParams['lines.linewidth'] = 5
+    mpl.rcParams['xtick.labelsize'] = 25
+    mpl.rcParams['ytick.labelsize'] = 25
+
+
+
+    fig = plt.figure(figsize=(15,15),)
+    ax = plt.axes(projection='3d')
+    ax.scatter3D(R[:,0],R[:,1],R[:,2],color='red',s=200)
+    ax.scatter3D(R[:,3],R[:,4],R[:,5],color='black',s=100)
+    ax.scatter3D(R[:,6],R[:,7],R[:,8],color='black',s=100)
+
+    if R2 is not None:
+        ax.scatter3D(R2[:,0],R2[:,1],R2[:,2],color='green',s=200)
+        ax.scatter3D(R2[:,3],R2[:,4],R2[:,5],color='blue',s=100)
+        ax.scatter3D(R2[:,6],R2[:,7],R2[:,8],color='blue',s=100)
+
+
+    plt.tight_layout()  # <-- Without this, everything is fine
+    if filename is not None:
+        plt.savefig(filename)
+
+    # ax.scatter3D(r_new[:n_mol,0],r_new[:n_mol,1],r_new[:n_mol,2],color='red',s=100)
+    # ax.scatter3D(r_old[:n_mol,0],r_old[:n_mol,1],r_old[:n_mol,2],color='pink',s=100)
+    # ax.scatter3D(r_org[:n_mol,0],r_org[:n_mol,1],r_org[:n_mol,2],color='black',s=100)
+    #
+    # ax.scatter3D(r_new[:n_mol,3],r_new[:n_mol,4],r_new[:n_mol,5],color='blue',s=50)
+    # ax.scatter3D(r_old[:n_mol,3],r_old[:n_mol,4],r_old[:n_mol,5],color='darkblue',s=50)
+    # ax.scatter3D(r_org[:n_mol,3],r_org[:n_mol,4],r_org[:n_mol,5],color='black',s=50)
+    #
+    # ax.scatter3D(r_new[:n_mol,6],r_new[:n_mol,7],r_new[:n_mol,8],color='green',s=50)
+    # ax.scatter3D(r_old[:n_mol,6],r_old[:n_mol,7],r_old[:n_mol,8],color='darkgreen',s=50)
+    # ax.scatter3D(r_org[:n_mol,6],r_org[:n_mol,7],r_org[:n_mol,8],color='black',s=50)
+    # assert np.max(np.abs(v_new-v_old)) < 1e-10
+
+    # plt.show()
+    # plt.pause(1)
+    # print("done")
+    return
 
 
 def plot_water(r_new,v_new,r_old,v_old,r_org,v_org):
@@ -1005,6 +1054,283 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
 
     return
 
+
+
+def plot_water_paper(results,legends,results_dir,colors,semilogy=False,fill_between=False,train_limits=None):
+    """
+    This is a more customizable version of the above function, designed for printing specific figures for papers or similar things.
+    """
+    mpl.rcParams['pdf.fonttype'] = 42
+    mpl.rcParams['ps.fonttype'] = 42
+    mpl.rcParams['ytick.labelsize'] = 25
+    mpl.rcParams['axes.labelsize'] = 25
+    mpl.rcParams['legend.fontsize'] = 25
+    mpl.rcParams['lines.markersize'] = 20
+    mpl.rcParams['lines.markeredgewidth'] = 5
+    mpl.rcParams['lines.linewidth'] = 5
+    mpl.rcParams['xtick.labelsize'] = 25
+    mpl.rcParams['ytick.labelsize'] = 25
+    # mpl.rcParams['xtick.labelsize'] = 25
+    # mpl.rcParams['xtick.labelsize'] = 25
+    # mpl.rcParams['font.family'] = 'Arial'
+
+
+    njobs, nrep, nlosses, nepochs = results.shape
+    x = np.arange(nepochs)
+    M = np.sum(results,axis=3) > 0
+
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
+        idx = 0
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 1
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, ':', color=colors[ii])
+            else:
+                h = ax.plot(x, y, ':', color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+    pngfile = "{:}/Loss_r.png".format(results_dir)
+    ax.set_xlim(xmin=0,xmax=150)
+    # ax.set_ylim(ymax=0.3)
+    plt.savefig(pngfile)
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
+        idx = 4
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 6
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, ':', color=colors[ii])
+            else:
+                h = ax.plot(x, y, ':', color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Constraint violation (Å)')
+    plt.legend()
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    pngfile = "{:}/CV_training.png".format(results_dir)
+    ax.set_xlim(xmin=0,xmax=150)
+    # ax.set_ylim(ymax=0.3)
+    plt.savefig(pngfile)
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(15, 15))
+    for ii in range(njobs):
+        idx = 5
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 7
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, ':', color=colors[ii])
+            else:
+                h = ax.plot(x, y, ':', color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Constraint violation (Å)')
+    plt.legend()
+    ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    pngfile = "{:}/CV_validation.png".format(results_dir)
+    ax.set_xlim(xmin=0, xmax=150)
+    # ax.set_ylim(ymax=0.3)
+    plt.savefig(pngfile)
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(15, 15))
+    for ii in range(njobs):
+        idx = 8
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 9
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, ':', color=colors[ii])
+            else:
+                h = ax.plot(x, y, ':', color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Mean absolute error (Å)')
+    plt.legend()
+    # ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    # ax.yaxis.set_major_locator(y_major)
+    # y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    # ax.yaxis.set_minor_locator(y_minor)
+    # ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    pngfile = "{:}/MAE_r.png".format(results_dir)
+    ax.set_xlim(xmin=0, xmax=150)
+    # ax.set_ylim(ymin=0.01,ymax=1)
+    plt.savefig(pngfile)
+    plt.close()
+
+
+
+
+
+    fig, ax = plt.subplots(figsize=(15,15))
+    for ii in range(njobs):
+        idx = 4
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 5
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, ':', color=colors[ii])
+            else:
+                h = ax.plot(x, y, ':', color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Mean constraint violation (Å)')
+    plt.legend()
+    # ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    # ax.yaxis.set_major_locator(y_major)
+    # y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    # ax.yaxis.set_minor_locator(y_minor)
+    # ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    pngfile = "{:}/CV.png".format(results_dir)
+    ax.set_xlim(xmin=0,xmax=150)
+    # ax.set_ylim(ymax=0.3)
+    plt.savefig(pngfile)
+    plt.close()
+
+    fig, ax = plt.subplots(figsize=(15, 15))
+    for ii in range(njobs):
+        idx = 6
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+            else:
+                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+        idx = 7
+        if np.sum(M[ii, :, idx]) > 0:
+            y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
+            ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
+            if semilogy:
+                h = ax.semilogy(x, y, ':', color=colors[ii])
+            else:
+                h = ax.plot(x, y, ':', color=colors[ii])
+            if fill_between:
+                ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
+
+    plt.xlabel('Epochs')
+    plt.ylabel('Max constraint violation (Å)')
+    plt.legend()
+    # ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # ax.yaxis.set_minor_formatter(mpl.ticker.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    # y_major = mpl.ticker.LogLocator(base=10.0, numticks=5)
+    # ax.yaxis.set_major_locator(y_major)
+    # y_minor = mpl.ticker.LogLocator(base=10.0, subs=np.arange(1.0, 10.0) * 0.1, numticks=10)
+    # ax.yaxis.set_minor_locator(y_minor)
+    # ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
+
+    pngfile = "{:}/CV_max.png".format(results_dir)
+    ax.set_xlim(xmin=0, xmax=150)
+    # ax.set_ylim(ymax=0.3)
+    plt.savefig(pngfile)
+    plt.close()
+
+
+
+    return
 
 
 

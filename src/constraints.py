@@ -18,7 +18,7 @@ def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='c
         r1 = con_variables['r1']
         r2 = con_variables['r2']
         l = torch.tensor([r0/rscale,r1/rscale,r2/rscale],device=device)
-        con_fnc = Water(l,tol=1e-3/rscale,niter=100)
+        con_fnc = Water(l,tol=1e-2/rscale,niter=100)
     elif con == 'n-pendulum':
         if con_type == 'stabhigh':
             niter = 1

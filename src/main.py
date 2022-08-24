@@ -10,6 +10,7 @@ from src.dataloader import load_data
 from src.log import log_all_parameters, close_logger
 from src.loss import find_relevant_loss
 from src.network_e3 import neural_network_equivariant
+from src.network_eq_simple import neural_network_equivariant_simple
 from src.network_mim import neural_network_mimetic
 from src.optimization import run_model
 from src.project_uplift import ProjectUpliftEQ
@@ -40,6 +41,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     LOG = log.setup_custom_logger('runner', logfile_loc, c['debug'])
     log_all_parameters(LOG, c)
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    # device = 'cpu'
 
     # load training data
     if dataloader_train is None:
@@ -58,6 +60,8 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
                                     max_radius=cn['max_radius'],
                                     number_of_basis=cn['number_of_basis'], radial_neurons=cn['radial_neurons'], num_neighbors=cn['num_neighbors'],
                                     num_nodes=ds.Rin.shape[1], embed_dim=cn['embed_dim'], max_atom_types=cn['max_atom_types'], con_fnc=con_fnc, con_type=c['con_type'], PU=PU, particles_pr_node=ds.particles_pr_node,discretization=c['network_discretization'],gamma=c['penalty'])
+    elif c['network_type'].lower() == 'eq_simple':
+        model = neural_network_equivariant_simple(cn['nlayers'],gamma=c['penalty'],dim=c['data_dim'],con_fnc=con_fnc,con_type=c['con_type'],discretization=c['network_discretization'])
     elif c['network_type'] == 'mim':
         node_dim_in = cn['node_dim_in'] if ds.pos_only else cn['node_dim_in'] * 2
         model = neural_network_mimetic(node_dim_in,cn['node_dim_latent'], cn['nlayers'], con_fnc=con_fnc, con_type=c['con_type'],dim=c["data_dim"],discretization=c['network_discretization'],gamma=c['penalty'],regularization=c['regularization'])

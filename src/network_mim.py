@@ -300,7 +300,11 @@ class neural_network_mimetic(nn.Module):
             raise ValueError("NaN detected")
 
         if self.con_fnc is not None:
-            _, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+            c, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+            if reg == 0:
+                reg = cv_mean
+            if reg2 == 0:
+                reg2 = (c*c).mean()
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 

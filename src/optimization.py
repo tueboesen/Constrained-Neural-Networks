@@ -159,7 +159,10 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
         if loss_type.lower() == 'eq':
             loss_r, loss_v = lossE_rel_r, lossE_rel_v
             if predict_pos_only:
-                loss = lossE_rel_r + reg2 * regularization
+                loss_reg = reg2 * regularization
+                loss = lossE_rel_r + loss_reg
+                # loss = lossE_rel_r + torch.min(loss_reg,lossE_rel_r)
+                print(f"{lossE_rel_r:2.2f},{loss_reg:2.2f}")
             else:
                 loss = lossE_rel + reg2 * regularization
         elif loss_type.lower() == 'mim':
@@ -172,14 +175,30 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
             raise NotImplementedError("The loss function you have chosen has not been implemented.")
 
         # E_pred, Ekin_pred, Epot_pred, P_pred = energy_momentum(Vpred.view(Vout.shape) * vscale,Vpred.view(Vout.shape) * vscale, m) #TODO THIS DOESNT WORK JUST YET
-        MAEr = torch.mean(torch.norm((Rpred - Rout_vec)*rscale,dim=1))
+        if ds.data_type == 'water':
+            # rpred1 = (Rpred*rscale).view(-1,3,3)
+            rdiff = ((Rpred - Rout_vec)*rscale).view(-1,3,3)
+            MAEr = torch.mean(torch.norm(rdiff,dim=1))
+        else:
+            MAEr = torch.mean(torch.norm((Rpred - Rout_vec)*rscale,dim=1))
 
         if check_equivariance:
-            rot = o3.rand_matrix().to(device=x.device)
-            Drot = model.irreps_in.D_from_matrix(rot)
-            output_rot_after = output @ Drot
-            output_rot = model(x @ Drot, batch, z_vec, edge_src, edge_dst)
-            assert torch.allclose(output_rot,output_rot_after, rtol=1e-4, atol=1e-4)
+            if ndim == 3:
+                rot = o3.rand_matrix().to(device=x.device)
+                Drot = model.irreps_in.D_from_matrix(rot)
+                output_rot_after = output @ Drot
+                output_rot = model(x @ Drot, batch, z_vec, edge_src, edge_dst)
+                assert torch.allclose(output_rot,output_rot_after, rtol=1e-4, atol=1e-4)
+            elif ndim == 2:
+                theta = torch.rand(1)*torch.pi
+                rot = torch.tensor([[torch.cos(theta), -torch.sin(theta)],[torch.sin(theta), torch.cos(theta)]])
+                Rpred_rot_after = Rpred @ rot
+                with P.cached():
+                    model_input_rot = torch.cat([Rin_vec @ rot , Vin_vec @ rot], dim=-1)
+                    output_rot, _,_,_,_ = model(model_input_rot, batch, z_vec, edge_src, edge_dst, wstatic=wstatic, weight=weights)
+                    Rpred_rot = output_rot[:, 0:ndim]
+                    assert torch.allclose(Rpred_rot, Rpred_rot_after, rtol=1e-4, atol=1e-4)
+
         if train:
             loss.backward()
             # if debug:
@@ -201,6 +220,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
                 # assert not torch.isnan(grad_1d).any()
                 # assert not torch.isinf(grad_1d).any()
                 # print(f"{grad_1d.max()}, {grad_1d.min()}")
+            torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
+
             optimizer.step()
 
         aloss_r += loss_r.item()

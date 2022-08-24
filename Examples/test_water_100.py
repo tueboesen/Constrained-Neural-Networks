@@ -16,17 +16,27 @@ if __name__ == '__main__':
         # 'lr': [1e-2,1e-2,1e-3,1e-3]
     }
 
+    # mutable_parameters = {
+    #     # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
+    #     'con_type': ['high'],
+    #     'penalty': [10],
+    #     'regularization': [5000],
+    #     # 'lr': [1e-2,1e-2,1e-3,1e-3]
+    # }
+    #
+
     c = load_base_parameters_npendulum()
     c['data'] = './../Data/water.npz'
     c['data_type'] = 'water'
     c['con'] = 'water'
+    c['epochs'] = 50
     # c['lr_adjustment'] = 0.99
     # args.epochs_for_lr_adjustment = 1
     # c['epochs_for_lr_adjustment'] = 1000
     c['lr'] = 1e-2
     c['nskip'] = 49
     c['n_val'] = 1000
-    c['n_train'] = 1000
+    c['n_train'] = 100
 
     # c['epochs'] = 2
     c['use_test'] = False

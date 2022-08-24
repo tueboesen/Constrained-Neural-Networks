@@ -10,6 +10,7 @@ from torch_cluster import radius_graph
 
 from src.utils import atomic_masses, convert_snapshots_to_future_state_dataset
 from src.npendulum import NPendulum, get_coordinates_from_angle, animate_pendulum
+from src.vizualization import plot_water_snapshot
 
 
 def load_data(file,data_type,device,nskip,n_train,n_val,n_test,use_val,use_test,batch_size, shuffle=True, use_endstep=False,file_val=None,model_specific=None):
@@ -121,7 +122,7 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_
     return dataloader_train, dataloader_val, dataloader_test
 
 
-def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False):
+def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False,viz_paper=False):
     """
     A function for loading molecular dynamics data
     """
@@ -159,6 +160,13 @@ def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batc
     masses = atomic_masses(z)
 
     z = z.view(-1,3)
+
+    if viz_paper:
+        plot_water_snapshot(R[0], filename=f"water_start.png")
+        plot_water_snapshot(R[-1], filename=f"water_end.png")
+        k = 50
+        for ii in [0,2134,10001,43534,56534]:
+            plot_water_snapshot(R[ii],R[ii+k],filename=f"water_{ii}_{k}.png")
 
     #We rescale the data
     Rscale = torch.sqrt(R.pow(2).mean())
