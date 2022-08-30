@@ -154,6 +154,7 @@ class neural_network_equivariant(torch.nn.Module):
         reg2 =  torch.tensor(0.0)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
+            dt = min(self.h[i]**2,0.1)
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
             y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
@@ -161,9 +162,9 @@ class neural_network_equivariant(torch.nn.Module):
             if self.gamma > 0:
                 if self.discretization == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
-                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
-                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
-                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * self.h[i] ** 2, self.project, self.uplift, weight)
+                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
+                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
+                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
                     dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
                 else:
                     dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
@@ -172,17 +173,17 @@ class neural_network_equivariant(torch.nn.Module):
                 dy = 0
             if self.discretization == 'leapfrog':
                 tmp = y.clone()
-                y = 2*y - y_old + self.h[i]**2 *(y_new + self.gamma*dy)
+                y = 2*y - y_old + dt *(y_new + self.gamma*dy)
                 y_old = tmp
             elif self.discretization == 'euler':
-                y = y + self.h[i] ** 2 * (y_new - self.gamma * dy)
+                y = y + dt * (y_new - self.gamma * dy)
             elif self.discretization == 'rk4':
                 k1 = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
-                k2 = self.forward_propagation(y.clone() + k1 * self.h[i] ** 2 / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
-                k3 = self.forward_propagation(y.clone() + k2 * self.h[i] ** 2 / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
-                k4 = self.forward_propagation(y.clone() + k3 * self.h[i] ** 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                k2 = self.forward_propagation(y.clone() + k1 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                k3 = self.forward_propagation(y.clone() + k2 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
+                k4 = self.forward_propagation(y.clone() + k3 * dt, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
-                y = y + self.h[i]**2 * (y_new - self.gamma*dy)
+                y = y + dt * (y_new - self.gamma*dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
 

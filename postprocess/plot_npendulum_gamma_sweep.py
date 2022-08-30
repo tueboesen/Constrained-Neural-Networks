@@ -9,6 +9,7 @@ A simple file to load data from an already finished run, and plot it with custom
 """
 
 folders = ['/home/tue/PycharmProjects/results/test_npendulum_penalty_sweep/2022-08-03_12_15_54/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_penalty_sweep/2022-08-03_12_15_54/']  # train 100, skip 20
 
 
 output = 'gamma_sweep'

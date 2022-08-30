@@ -241,6 +241,7 @@ class neural_network_mimetic(nn.Module):
         reg2 =  torch.tensor(0.0)
 
         for i in range(self.nlayers):
+            dt = min(self.h[i] ** 2, 0.1)
             if x.isnan().any():
                 raise ValueError("NaN detected")
             if wstatic is None:
@@ -256,9 +257,9 @@ class neural_network_mimetic(nn.Module):
             if self.gamma > 0:
                 if self.discretization == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
-                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
-                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * self.h[i] ** 2, self.project, self.uplift, weight)
-                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * self.h[i] ** 2, self.project, self.uplift, weight)
+                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
+                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
+                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
                     dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
                 else:
                     dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
@@ -267,17 +268,17 @@ class neural_network_mimetic(nn.Module):
                 dy = 0
             if self.discretization == 'leapfrog':
                 tmp = y.clone()
-                y = 2*y - y_old - self.h[i]**2 * (y_new + self.gamma*dy)
+                y = 2*y - y_old - dt * (y_new + self.gamma*dy)
                 y_old = tmp
             elif self.discretization == 'euler':
-                y = y + self.h[i]**2 * (y_new - self.gamma*dy)
+                y = y + dt * (y_new - self.gamma*dy)
             elif self.discretization == 'rk4':
                 k1 = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
-                k2 = self.PropagationBlocks[i](y.clone() + k1 * self.h[i] ** 2 / 2, edge_attr, edge_src, edge_dst)
-                k3 = self.PropagationBlocks[i](y.clone() + k2 * self.h[i] ** 2 / 2, edge_attr, edge_src, edge_dst)
-                k4 = self.PropagationBlocks[i](y.clone() + k3 * self.h[i] ** 2, edge_attr, edge_src, edge_dst)
+                k2 = self.PropagationBlocks[i](y.clone() + k1 * dt / 2, edge_attr, edge_src, edge_dst)
+                k3 = self.PropagationBlocks[i](y.clone() + k2 * dt / 2, edge_attr, edge_src, edge_dst)
+                k4 = self.PropagationBlocks[i](y.clone() + k3 * dt, edge_attr, edge_src, edge_dst)
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
-                y = y + self.h[i]**2 * (y_new - self.gamma*dy)
+                y = y + dt * (y_new - self.gamma*dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
 

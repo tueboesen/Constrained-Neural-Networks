@@ -144,6 +144,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
 
 
         lossE_r, lossE_ref_r, lossE_rel_r = loss_eq(Rpred, Rout_vec, Rin_vec)
+        if lossE_rel_r > 100:
+            print("ups")
         lossD_r, lossD_ref_r, lossD_rel_r = loss_mim(Rpred, Rout_vec, Rin_vec, edge_src, edge_dst)
         lossE_v, lossE_ref_v, lossE_rel_v = loss_eq(Vpred, Vout_vec, Vin_vec)
         lossD_v, lossD_ref_v, lossD_rel_v = loss_mim(Vpred, Vout_vec, Vin_vec, edge_src, edge_dst)
