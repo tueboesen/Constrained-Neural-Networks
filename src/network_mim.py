@@ -241,7 +241,7 @@ class neural_network_mimetic(nn.Module):
         reg2 =  torch.tensor(0.0)
 
         for i in range(self.nlayers):
-            dt = min(self.h[i] ** 2, 0.1)
+            dt = max(min(self.h[i] ** 2, 0.1),1e-4)
             if x.isnan().any():
                 raise ValueError("NaN detected")
             if wstatic is None:

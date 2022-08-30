@@ -154,7 +154,7 @@ class neural_network_equivariant(torch.nn.Module):
         reg2 =  torch.tensor(0.0)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
-            dt = min(self.h[i]**2,0.1)
+            dt = max(min(self.h[i]**2,0.1),1e-4)
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
             y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
