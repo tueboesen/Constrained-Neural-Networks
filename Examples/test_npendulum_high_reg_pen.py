@@ -32,6 +32,7 @@ if __name__ == '__main__':
 
     c = load_base_parameters_npendulum()
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
+    c['n_val'] = 100
 
 
     cs, legends, results = job_planner3(c,mutable_parameters)

@@ -79,7 +79,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
                                   {"params": model.params.h.parameters()},
                                   {'params': model.params.close.parameters(), 'lr': lr*0.1}], lr=lr)
-    lossBest = 1e6
+    lossBest = 1e20
     epochs_since_best = 0
     results=None
     epoch = 0

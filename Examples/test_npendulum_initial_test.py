@@ -10,8 +10,8 @@ if __name__ == '__main__':
 
     mutable_parameters = {
         # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-        'con_type': ['','','low','high'],
-        'penalty': [0,50,0,0],
+        'con_type': ['low','high'],
+        'penalty': [0,0],
     }
     c = load_base_parameters_npendulum()
     c['basefolder'] = os.path.basename(__file__).split(".")[0]

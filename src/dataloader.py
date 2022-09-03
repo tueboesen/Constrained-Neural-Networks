@@ -256,14 +256,14 @@ def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batc
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
     if use_val:
         dataset_val = DatasetFutureState(data_type,Rin_val, Rout_val, z, Vin_val, Vout_val, Fin_val, Fout_val, KEin_val, KEout_val, PEin_val, PEout_val, masses,device=device, rscale=Rscale, vscale=Vscale)
-        dataloader_val = DataLoader(dataset_val, batch_size=batch_size*100, shuffle=False, drop_last=False)
+        dataloader_val = DataLoader(dataset_val, batch_size=batch_size*10, shuffle=False, drop_last=False)
     else:
         dataloader_val = None
 
 
     if use_test:
         dataset_test = DatasetFutureState(data_type,Rin_test, Rout_test, z, Vin_test, Vout_test, Fin_test, Fout_test, KEin_test, KEout_test, PEin_test, PEout_test, masses,device=device, rscale=Rscale, vscale=Vscale)
-        dataloader_test = DataLoader(dataset_test, batch_size=batch_size*100, shuffle=False, drop_last=False)
+        dataloader_test = DataLoader(dataset_test, batch_size=batch_size*10, shuffle=False, drop_last=False)
     else:
         dataloader_test = None
 
