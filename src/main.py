@@ -14,7 +14,7 @@ from src.network_eq_simple import neural_network_equivariant_simple
 from src.network_mim import neural_network_mimetic
 from src.optimization import run_model
 from src.project_uplift import ProjectUpliftEQ
-from src.utils import fix_seed, update_results_and_save_to_csv, run_model_MD_propagation_simulation
+from src.utils import fix_seed, update_results_and_save_to_csv, run_model_MD_propagation_simulation, save_test_results_to_csv
 from src.vizualization import plot_training_and_validation
 
 
@@ -82,6 +82,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     lossBest = 1e20
     epochs_since_best = 0
     results=None
+    results_test=None
     epoch = 0
     csv_file = f"{c['result_dir']}/training.csv"
 
@@ -103,13 +104,16 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
 
 
         # Next save results
-        loss_t = (loss_r_t + loss_v_t) / 2
-        loss_v = (loss_r_v + loss_v_v) / 2
+        # loss_t = (loss_r_t + loss_v_t) / 2
+        # loss_v = (loss_r_v + loss_v_v) / 2
 
         results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v, cv_max_v, MAE_r_t, MAE_r_v, csv_file,cv_t,cv_v)
         # results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,loss_r_v,loss_v_v, csv_file)
 
-        loss = find_relevant_loss(loss_t, loss_t, loss_v, loss_v, c['use_val'], c['loss'])
+        if c['use_val']:
+            loss = loss_r_v
+        else:
+            loss = loss_r_t
         if loss < lossBest: # Check if model was better than previous
             lossBest = loss
             epochs_since_best = 0
@@ -137,9 +141,13 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     model.load_state_dict(torch.load(model_name_best))  # We load the best performing model
     if c['use_test']:
         t4 = time.time()
-        loss_r_v, loss_v_v, drmsd_v, cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_test, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'],
+        loss_r_test, loss_v_test, drmsd_test, cv_test, cv_max_test, MAE_r_test, reg_test, reg2_test = run_model(c['data_type'], model, dataloader_test, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'],
                                                                                         max_radius=cn['max_radius'], debug=c['debug'], epoch=epoch,
                                                                                         output_folder=c['result_dir'], nviz=c['nviz'], regularization=c['regularization'],viz_paper=True)
+        LOG.info(f'Test  cv={cv_test:.2e} cvm={cv_max_test:.2e} reg={reg_test:.2e} reg2={reg2_test:.2e}  MAEr={MAE_r_test:.2e}  Loss_r={loss_r_test:.2e} Time={t4 - time.time():.1f}s ')
+
+        csv_file_test = f"{c['result_dir']}/test.csv"
+        results_test = save_test_results_to_csv(loss_r_test, loss_v_test, cv_max_test, MAE_r_test, cv_test, csv_file_test)
 
     if c['viz']:
         plot_training_and_validation(results,c['result_dir'])
@@ -152,4 +160,4 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     # print(f"{torch.cuda.memory_allocated() / 1024 / 1024:2.2f}MB")
     # print(f"{torch.cuda.max_memory_allocated() / 1024 / 1024:2.2f}MB")
     # print(torch.cuda.memory_summary())
-    return results, dataloader_train, dataloader_val, dataloader_test, dataloader_endstep
+    return results, results_test, dataloader_train, dataloader_val, dataloader_test, dataloader_endstep

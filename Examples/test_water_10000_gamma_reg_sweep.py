@@ -18,10 +18,10 @@ if __name__ == '__main__':
 
     mutable_parameters = {
         # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-        'con_type': ['low']*2,
-        'penalty': [10]*2,
-        'regularization': [1]*2,
-        'lr': [1e-2,1e-3]
+        'con_type': ['low']*1,
+        'penalty': [10]*1,
+        'regularization': [1]*1,
+        'lr': [1e-3]
     }
 
 

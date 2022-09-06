@@ -125,6 +125,22 @@ def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,cv_max_t,loss
         results.iloc[-1:].to_csv(csv_file, mode='a', header=False, sep='\t')
     return results
 
+def save_test_results_to_csv(loss_r,loss_v,cv_max,MAEr,cv,csv_file):
+    """
+    Updates the results and saves it to a csv file.
+    """
+    result = pd.DataFrame({
+        'loss_r': [loss_r],
+        'loss_v': [loss_v],
+        'cv': [cv],
+        'cv_max': [cv_max],
+        'MAE_r': [MAEr],
+    }, dtype=np.float32)
+    results = result
+    results.iloc[-1:].to_csv(csv_file, header=True, sep='\t')
+    return results
+
+
 
 def run_model_MD_propagation_simulation(model, dataloader, max_radius=15,log=None,viz=None):
     """

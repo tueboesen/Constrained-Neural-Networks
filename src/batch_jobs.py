@@ -238,9 +238,10 @@ def job_planner3(c,mutable_parameters):
     # for key in keys:
     #     results[key] = np.zeros((len(legends),len(c_base['seed']),c['epochs']))
     results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
+    results_test = np.zeros((len(legends),len(c_base['seed']),5))
     assert len(set(legends)) == len(legends), "Some of the mutable parameter combinations used are identical, remove those"
 
-    return cs, legends, results
+    return cs, legends, results,results_test
 
 
 
@@ -249,7 +250,7 @@ def job_planner3(c,mutable_parameters):
 
 
 
-def job_runner(cs,legends, results):
+def job_runner(cs,legends, results,results_test):
     """
     This function runs a set of jobs, stores the results and plot the training and validation loss
     """
@@ -277,7 +278,7 @@ def job_runner(cs,legends, results):
                     dataloader_train.dataset.useprimary = True
                     dataloader_val.dataset.useprimary = True
 
-        result,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
+        result,result_test,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
 
         # for (key,val) in result.items():
         #     results[key][c['jobid'],c['repetition'],:] = val
@@ -294,6 +295,19 @@ def job_runner(cs,legends, results):
 
         file = f"{c['result_dir_base']:}/results"
         np.save(file,results)
+
+        if result_test is not None:
+            results_test[c['jobid'],c['repetition'],0] = result_test['loss_r']
+            results_test[c['jobid'],c['repetition'],1] = result_test['loss_v']
+            results_test[c['jobid'],c['repetition'],2] = result_test['cv']
+            results_test[c['jobid'],c['repetition'],3] = result_test['cv_max']
+            results_test[c['jobid'],c['repetition'],4] = result_test['MAE_r']
+
+            file_test = f"{c['result_dir_base']:}/results_test"
+            np.save(file_test,results_test)
+
+
+
         # plot_training_and_validation_accumulated_2(results, legends, c['result_dir_base'])
         plot_training_and_validation_accumulated_4(results, legends, c['result_dir_base'],semilogy=True)
     return

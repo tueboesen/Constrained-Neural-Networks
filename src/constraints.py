@@ -122,7 +122,7 @@ class ConstraintTemplate(nn.Module):
 
 
     def gradient_descent(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1,debug=False):
-        y_org = y.clone()
+        # y_org = y.clone()
         for j in range(self.n):
             x = project(y)
             c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
@@ -141,16 +141,14 @@ class ConstraintTemplate(nn.Module):
             while True:
                 y_try = y - alpha * dy
                 x_try = project(y_try)
-                # y_try2 = uplift(x_try)
-                # x_try2 = project(y_try2)
                 c_try, c_error_mean_try, c_error_max_try = self.compute_constraint_violation(x_try)
                 if c_error_max_try < c_error_max:
                     break
                 alpha = alpha / 2
                 lsiter = lsiter + 1
                 if alpha == 0:
-                    if c_error_max > 1e-2 and debug is False:
-                        self.gradient_descent(y_org, project, uplift, weight, debug=True)
+                    # if c_error_max > 1e-2 and debug is False:
+                    #     self.gradient_descent(y_org, project, uplift, weight, debug=True)
                     return y
             if lsiter == 0 and c_error_max_try > self.tol:
                 alpha = alpha * 1.5
@@ -159,7 +157,6 @@ class ConstraintTemplate(nn.Module):
         if j+1 >= self.n:
             print("problems detected!")
             # self.gradient_descent(y_org, project, uplift, weight, extra='n_exceeded', debug=True)
-        # print(j)
         return y, reg
 
 

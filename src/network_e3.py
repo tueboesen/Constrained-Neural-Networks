@@ -78,7 +78,7 @@ class neural_network_equivariant(torch.nn.Module):
         self.gates = torch.nn.ModuleList()
         self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
         # self.h = torch.ones(layers)*1e-2
-        self.mix = torch.nn.Parameter(torch.ones(layers)*0.5)
+        self.mix = torch.nn.Parameter(torch.ones(layers)*0.75)
         radial_neurons_prepend = [2*particles_pr_node*self.number_of_basis] + radial_neurons
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -136,7 +136,7 @@ class neural_network_equivariant(torch.nn.Module):
         y_new = self.convolutions[i](y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, num_neighbors)
         y_new = self.gates[i](y_new)
         y_new2 = self.self_interaction[i](y.clone())
-        y_out = self.mix[i] * y_new + (self.mix[i] - 1) * y_new2
+        y_out = min(self.mix[i]**2,1) * y_new + (1 - min(self.mix[i]**2,1)) * y_new2
         return y_out
 
     def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,weight=1) -> torch.Tensor:
@@ -157,8 +157,6 @@ class neural_network_equivariant(torch.nn.Module):
             dt = max(min(self.h[i]**2,0.1),1e-4)
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
-            y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
-
             if self.gamma > 0:
                 if self.discretization == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
@@ -172,10 +170,12 @@ class neural_network_equivariant(torch.nn.Module):
             else:
                 dy = 0
             if self.discretization == 'leapfrog':
+                y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 tmp = y.clone()
                 y = 2*y - y_old + dt *(y_new + self.gamma*dy)
                 y_old = tmp
             elif self.discretization == 'euler':
+                y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 y = y + dt * (y_new - self.gamma * dy)
             elif self.discretization == 'rk4':
                 k1 = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)

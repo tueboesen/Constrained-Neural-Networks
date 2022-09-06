@@ -10,7 +10,7 @@ def load_base_parameters_npendulum():
     args = parser.parse_args()
     args.n_train = 100
     args.n_val = 1000
-    args.n_test = 100
+    args.n_test = 1000
     args.batch_size = 10
     args.nskip = 20
     args.epochs_for_lr_adjustment = 1
