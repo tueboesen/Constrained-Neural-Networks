@@ -50,6 +50,11 @@ colors = ['black','orange', 'blue', 'red','darkgreen','pink']
 # colors = ['black', 'darkred', 'red', 'indianred', 'darkgreen', 'green', 'lime', 'darkblue', 'blue', 'slateblue']
 #
 # legends = ['No constraints', 'Chain', 'Triangle', 'Chaintriangle', 'End chain', 'End triangle', 'End chaintriangle', 'Reg chain', 'Reg triangle', 'Reg chaintriangle']
+
+
+#CV_MAX    ax.set_ylim(ymin=0.05)
+#MAE     ax.set_ylim(ymin=0.025,ymax=0.5)
+
 plot_pendulum_paper(result, legends, output_dir, colors, semilogy=True, fill_between=True, train_limits=False)
 # plot_training_and_validation_accumulated_custom(result_mim,legends,output_dir_mim,colors,semilogy=True,fill_between=True,train_limits=False)
 

@@ -9,25 +9,25 @@ from src.batch_jobs import job_planner, job_runner, job_planner3
 if __name__ == '__main__':
 
     # mutable_parameters = {
-    #     'con_type': ['high']*6,
-    #     'penalty': [0,1,10,50,100,200],
+    #     'con_type': ['low']*6,
+    #     'penalty': [0,10,50,100,200,500],
     # }
     #
     # mutable_parameters = {
-    #     'con_type': ['high']*4,
-    #     'regularization': [0,0.1,1,10],
+    #     'con_type': ['low']*4,
+    #     'regularization': [0,1,10,20],
     # }
     #
     # mutable_parameters = {
-    #     'con_type': ['high']*5,
+    #     'con_type': ['low']*5,
     #     'regularization': [1]*5,
-    #     'penalty': [1,10,50,100,200],
+    #     'penalty': [10,50,100,200,500],
     # }
 
     mutable_parameters = {
-        'con_type': ['high']*14,
-        'regularization': [0,0,0,0,0,0,0.1,1,10,1,1,1,1,1],
-        'penalty': [0,1,10,50,100,200,0,0,0,1,10,50,100,200],
+        'con_type': ['high']*9,
+        'regularization': [1,5,10,]*3,
+        'penalty': [10,10,10,50,50,50,100,100,100],
     }
 
     c = load_base_parameters_npendulum()
@@ -35,6 +35,6 @@ if __name__ == '__main__':
     c['n_val'] = 100
 
 
-    cs, legends, results = job_planner3(c,mutable_parameters)
+    cs, legends, results,results_test = job_planner3(c,mutable_parameters)
 
-    job_runner(cs,legends,results)
+    job_runner(cs,legends,results,results_test)

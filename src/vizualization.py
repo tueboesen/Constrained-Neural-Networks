@@ -778,7 +778,7 @@ def plot_training_and_validation_accumulated_custom(results,legends,results_dir,
     return
 
 
-def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_between=False,train_limits=None):
+def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_between=False,train_limits=None,cv_exclusions=[]):
     """
     This is a more customizable version of the above function, designed for printing specific figures for papers or similar things.
     """
@@ -808,9 +808,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+                h = ax.semilogy(x, y, ':', color=colors[ii])
             else:
-                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+                h = ax.plot(x, y, ':', color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -819,9 +819,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, ':', color=colors[ii])
+                h = ax.semilogy(x, y, '-',label=legends[ii], color=colors[ii])
             else:
-                h = ax.plot(x, y, ':', color=colors[ii])
+                h = ax.plot(x, y, '-',label=legends[ii], color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -848,9 +848,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+                h = ax.semilogy(x, y, ':',color=colors[ii])
             else:
-                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+                h = ax.plot(x, y, ':', color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -859,9 +859,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, ':', color=colors[ii])
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
-                h = ax.plot(x, y, ':', color=colors[ii])
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -889,9 +889,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+                h = ax.semilogy(x, y, ':',  color=colors[ii])
             else:
-                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+                h = ax.plot(x, y, ':', color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -900,9 +900,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, ':', color=colors[ii])
+                h = ax.semilogy(x, y, '-',label=legends[ii], color=colors[ii])
             else:
-                h = ax.plot(x, y, ':', color=colors[ii])
+                h = ax.plot(x, y, '-',label=legends[ii], color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -930,9 +930,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+                h = ax.semilogy(x, y, ':',color=colors[ii])
             else:
-                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+                h = ax.plot(x, y, ':',  color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -941,9 +941,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, ':', color=colors[ii])
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
-                h = ax.plot(x, y, ':', color=colors[ii])
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -960,7 +960,7 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
 
     pngfile = "{:}/MAE_r.png".format(results_dir)
     ax.set_xlim(xmin=0, xmax=150)
-    # ax.set_ylim(ymin=0.01,ymax=1)
+    # ax.set_ylim(ymin=0.025,ymax=0.5)
     plt.savefig(pngfile)
     plt.close()
 
@@ -975,9 +975,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
+                h = ax.semilogy(x, y, ':', color=colors[ii])
             else:
-                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
+                h = ax.plot(x, y, ':',color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -986,9 +986,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii,M[ii,:,idx],idx,:].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, ':', color=colors[ii])
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
-                h = ax.plot(x, y, ':', color=colors[ii])
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y+ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -1011,14 +1011,16 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
 
     fig, ax = plt.subplots(figsize=(15, 15))
     for ii in range(njobs):
+        if ii in cv_exclusions:
+            continue
         idx = 6
         if np.sum(M[ii, :, idx]) > 0:
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, '-', label=legends[ii], color=colors[ii])
+                h = ax.semilogy(x, y, ':',  color=colors[ii])
             else:
-                h = ax.plot(x, y, '-', label=legends[ii], color=colors[ii])
+                h = ax.plot(x, y, ':',  color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -1027,9 +1029,9 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
             y = results[ii, M[ii, :, idx], idx, :].mean(axis=0)
             ystd = results[ii, M[ii, :, idx], idx, :].std(axis=0)
             if semilogy:
-                h = ax.semilogy(x, y, ':', color=colors[ii])
+                h = ax.semilogy(x, y, '-', label=legends[ii],color=colors[ii])
             else:
-                h = ax.plot(x, y, ':', color=colors[ii])
+                h = ax.plot(x, y, '-', label=legends[ii],color=colors[ii])
             if fill_between:
                 ax.fill_between(x, y - ystd, y + ystd, color=h[0].get_color(), alpha=0.2)
 
@@ -1046,7 +1048,7 @@ def plot_pendulum_paper(results,legends,results_dir,colors,semilogy=False,fill_b
 
     pngfile = "{:}/CV_max.png".format(results_dir)
     ax.set_xlim(xmin=0, xmax=150)
-    # ax.set_ylim(ymax=0.3)
+    # ax.set_ylim(ymin=0.05)
     plt.savefig(pngfile)
     plt.close()
 

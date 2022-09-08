@@ -8,10 +8,10 @@ A simple file to load data from an already finished run, and plot it with custom
 
 """
 
-folders = ['/home/tue/PycharmProjects/results/test_npendulum_initial_test/2022-08-03_20_38_18/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_initial_test/2022-09-06_11_36_38/']  # train 100, skip 20
 
 
-output = 'Initial_test_train100_skip100_lr_var'
+output = 'Initial_test_train100_skip20_lr_var'
 
 # output_dir = '/home/tue/remote_desktop/regularization10/'
 # os.makedirs(output_dir,exist_ok=True)
@@ -40,8 +40,8 @@ output_dir = f"{base_output_dir}{output}"
 os.makedirs(output_dir, exist_ok=True)
 
 # selected_idx = [0,1,2,7,8,13,14]
-legends = ['No constraints', 'Stabilized', 'End constraints', 'Smooth constraints']
-colors = ['black','orange', 'blue', 'red']
+legends = ['No constraints', 'Auxiliary loss', 'Penalty', 'End constraints', 'Smooth constraints']
+colors = ['black','orange', 'blue', 'red','darkgreen']
 # colors = ['black', 'darkred', 'pink', 'darkgreen', 'lime', 'darkblue', 'slateblue']
 # results_selected = results_numpy
 # permutation = [0, 1, 4, 7, 2, 5, 8, 3, 6, 9] #The data was ordered as: ['No constraints' 'chain high' 'chain low' 'chain reg', 'triangle high' 'triangle low' 'triangle reg' 'chaintriangle high' 'chaintriangle low' 'chaintriangle reg'], but we wish a different ordering
@@ -49,6 +49,6 @@ colors = ['black','orange', 'blue', 'red']
 # colors = ['black', 'darkred', 'red', 'indianred', 'darkgreen', 'green', 'lime', 'darkblue', 'blue', 'slateblue']
 #
 # legends = ['No constraints', 'Chain', 'Triangle', 'Chaintriangle', 'End chain', 'End triangle', 'End chaintriangle', 'Reg chain', 'Reg triangle', 'Reg chaintriangle']
-plot_pendulum_paper(result, legends, output_dir, colors, semilogy=True, fill_between=True, train_limits=False)
+plot_pendulum_paper(result, legends, output_dir, colors, semilogy=True, fill_between=True, train_limits=False,cv_exclusions=[3,4])
 # plot_training_and_validation_accumulated_custom(result_mim,legends,output_dir_mim,colors,semilogy=True,fill_between=True,train_limits=False)
 

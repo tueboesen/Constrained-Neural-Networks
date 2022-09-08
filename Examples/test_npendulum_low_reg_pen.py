@@ -25,9 +25,9 @@ if __name__ == '__main__':
     # }
 
     mutable_parameters = {
-        'con_type': ['low']*19,
-        'regularization': [0,0,0,0,0,0,1,10,20,1,1,1,1,1,10,10,10,10,10],
-        'penalty': [0,10,50,100,200,500,0,0,0,10,50,100,200,500,10,50,100,200,500],
+        'con_type': ['low']*9,
+        'regularization': [1,5,10,]*3,
+        'penalty': [10,10,10,50,50,50,100,100,100],
     }
 
     c = load_base_parameters_npendulum()
@@ -35,6 +35,6 @@ if __name__ == '__main__':
     c['n_val'] = 100
 
 
-    cs, legends, results = job_planner3(c,mutable_parameters)
+    cs, legends, results,results_test = job_planner3(c,mutable_parameters)
 
-    job_runner(cs,legends,results)
+    job_runner(cs,legends,results,results_test)

@@ -279,8 +279,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
             for j in range(min(nviz, batch_size)):
                 MAEj = MAEr_xy[j].mean()
                 filename = f"{output_folder}/viz_paper/{j}_{MAEr_xy[j].mean():2.4f}.png"
-                fighandler = plot_pendulum_snapshot_custom(Rin_xy[j], Vin_xy[j], color='red')
-                fighandler = plot_pendulum_snapshot_custom(Rout_xy[j], fighandler=fighandler, color='green')
+                # fighandler = plot_pendulum_snapshot_custom(Rin_xy[j], Vin_xy[j], color='red')
+                fighandler = plot_pendulum_snapshot_custom(Rout_xy[j],  color='green')
                 fighandler = plot_pendulum_snapshot_custom(Rpred_xy[j], fighandler=fighandler, file=filename, color='blue')
 
         # if (i + 1) * batch_size >= max_samples:
