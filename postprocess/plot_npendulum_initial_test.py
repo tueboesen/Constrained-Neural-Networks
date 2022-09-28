@@ -40,7 +40,7 @@ output_dir = f"{base_output_dir}{output}"
 os.makedirs(output_dir, exist_ok=True)
 
 # selected_idx = [0,1,2,7,8,13,14]
-legends = ['No constraints', 'Auxiliary loss', 'Penalty', 'End constraints', 'Smooth constraints']
+legends = ['No constraints', r'Auxiliary loss $\eta=10$', r'Penalty $\gamma=10$', 'End constraints', 'Smooth constraints']
 colors = ['black','orange', 'blue', 'red','darkgreen']
 # colors = ['black', 'darkred', 'pink', 'darkgreen', 'lime', 'darkblue', 'slateblue']
 # results_selected = results_numpy

@@ -23,7 +23,7 @@ def load_base_parameters_npendulum():
     args.debug = False
     args.viz = False
     args.lr = 1e-3
-    args.seed = [1234,1235,1236,1237,1238]
+    args.seed = [1234,1235,1236]
     args.use_same_data = True
     args.epochs = 150
     args.load_previous_model_file = ''

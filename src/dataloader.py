@@ -18,7 +18,7 @@ def load_data(file,data_type,device,nskip,n_train,n_val,n_test,use_val,use_test,
     Wrapper function that handles the different supported data_types.
     """
     if data_type == 'water':
-        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep =load_MD_data(file, data_type, device, nskip, n_train, n_val, use_val, use_test, batch_size, shuffle=shuffle, use_endstep=use_endstep)
+        dataloader_train, dataloader_val, dataloader_test, dataloader_endstep =load_MD_data(file, data_type, device, nskip, n_train, n_val,n_test, use_val, use_test, batch_size, shuffle=shuffle, use_endstep=use_endstep)
     elif data_type == 'protein':
         dataloader_train= load_protein_data(file, data_type, device, n_train, batch_size, shuffle=shuffle)
         if use_val:
@@ -122,7 +122,7 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_
     return dataloader_train, dataloader_val, dataloader_test
 
 
-def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batch_size, shuffle=True, use_endstep=False,viz_paper=False):
+def load_MD_data(file,data_type,device,nskip,n_train,n_val,n_test,use_val,use_test,batch_size, shuffle=True, use_endstep=False,viz_paper=False):
     """
     A function for loading molecular dynamics data
     """
@@ -193,7 +193,7 @@ def load_MD_data(file,data_type,device,nskip,n_train,n_val,use_val,use_test,batc
         np.random.shuffle(ndata_rand)
     train_idx = ndata_rand[:n_train]
     val_idx = ndata_rand[n_train:n_train + n_val]
-    test_idx = ndata_rand[n_train + n_val:]
+    test_idx = ndata_rand[n_train + n_val:n_train + n_val + n_test]
     endstep_idx = np.arange(10)
 
     Rin_train = Rin[train_idx]

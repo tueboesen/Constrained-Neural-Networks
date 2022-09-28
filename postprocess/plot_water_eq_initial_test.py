@@ -9,9 +9,9 @@ A simple file to load data from an already finished run, and plot it with custom
 """
 
 # folders = ['/home/tue/PycharmProjects/results/test_water/2022-08-15_15_34_01/']  # train 100, skip 20
-folders = ['/home/tue/PycharmProjects/results/test_water/2022-08-19_13_48_27/']  # train 1000, skip 50
+# folders = ['/home/tue/PycharmProjects/results/test_water/2022-08-19_13_48_27/']  # train 1000, skip 50
 folders = ['/home/tue/PycharmProjects/results/test_water_100/2022-08-23_09_10_33/']  # train 100, skip 50
-folders = ['/home/tue/remote_desktop/test_water_100_k100/2022-08-24_08_46_20/']  # train 100, skip 100
+# folders = ['/home/tue/remote_desktop/test_water_100_k100/2022-08-24_08_46_20/']  # train 100, skip 100
 
 
 output = 'eq_initial_test_100_k100'
@@ -43,8 +43,13 @@ result[:,:,4:8] = result[:,:,4:8] / Rscale
 
 MAEtrainidx = 8
 MAEtestidx = 9
+CVtrainidx = 4
+CVtestidx = 5
 MAE_train = result[:,:,MAEtrainidx,:].min(axis=-1).mean(axis=1)*100
 MAE_test = result[:,:,MAEtestidx,:].min(axis=-1).mean(axis=1)*100
+
+CV_test = result[:,:,CVtestidx,:].min(axis=-1).mean(axis=1)*100
+
 
 MAE_train_std = result[:,:,MAEtrainidx,:].min(axis=-1).std(axis=1)*100
 MAE_test_std = result[:,:,MAEtestidx,:].min(axis=-1).std(axis=1)*100
