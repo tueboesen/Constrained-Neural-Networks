@@ -220,6 +220,9 @@ class neural_network_mimetic(nn.Module):
         # y = x @ self.K.T
         return y
 
+    def K(self):
+        return self.lin.weight.T
+
     def project(self,y):
         x = y @ self.lin.weight
         # x = y @ self.K
@@ -234,6 +237,7 @@ class neural_network_mimetic(nn.Module):
         else:
             node_attr_embedded = node_attr
         y = self.uplift(x)
+        # y2 = x @ self.K().T
         ndimx = x.shape[-1]
         ndimy = y.shape[-1]
         y_old = y
@@ -285,7 +289,8 @@ class neural_network_mimetic(nn.Module):
             if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
-                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                # y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.K(),self.K().T,weight)
+                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight,K=self.K())
                 y = y.view(-1,ndimy)
                 reg = reg + regi
                 reg2 = reg2 + regi2

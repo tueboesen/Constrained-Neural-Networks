@@ -10,9 +10,9 @@ if __name__ == '__main__':
 
     mutable_parameters = {
         # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-        'con_type': ['','','','low','high'],
-        'penalty': [0,0,10,10,10],
-        'regularization': [0, 10, 0, 10, 10],
+        'con_type': ['low','high'],
+        'penalty': [10,10],
+        'regularization': [10, 10],
         # 'lr': [1e-2,1e-2,1e-3,1e-3]
     }
 
@@ -21,13 +21,13 @@ if __name__ == '__main__':
     c['data'] = './../Data/water.npz'
     c['data_type'] = 'water'
     c['con'] = 'water'
-    c['epochs'] = 50
+    c['epochs'] = 1
     # c['lr_adjustment'] = 0.99
     # args.epochs_for_lr_adjustment = 1
     # c['epochs_for_lr_adjustment'] = 1000
     c['lr'] = 1e-2
     c['nskip'] = 49
-    c['n_val'] = 1000
+    c['n_val'] = 100
     c['n_train'] = 100
 
     # c['epochs'] = 2

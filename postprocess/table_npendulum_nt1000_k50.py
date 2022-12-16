@@ -31,5 +31,6 @@ mae_r_test = results_numpy[:,:,4]
 mae_r_test_mean = mae_r_test.mean(axis=1)
 # mae_r_test_mean_high = (mae_r_test[-1,0] + mae_r_test[-1,-1]) /2
 print(f"MAEr={mae_r_test_mean*100}")
+print(f"cv = {cv_test*100}")
 # print(f"MAEr={mae_r_test_mean_high*100}")
 print("done")

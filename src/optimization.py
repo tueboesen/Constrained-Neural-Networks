@@ -164,7 +164,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
                 loss_reg = reg2 * regularization
                 loss = lossE_rel_r + loss_reg
                 # loss = lossE_rel_r + torch.min(loss_reg,lossE_rel_r)
-                print(f"{lossE_rel_r:2.2f},{loss_reg:2.2f}")
+                # print(f"{lossE_rel_r:2.2f},{loss_reg:2.2f}")
             else:
                 loss = lossE_rel + reg2 * regularization
         elif loss_type.lower() == 'mim':
@@ -228,12 +228,17 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
 
         aloss_r += loss_r.item()
         aloss_v += loss_v.item()
-        acv += (cv_mean*rscale).item()
-        acv_max = max((cv_max*rscale).item(),acv_max)
+        acv += cv_mean.item()
+        acv_max = max(cv_max.item(),acv_max)
         areg += reg.item()
         areg2 += reg2.item()
         aMAEr += MAEr.item()
         # aMAEv += MAEv.item()
+        # dr = delta_r(Rpred.view(-1,32,3,3)*rscale)
+        # dr2 = delta_r(Rout_vec.view(-1,32,3,3)*rscale)
+        # c_mean = water_con(dr)
+        # c_mean2 = water_con(dr2)
+        # print(cv_mean.item(),c_mean.item())
 
         if ds.data_type == 'n-pendulum' and viz == True and i == 0:
             if ndim == 1:
@@ -460,5 +465,27 @@ def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, b
     aDRMSD /= (i + 1)
     return alossD, aDRMSD
 
+
+
+
+
+
+def delta_r(r):
+    """
+    """
+    dr1 = r[:,:,0] - r[:,:,1]
+    dr2 = r[:,:,1] - r[:,:,2]
+    dr3 = r[:,:,2] - r[:,:,0]
+    dr = torch.cat((dr1[:,:,None,:],dr2[:,:,None,:],dr3[:,:,None,:]),dim=2)
+    return dr
+
+def water_con(dr):
+    l = torch.tensor([0.957, 1.513, 0.957]).to(device=dr.device)
+
+    drnorm = torch.norm(dr, dim=-1)
+    c = drnorm - l
+    cabs = torch.abs(c)
+    c_mean = torch.mean(cabs)
+    return c_mean
 
 
