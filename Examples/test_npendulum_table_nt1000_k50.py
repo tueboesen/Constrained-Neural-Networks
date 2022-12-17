@@ -14,7 +14,7 @@ if __name__ == '__main__':
         'con_type': ['','','','low','high'],
         'penalty': [0,0,10,10,10],
         'regularization': [0, 10, 0, 10, 10],
-        'nskip': [20]*5
+        'nskip': [50]*5
     }
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
     c['epochs'] = 100

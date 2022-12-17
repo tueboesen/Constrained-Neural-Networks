@@ -10,18 +10,12 @@ if __name__ == '__main__':
 
     mutable_parameters = {
         # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-        'con_type': [''],
-        'regularization': [10],
+        'con_type': ['','','','low','high'],
+        'penalty': [0,0,1,1,1],
+        'regularization': [0, 1, 0, 1, 1],
+        # 'lr': [1e-2,1e-2,1e-3,1e-3]
     }
 
-    # mutable_parameters = {
-    #     # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-    #     'con_type': ['','','low','high'],
-    #     'penalty': [0,10,10,10],
-    #     'regularization': [0, 0, 10, 10],
-    #     'lr': [1e-2,1e-2,1e-3,1e-3],
-    #     'epochs': [75,75,20,20]
-    # }
 
     c = load_base_parameters_npendulum()
     c['data'] = './../Data/water.npz'
@@ -42,6 +36,6 @@ if __name__ == '__main__':
     c['network_type'] = 'eq'  #Note if you use multiple network types equivariant networks always needs to go first or you will have memory trouble, this is likely due to the JIT compiler, though I'm not 100% sure.
     c = standard_network_sizes(c, c['network_type'])
 
-    cs, legends, results,results_test = job_planner3(c,mutable_parameters)
+    cs, legends, results,results_test= job_planner3(c,mutable_parameters)
 
-    job_runner(cs,legends,results,results_test)
+    job_runner(cs,legends,results, results_test)

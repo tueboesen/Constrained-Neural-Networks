@@ -18,7 +18,9 @@ def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='c
         r1 = con_variables['r1']
         r2 = con_variables['r2']
         l = torch.tensor([r0/rscale,r1/rscale,r2/rscale],device=device)
-        con_fnc = Water(l,tol=1e-2/rscale,niter=100,scale=rscale)
+        niter = 100
+        shape_transform = 1 #This is the dimensions of coupled constraints, for the water molecules this should be 1 since they are not coupled.
+        con_fnc = Water(l,tol=1e-2/rscale,niter=niter,scale=rscale,shape_transform=shape_transform)
     elif con == 'n-pendulum':
         if con_type == 'stabhigh':
             niter = 1
@@ -84,7 +86,7 @@ class ConstraintTemplate(nn.Module):
         niter: Maximum number of gradient descent steps taken.
     """
 
-    def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='gradient_descent',scale=1):
+    def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='gradient_descent',scale=1,shape_transform=None):
         super(ConstraintTemplate, self).__init__()
         self.tol = tol
         self.n = niter
@@ -93,6 +95,7 @@ class ConstraintTemplate(nn.Module):
         self.use_newton_steps = use_newton_steps
         self.mode = mode
         self.scale = scale
+        self.shape_transform = shape_transform
         return
 
     def debug(self,x):
@@ -155,63 +158,6 @@ class ConstraintTemplate(nn.Module):
         dy = uplift(dx)
         return dy
 
-    def gradient_descent(self,y,project,uplift,K=None,weight=1,debug=False,):
-        """
-        This function has squeezed out the batch dimension, which allows us to use the constraints as written in the paper, for a batch version everything needs to be flipped.
-        """
-        for j in range(self.n):
-            # if K is not None:
-            #     x = y @ K.T
-            # else:
-            #     x = y
-            x = project(y)
-            c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
-            if j == 0:
-                reg = c_error_mean
-                reg2 = (c * c).mean()
-            if c_error_max < self.tol:
-                break
-            if debug:
-                self.debug(x, c, extra=j)
-            if self.use_newton_steps:
-                dx = self.newton_step_simple(x, c, K)
-            else:
-                dx = self.jacobian_transpose_times_constraint(x,c)
-                # dx = self.jacobian_transpose_times_constraint2(x,c)
-            # dx2 = self.newton_step_simple(x,c,K)
-            dx = weight * dx
-            dy = uplift(dx)
-            # if K is not None:
-            #     dy = dx @ K
-            # else:
-            #     dy = dx
-            if j == 0:
-                alpha = 1.0 / dy.norm(dim=-1).mean()
-            lsiter = 0
-            while True:
-                y_try = y - alpha * dy
-                x_try = project(y_try)
-                # if K is not None:
-                #     x_try = y_try @ K.T
-                # else:
-                #     x_try = y_try
-                c_try, c_error_mean_try, c_error_max_try = self.compute_constraint_violation(x_try)
-                if c_error_max_try < c_error_max:
-                    break
-                alpha = alpha / 2
-                lsiter = lsiter + 1
-                if alpha == 0:
-                    # if c_error_max > 1e-2 and debug is False:
-                    #     self.gradient_descent(y_org, project, uplift, weight, debug=True)
-                    return y
-            if lsiter == 0 and c_error_max_try > self.tol:
-                alpha = alpha * 1.5
-            if c_error_max_try < c_error_max:
-                y = y - alpha * dy
-        if j+1 >= self.n:
-            print("problems detected!")
-            # self.gradient_descent(y_org, project, uplift, weight, extra='n_exceeded', debug=True)
-        return y, reg,reg2
 
     def conjugate_gradient(self,y,K=None,weight=1,debug=False):
         """
@@ -272,20 +218,77 @@ class ConstraintTemplate(nn.Module):
         print(f"{i} - {c_error_max:2.2e}")
         return x, reg, reg2
 
+    def gradient_descent(self,y,project,uplift,K=None,weight=1,debug=False,):
+        """
+        This function has squeezed out the batch dimension, which allows us to use the constraints as written in the paper, for a batch version everything needs to be flipped.
+        """
+        problems = False
+        for j in range(self.n):
+            # if K is not None:
+            #     x = y @ K.T
+            # else:
+            #     x = y
+            x = project(y)
+            c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
+            if j == 0:
+                reg = c_error_mean
+                reg2 = (c * c).mean()
+            if c_error_max < self.tol:
+                break
+            if debug:
+                self.debug(x, c, extra=j)
+            if self.use_newton_steps:
+                dx = self.newton_step_simple(x, c, K)
+            else:
+                dx = self.jacobian_transpose_times_constraint(x,c)
+                # dx = self.jacobian_transpose_times_constraint2(x,c)
+            # dx2 = self.newton_step_simple(x,c,K)
+            dx = weight * dx
+            dy = uplift(dx)
+            # if K is not None:
+            #     dy = dx @ K
+            # else:
+            #     dy = dx
+            if j == 0:
+                alpha = 1.0 / dy.norm(dim=-1).mean()
+            lsiter = 0
+            while True:
+                y_try = y - alpha * dy
+                x_try = project(y_try)
+                # if K is not None:
+                #     x_try = y_try @ K.T
+                # else:
+                #     x_try = y_try
+                c_try, c_error_mean_try, c_error_max_try = self.compute_constraint_violation(x_try)
+                if c_error_max_try < c_error_max:
+                    break
+                alpha = alpha / 2
+                lsiter = lsiter + 1
+                if alpha == 0:
+                    # if c_error_max > 1e-2 and debug is False:
+                    #     self.gradient_descent(y_org, project, uplift, weight, debug=True)
+                    return y, reg, reg2, True
+            if c_error_max_try < c_error_max:
+                y = y - alpha * dy
+            if lsiter == 0:
+                alpha = alpha * 1.5
+        if j+1 >= self.n:
+            problems = True
+        return y, reg, reg2, problems
+
     def gradient_descent_batch(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1,debug_idx=None):
         # y_org = y.clone()
         nb = y.shape[0]
         alpha = torch.ones(nb,device=y.device)
         j = 0
         while True:
-        # for j in range(self.n):
-            idx_all = torch.arange(nb)
+            idx_all = torch.arange(nb,device=y.device)
             x = project(y)
             c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
             if j == 0:
                 reg = c_error_mean
                 reg2 = (c*c).mean()
-            cm = c.abs().sum(dim=2).max(dim=1)[0]
+            cm = c.abs().max(dim=1)[0].max(dim=1)[0]
             M = cm > self.tol
             idx = idx_all[M]
             if len(idx) == 0:
@@ -295,13 +298,14 @@ class ConstraintTemplate(nn.Module):
             dx = self.jacobian_transpose_times_constraint(x[idx],c[idx])
             dx = weight[idx] * dx
             dy = uplift(dx)
-            lsiter = torch.zeros(len(idx))
+            lsiter = torch.zeros(len(idx),device=y.device)
             while True:
                 y_try = y[idx] - alpha[idx,None,None] * dy
                 x_try = project(y_try)
                 c_try, c_error_mean_try, c_error_max = self.compute_constraint_violation(x_try)
-                cm_try = c_try.abs().sum(dim=2).max(dim=1)[0]
+                cm_try = c_try.abs().max(dim=1)[0].max(dim=1)[0]
                 M_try = cm_try <= cm[idx]
+                # print(int(lsiter.max().item()), M_try.sum().item(), M_try.shape[0])
                 if M_try.all():
                     break
                 idx_sel = idx[~M_try]
@@ -311,8 +315,8 @@ class ConstraintTemplate(nn.Module):
                     break
             M_increase = lsiter == 0
             idx_sel = idx[M_increase]
-            alpha[idx_sel] = alpha[idx_sel] * 1.5
             ysel = y[idx] - alpha[idx,None,None] * dy
+            alpha[idx_sel] = alpha[idx_sel] * 1.5
             yall = []
             count = 0
             for i in range(nb):
@@ -324,19 +328,7 @@ class ConstraintTemplate(nn.Module):
             y = torch.stack(yall,dim=0)
             j += 1
             if j > self.n:
-                # print(f"{cm.max()}")
-                # if debug_idx is None:
-                #     self.gradient_descent_batch(y_org,project,uplift,weight,debug_idx=cm.argmax())
-                # x = project(y)
-                # x_org = project(y_org)
-                # c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
-                # c_org, c_org_error_mean, c_org_error_max = self.compute_constraint_violation(x_org)
-                # dx = self.jacobian_transpose_times_constraint(x, c)
-                # dx2 = self.jacobian_transpose_times_constraint_backup(x, c)
-                # self.debug(x,c)
-                # self.debug(x_org,c_org,extra='org')
-                # assert torch.allclose(dx,dx2,rtol=1e-7), "The jacobian is wrong!"
-
+                print("Projection failed")
                 break
         return y, reg, reg2
 
@@ -347,12 +339,16 @@ class ConstraintTemplate(nn.Module):
         c = self.constraint(x,rescale=True)
         cabs = torch.abs(c)
         c_error_mean = torch.mean(cabs)
-        c_error_max = torch.max(torch.abs(cabs))
+        c_error_max = torch.max(cabs)
         return c,c_error_mean, c_error_max
 
-    def forward(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=False,K=None):
+    def forward(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True,K=None):
+        if self.shape_transform is not None:
+            y_shape = y.shape
+            y_shape_new = torch.Size([y_shape[0]*y_shape[1],self.shape_transform,-1])
+            y = y.view(y_shape_new)
+            weight = weight.view(y_shape_new)
         if use_batch:
-            raise NotImplementedError("This has not been implemented yet in the new version")
             y, reg, reg2 = self.gradient_descent_batch(y,project,uplift,weight)
         else:
             nb = y.shape[0]
@@ -361,7 +357,9 @@ class ConstraintTemplate(nn.Module):
             reg2 = 0
             for i in range(nb):
                 if self.mode == 'gradient_descent':
-                    tmp, regi,regi2 = self.gradient_descent(y[i:i+1],project,uplift, K, weight[i:i+1])
+                    tmp, regi,regi2,problems = self.gradient_descent(y[i:i+1],project,uplift, K, weight[i:i+1])
+                    if problems:
+                        tmp, regi, regi2, problems = self.gradient_descent(y[i:i + 1], project, uplift, K, weight[i:i + 1])
                 elif self.mode == 'cg':
                     tmp, regi,regi2 = self.conjugate_gradient(y[i:i+1],K=K,weight=weight[i:i+1])
                 else:
@@ -370,6 +368,10 @@ class ConstraintTemplate(nn.Module):
                 reg = reg + regi
                 reg2 = reg2 + regi2
             y = torch.cat(y_new, dim=0)
+        if self.shape_transform is not None:
+            y = y.view(y_shape)
+
+
         return y, reg, reg2
 
 class MultiPendulum(ConstraintTemplate):
@@ -481,8 +483,8 @@ class Water(ConstraintTemplate):
         l: A torch tensor with the binding lengths of the different bonds, can also be a single number if all bonds have the same length.
         position_idx: gives the indices for x,y,z coordinates in ndims for the different particles.
     """
-    def __init__(self,l,tol,niter,position_idx=[0,1,2,3,4,5,6,7,8],scale=1):
-        super(Water, self).__init__(tol,niter,scale=scale)
+    def __init__(self,l,tol,niter,position_idx=[0,1,2,3,4,5,6,7,8],scale=1,shape_transform=None):
+        super(Water, self).__init__(tol,niter,scale=scale,shape_transform=shape_transform)
         self.l = l
         self.position_idx = position_idx
         return

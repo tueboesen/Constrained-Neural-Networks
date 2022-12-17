@@ -11,8 +11,8 @@ if __name__ == '__main__':
     mutable_parameters = {
         # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
         'con_type': ['','','','low','high'],
-        'penalty': [0,0,10,10,10],
-        'regularization': [0, 10, 0, 10, 10],
+        'penalty': [0,0,1,1,1],
+        'regularization': [0, 1, 0, 1, 1],
         # 'lr': [1e-2,1e-2,1e-3,1e-3]
     }
 
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     # c['epochs_for_lr_adjustment'] = 1000
     c['lr'] = 1e-2
     c['nskip'] = 49
-    c['n_val'] = 1000
+    c['n_val'] = 100
     c['n_train'] = 100
 
     # c['epochs'] = 2

@@ -11,13 +11,13 @@ if __name__ == '__main__':
     c = load_base_parameters_npendulum()
     mutable_parameters = {
         # 'network_discretization': ['rk4','rk4','rk4','rk4','rk4','rk4','rk4','euler'],
-        'con_type': ['','','','low','high']*2,
-        'penalty': [0,0,10,10,10]*2,
-        'regularization': [0, 10, 0, 10, 10]*2,
-        'nskip': [20,20,20,20,20,50,50,50,50,50]
+        'con_type': ['','','','low','high'],
+        'penalty': [0,0,10,10,10],
+        'regularization': [0, 10, 0, 10, 10],
+        'nskip': [20]*5
     }
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
-    c['epochs'] = 2
+    c['epochs'] = 150
 
     cs, legends, results,results_test = job_planner3(c,mutable_parameters)
 

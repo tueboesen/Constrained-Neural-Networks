@@ -17,9 +17,9 @@ if __name__ == '__main__':
         'nskip': [20]*5
     }
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
-    c['epochs'] = 100
+    c['epochs'] = 75
     c['n_val'] = 100
-    c['n_train'] = 1000
+    c['n_train'] = 10000
 
 
     cs, legends, results,results_test = job_planner3(c,mutable_parameters)
