@@ -20,5 +20,4 @@ if __name__ == '__main__':
     c['epochs'] = 150
 
     cs, legends, results,results_test = job_planner3(c,mutable_parameters)
-
     job_runner(cs,legends,results,results_test)
