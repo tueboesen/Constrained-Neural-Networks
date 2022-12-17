@@ -1,3 +1,5 @@
+#!/bin/bash
+
 search_dir=scripts_to_run/
 for entry in "$search_dir"/*.py
 do
