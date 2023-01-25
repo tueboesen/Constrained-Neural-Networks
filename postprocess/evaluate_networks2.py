@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 from src.base_parameters import load_base_parameters_npendulum
-from src.batch_jobs import job_runner, job_planner2, job_planner3
+from src.batch_jobs import job_runner, job_planner2, job_planner
 
 mutable_parameters = {
     # 'network_discretization': ['rk4'],
@@ -23,5 +23,5 @@ c['use_test'] = True
 c['seed'] = [1234]
 c['nviz'] = 10
 c['batchsize'] = 10
-cs, legends, results = job_planner3(c,mutable_parameters=mutable_parameters)
+cs, legends, results = job_planner(c, mutable_parameters=mutable_parameters)
 job_runner(cs, legends, results)

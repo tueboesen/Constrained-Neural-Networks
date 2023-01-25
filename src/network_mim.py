@@ -314,4 +314,4 @@ class neural_network_mimetic(nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        return x, cv_mean, cv_max, reg, reg2
+        return x, c, cv_max, reg, reg2

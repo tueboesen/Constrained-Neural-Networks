@@ -8,9 +8,13 @@ A simple file to load data from an already finished run, and plot it with custom
 
 """
 
-# folders = ['/home/tue/PycharmProjects/results/test_water_100/2022-08-23_09_10_33/']
-folders = ['/home/tue/results/test_water_1000/2022-12-19_12_33_13/']
+# folders = ['/home/tue/PycharmProjects/results/test_npendulum_final_test/2022-08-01_12_06_30/']  # train 100, skip 20
+# folders = ['/home/tue/PycharmProjects/results/test_water_10000/2022-09-09_22_13_19/']  # train 1000, skip 50
+folders = ['/home/tue/results/test_water_10000/2022-12-21_10_14_33/']  # train 1000, skip 50
 
+
+# output = 'final_test_train100_skip100_lr1e-3'
+output = 'table_nt1000_k50'
 
 
 

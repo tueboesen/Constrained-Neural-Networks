@@ -28,7 +28,7 @@ def load_data(file,data_type,device,nskip,n_train,n_val,n_test,use_val,use_test,
         dataloader_endstep = None
         dataloader_test = None
     elif data_type == 'n-pendulum':
-        dataloader_train, dataloader_val, dataloader_test =load_npendulum_data(data_type, device, nskip, n_train, n_val, n_test, use_val, use_test, batch_size, shuffle=shuffle,n=model_specific['n'],dt=model_specific['dt'],M=model_specific['M'],L=model_specific['L'], use_angles=model_specific['angles'])
+        dataloader_train, dataloader_val, dataloader_test =load_npendulum_data(data_type, device, nskip, n_train, n_val, n_test, use_val, use_test, batch_size, shuffle=shuffle,n=model_specific['n'],dt=model_specific['dt'],M=model_specific['M'],L=model_specific['L'], use_angles=model_specific['angles'],n_extra=model_specific['extra_simulation_steps'])
         dataloader_endstep = None
     else:
         NotImplementedError("The data_type={:} has not been implemented in function {:}".format(data_type, inspect.currentframe().f_code.co_name))
@@ -75,6 +75,19 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_
     R = torch.cat((x[:,1:,None],y[:,1:,None]),dim=2)
     V = torch.cat((vx[:,1:,None],vy[:,1:,None]),dim=2)
 
+    Vm = V.sum(dim=1)
+    Rm = R.sum(dim=1)
+    g = 9.82
+    # Vm = V.mean(dim=0).sum(dim=0)
+    # Rm = R.mean(dim=0).sum(dim=0)
+    v2 = vx**2 + vy**2
+    K = 0.5*torch.sum(v2[:,1:],dim=1)
+    P = g * torch.sum(y[:,1:],dim=1)
+    E = K + P
+    Estd = E.std()
+    E0 = E.mean()
+
+
     Rin, Rout = convert_snapshots_to_future_state_dataset(nskip, R)
     Vin, Vout = convert_snapshots_to_future_state_dataset(nskip, V)
     Rina, Routa = convert_snapshots_to_future_state_dataset(nskip, Ra)
@@ -98,7 +111,7 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_
     v_tuple = (Rin,Rout,Vin,Vout,Rina,Routa,Vina,Vouta)
     Rin_sel,Rout_sel,Vin_sel,Vout_sel,Rina_sel,Routa_sel,Vina_sel,Vouta_sel = select_indices(train_idx,v_tuple,device)
 
-    dataset_train = DatasetFutureState(data_type, Rin_sel, Rout_sel, z, Vin_sel, Vout_sel, m=M, device=device, Rin2=Rina_sel, Rout2=Routa_sel, Vin2=Vina_sel, Vout2=Vouta_sel)
+    dataset_train = DatasetFutureState(data_type, Rin_sel, Rout_sel, z, Vin_sel, Vout_sel, m=M, device=device, Rin2=Rina_sel, Rout2=Routa_sel, Vin2=Vina_sel, Vout2=Vouta_sel,E0=E0)
     if use_angles:
         dataset_train.useprimary = False
     dataloader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=shuffle, drop_last=True)
@@ -310,7 +323,7 @@ class DatasetFutureState(data.Dataset):
     """
     A dataset type for future state predictions of molecular dynamics data
     """
-    def __init__(self, data_type, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1, pos_only=False,Rin2=None,Rout2=None,Vin2=None,Vout2=None):
+    def __init__(self, data_type, Rin, Rout, z, Vin, Vout, Fin=None, Fout=None, KEin=None, KEout=None, PEin=None, PEout=None, m=None, device='cpu', rscale=1, vscale=1, nskip=1, pos_only=False,Rin2=None,Rout2=None,Vin2=None,Vout2=None,E0=None):
         self.Rin = Rin
         self.Rout = Rout
         self.z = z
@@ -330,6 +343,7 @@ class DatasetFutureState(data.Dataset):
         self.particles_pr_node = Rin.shape[-1] // 3
         self.data_type = data_type
         self.pos_only = pos_only
+        self.E0 = E0
 
         self.Rin2 = Rin2
         self.Rout2 = Rout2

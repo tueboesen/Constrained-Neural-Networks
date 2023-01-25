@@ -5,7 +5,7 @@ import os
 import numpy as np
 
 from src.base_parameters import load_base_parameters_npendulum
-from src.batch_jobs import job_runner, job_planner2, job_planner3
+from src.batch_jobs import job_runner, job_planner2, job_planner
 
 base= '/home/tue/PycharmProjects/results/test_npendulum_final_test_1000/2022-08-03_12_16_42/'
 mutable_parameters = {
@@ -25,5 +25,5 @@ c['n_test'] = 1000
 c['seed'] = [1230]
 c['nviz'] = 20
 c['batchsize'] = 10
-cs, legends, results = job_planner3(c,mutable_parameters=mutable_parameters)
+cs, legends, results = job_planner(c, mutable_parameters=mutable_parameters)
 job_runner(cs, legends, results)

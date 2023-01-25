@@ -9,9 +9,9 @@ A simple file to load data from an already finished run, and plot it with custom
 """
 
 # folders = ['/home/tue/PycharmProjects/results/test_water_100/2022-08-23_09_10_33/']
-folders = ['/home/tue/results/test_water_1000/2022-12-19_12_33_13/']
+folders = ['/home/tue/PycharmProjects/results/test_water_100_tmp/2023-01-05_06_01_41/']
 
-
+#NOTE that this one does not have the correct ones for the projections, those are in a separate folder
 
 
 results = []

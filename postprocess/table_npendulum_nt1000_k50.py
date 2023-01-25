@@ -9,7 +9,10 @@ A simple file to load data from an already finished run, and plot it with custom
 """
 
 # folders = ['/home/tue/PycharmProjects/results/test_npendulum_final_test/2022-08-01_12_06_30/']  # train 100, skip 20
-folders = ['/home/tue/remote_desktop/test_npendulum_table_nt1000_k50/2022-09-09_11_09_51/']  # train 1000, skip 50
+# folders = ['/home/tue/remote_desktop/test_npendulum_table_nt1000_k50/2022-09-09_11_09_51/']  # train 1000, skip 50
+# folders = ['/home/tue/remote_desktop/test_npendulum_table_nt1000_k50/2023-01-11_06_16_34/']  # train 1000, skip 50
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_table_nt1000_k50/2023-01-12_10_21_14/']  # train 1000, skip 50
+folders = ['/home/tue/remote_desktop/test_npendulum_table_nt1000_k50/2023-01-13_16_18_42/']  # train 1000, skip 50
 
 
 # output = 'final_test_train100_skip100_lr1e-3'

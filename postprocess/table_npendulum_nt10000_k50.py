@@ -10,6 +10,10 @@ A simple file to load data from an already finished run, and plot it with custom
 
 # folders = ['/home/tue/PycharmProjects/results/test_npendulum_final_test/2022-08-01_12_06_30/']  # train 100, skip 20
 folders = ['/home/tue/remote_desktop/test_npendulum_table_nt10000_k50/2022-09-19_09_15_06/']  # train 100, skip 20
+folders = ['/home/tue/remote_desktop/test_npendulum_table_nt10000_k50/2022-12-30_18_44_47/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_table_nt10000_k50_low_proj/2023-01-13_16_29_00/']  # train 100, skip 20
+folders = ['/home/tue/remote_desktop/test_npendulum_table_nt10000_k50/2023-01-13_21_04_48/']  # train 100, skip 20
+folders = ['/home/tue/PycharmProjects/results/test_npendulum_table_nt10000_k50/2023-01-13_10_29_06/']  # train 100, skip 20
 
 results = []
 for i,folder in enumerate(folders):

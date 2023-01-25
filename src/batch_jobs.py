@@ -71,89 +71,7 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,
 
     return c,jobid,legend
 
-
-
-def job_planner(c):
-    """
-    This function can plan out multiple jobs to be run
-    """
-    c['result_dir_base'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
-        root='results',
-        runner_name=c['basefolder'],
-        date=datetime.now(),
-    )
-    os.makedirs(c['result_dir_base'])
-    c_base = copy.deepcopy(c)
-    cs = []
-    legends = []
-    for i,seed in enumerate(c_base['seed']):
-        jobid = 0
-        for network_type in c_base['network_type']:
-            for con in c_base['con']:
-                if con == '' or con == 'angles':
-                    con_type = ''
-                    c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i,1)
-                    cs.append(c_new)
-                    if i == 0:
-                        legends.append(legend)
-                else:
-                    for con_type in c_base['con_type']:
-                        if con_type == 'reg':
-                            for regularizationparameter in c_base['regularizationparameter']:
-                                c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,regularizationparameter)
-                                cs.append(c_new)
-                                if i == 0:
-                                    legends.append(legend)
-                        elif con_type == 'stabhigh':
-                            for gamma in c_base['gamma']:
-                                c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,gamma=gamma)
-                                cs.append(c_new)
-                                if i == 0:
-                                    legends.append(legend)
-
-                        else:
-                            c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid, i, 1)
-                            cs.append(c_new)
-                            if i == 0:
-                                legends.append(legend)
-
-    # results = {}
-    # keys = define_data_keys()
-    # for key in keys:
-    #     results[key] = np.zeros((len(legends),len(c_base['seed']),c['epochs']))
-    results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
-    return cs, legends, results
-
-
-
-
-def job_planner2(c):
-    """
-    This function can plan out multiple jobs to be run
-    """
-    c['result_dir_base'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
-        root='results',
-        runner_name=c['basefolder'],
-        date=datetime.now(),
-    )
-    os.makedirs(c['result_dir_base'])
-    c_base = copy.deepcopy(c)
-    cs = []
-    legends = []
-    for i,seed in enumerate(c_base['seed']):
-        jobid = 0
-        for network_type,con_type,model_file in zip(c_base['network_type'],c_base['con_type'],c_base['load_previous_model_file']):
-            c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,c_base['con'],con_type,seed,c_base['use_same_data'],jobid,i,1)
-            c_new['load_previous_model_file']= model_file
-            cs.append(c_new)
-            if i == 0:
-                legends.append(legend)
-    results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
-    return cs, legends, results
-
-
-
-def job_planner3(c,mutable_parameters):
+def job_planner(c, mutable_parameters):
     """
     This function can plan out multiple jobs to be run
     """
@@ -197,58 +115,11 @@ def job_planner3(c,mutable_parameters):
             cs.append(c_new)
             jobid += 1
 
-
-
-
-
-            # for (key, val) in mutable_parameters.items():
-        #
-        #
-        # for network_type in c_base['network_type']:
-        #     for con in c_base['con']:
-        #         if con == '' or con == 'angles':
-        #             con_type = ''
-        #             c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i,1)
-        #             cs.append(c_new)
-        #             if i == 0:
-        #                 legends.append(legend)
-        #         else:
-        #             for con_type in c_base['con_type']:
-        #                 if con_type == 'reg':
-        #                     for regularizationparameter in c_base['regularizationparameter']:
-        #                         c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,regularizationparameter)
-        #                         cs.append(c_new)
-        #                         if i == 0:
-        #                             legends.append(legend)
-        #                 elif con_type == 'stabhigh':
-        #                     for gamma in c_base['gamma']:
-        #                         c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,gamma=gamma)
-        #                         cs.append(c_new)
-        #                         if i == 0:
-        #                             legends.append(legend)
-        #
-        #                 else:
-        #                     c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid, i, 1)
-        #                     cs.append(c_new)
-        #                     if i == 0:
-        #                         legends.append(legend)
-
-    # results = {}
-    # keys = define_data_keys()
-    # for key in keys:
-    #     results[key] = np.zeros((len(legends),len(c_base['seed']),c['epochs']))
     results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
     results_test = np.zeros((len(legends),len(c_base['seed']),5))
     assert len(set(legends)) == len(legends), "Some of the mutable parameter combinations used are identical, remove those"
 
     return cs, legends, results,results_test
-
-
-
-
-
-
-
 
 def job_runner(cs,legends, results,results_test):
     """
@@ -306,8 +177,5 @@ def job_runner(cs,legends, results,results_test):
             file_test = f"{c['result_dir_base']:}/results_test"
             np.save(file_test,results_test)
 
-
-
-        # plot_training_and_validation_accumulated_2(results, legends, c['result_dir_base'])
         plot_training_and_validation_accumulated_4(results, legends, c['result_dir_base'],semilogy=True)
     return

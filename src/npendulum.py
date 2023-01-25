@@ -183,12 +183,12 @@ def animate_pendulum(x,y,vx=None,vy=None,save=None):
 
 if __name__ == '__main__':
     n = 5
-    dt = 0.01
+    dt = 0.001
     Npend = NPendulum(n,dt)
     g = Npend.g
     theta0 = 0.5*math.pi*torch.ones(n)
     dtheta0 = 0.0*torch.ones(n)
-    nsteps = 10000
+    nsteps = 100000
 
     t0 = time.time()
     times, thetas, dthetas = Npend.simulate(nsteps,theta0,dtheta0)
@@ -200,16 +200,22 @@ if __name__ == '__main__':
     K = 0.5*torch.sum(v2[1:],dim=0)
     V = g * torch.sum(y[1:],dim=0)
     E = K + V
-    # import matplotlib.pyplot as plt
-    # import matplotlib
-    # matplotlib.use('TkAgg')
-    # plt.figure(1)
-    # plt.plot(E,label='Energy')
-    # plt.plot(K,label='Kinetic energy')
-    # plt.plot(V,label='Potential energy')
-    # plt.legend()
-    # plt.show()
-    # plt.pause(1)
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('TkAgg')
+    plt.figure(1)
+    plt.plot(E,label='Energy')
+    plt.plot(K,label='Kinetic energy')
+    plt.plot(V,label='Potential energy')
+    plt.legend()
+    plt.show()
+    plt.pause(1)
+
+    plt.figure(2)
+    plt.plot(E,label='Energy')
+    plt.legend()
+    plt.show()
+    plt.pause(1)
 
     # x = x[:,100:]
     # y = y[:,100:]

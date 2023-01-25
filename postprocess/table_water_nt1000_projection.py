@@ -9,7 +9,8 @@ A simple file to load data from an already finished run, and plot it with custom
 """
 
 # folders = ['/home/tue/PycharmProjects/results/test_water_100/2022-08-23_09_10_33/']
-folders = ['/home/tue/results/test_water_1000/2022-12-19_12_33_13/']
+# folders = ['/home/tue/results/test_water_1000/2022-12-19_12_33_13/']
+folders = ['/home/tue/PycharmProjects/results/test_water_1000_projection_only/2023-01-05_09_19_21/']
 
 
 

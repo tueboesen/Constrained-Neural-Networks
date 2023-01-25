@@ -90,14 +90,14 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     while epoch < c['epochs']:
         t1 = time.time()
         if c['use_training']:
-            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t, MAE_r_t,reg_t, reg2_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
+            loss_r_t, loss_v_t,drmsd_t,cv_t, cv_max_t,cv_energy_t,cv_energy_max_t, MAE_r_t, MAE_v_t,reg_t, reg2_t = run_model(c['data_type'], model, dataloader_train, train=True, max_samples=1e6, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
         else:
-            loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,MAE_r_t, reg_t, reg2_t = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+            loss_r_t, loss_v_t, drmsd_t,cv_t, cv_max_t,cv_energy_t,cv_energy_max_t,MAE_r_t, MAE_v_t, reg_t, reg2_t = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t2 = time.time()
         if c['use_val']:
-            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v,cv_energy_v,cv_energy_max_v, MAE_r_v, MAE_v_v, reg_v, reg2_v = run_model(c['data_type'], model, dataloader_val, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],nviz=c['nviz'],regularization=c['regularization'])
         else:
-            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v, MAE_r_v, reg_v, reg2_v = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+            loss_r_v, loss_v_v, drmsd_v,cv_v, cv_max_v,cv_energy_v,cv_energy_max_v, MAE_r_v, MAE_v_v, reg_v, reg2_v = torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
         t3 = time.time()
         if c['ignore_cons']:
             _,_,_,_,_ = run_model(c['data_type'], model, dataloader_train, train=False, max_samples=9, optimizer=optimizer, loss_fnc=c['loss'], max_radius=cn['max_radius'], debug=c['debug'],epoch=epoch, output_folder=c['result_dir'],ignore_cons=True)
@@ -107,9 +107,7 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
         # loss_t = (loss_r_t + loss_v_t) / 2
         # loss_v = (loss_r_v + loss_v_v) / 2
 
-        results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v, cv_max_v, MAE_r_t, MAE_r_v, csv_file,cv_t,cv_v)
-        # results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,loss_r_v,loss_v_v, csv_file)
-
+        results = update_results_and_save_to_csv(results, epoch, loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v, cv_max_v, MAE_r_t, MAE_r_v, MAE_v_t, MAE_v_v, csv_file,cv_t,cv_v,cv_energy_t,cv_energy_max_t,cv_energy_v,cv_energy_max_v)
         if c['use_val']:
             loss = loss_r_v
         else:
@@ -120,17 +118,8 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
             torch.save(model.state_dict(), f"{model_name_best}")
         else:
             epochs_since_best += 1
-            # if epochs_since_best >= c['epochs_for_lr_adjustment']:
-            #     for g in optimizer.param_groups:
-            #         g['lr'] *= c['lr_adjustment']
-            #         lr = g['lr']
-            #     epochs_since_best = 0
-        #
 
-        # LOG.info(f'{epoch:2d}  DRMSD(train){drmsd_t:.2e}  DRMSD(val){drmsd_v:.2e}  Loss(train): {loss_t:.2e}  Loss(val): {loss_v:.2e}  Loss_r(train): {loss_r_t:.2e}  Loss_v(train): {loss_v_t:.2e}  Loss_r(val): {loss_r_v:.2e}  Loss_v(val): {loss_v_v:.2e}  Loss_best(val): {lossBest:.2e}  Lr: {lr:2.2e}  Time(train): {t2 - t1:.1f}s  Time(val): {t3 - t2:.1f}s  '
-        #          f'Time(total) {(time.time() - t0)/3600:.1f}h')
-
-        LOG.info(f'{epoch:2d}  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  reg2={reg2_t:.2e} ({reg2_v:.2e})  MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
+        LOG.info(f'{epoch:2d}  cv_energy={cv_energy_t:.2e} ({cv_energy_v:.2e})  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  reg2={reg2_t:.2e} ({reg2_v:.2e}) MAEv={MAE_v_t:.2e} ({MAE_v_v:.2e})   MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
                  f'Time(total) {(time.time() - t0)/3600:.1f}h')
         epoch += 1
         if (epoch % c['epochs_for_lr_adjustment']) == 0:
@@ -141,13 +130,13 @@ def main(c,dataloader_train=None,dataloader_val=None,dataloader_test=None,datalo
     model.load_state_dict(torch.load(model_name_best))  # We load the best performing model
     if c['use_test']:
         t4 = time.time()
-        loss_r_test, loss_v_test, drmsd_test, cv_test, cv_max_test, MAE_r_test, reg_test, reg2_test = run_model(c['data_type'], model, dataloader_test, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'],
+        loss_r_test, loss_v_test, drmsd_test, cv_test, cv_max_test,cv_energy_test,cv_energy_max_test, MAE_r_test, MAE_v_test, reg_test, reg2_test = run_model(c['data_type'], model, dataloader_test, train=False, max_samples=1000, optimizer=optimizer, loss_fnc=c['loss'],
                                                                                         max_radius=cn['max_radius'], debug=c['debug'], epoch=epoch,
                                                                                         output_folder=c['result_dir'], nviz=c['nviz'], regularization=c['regularization'],viz_paper=True)
-        LOG.info(f'Test  cv={cv_test:.2e} cvm={cv_max_test:.2e} reg={reg_test:.2e} reg2={reg2_test:.2e}  MAEr={MAE_r_test:.2e}  Loss_r={loss_r_test:.2e} Time={t4 - time.time():.1f}s ')
+        LOG.info(f'Test cv_energy={cv_energy_test:.2e}  cv={cv_test:.2e} cvm={cv_max_test:.2e} reg={reg_test:.2e} reg2={reg2_test:.2e}  MAEr={MAE_r_test:.2e}  MAEv={MAE_v_test:.2e}  Loss_r={loss_r_test:.2e} Time={t4 - time.time():.1f}s ')
 
         csv_file_test = f"{c['result_dir']}/test.csv"
-        results_test = save_test_results_to_csv(loss_r_test, loss_v_test, cv_max_test, MAE_r_test, cv_test, csv_file_test)
+        results_test = save_test_results_to_csv(loss_r_test, loss_v_test, cv_max_test, MAE_r_test, MAE_v_test, cv_test, cv_energy_test, cv_energy_max_test, csv_file_test)
 
     if c['viz']:
         plot_training_and_validation(results,c['result_dir'])

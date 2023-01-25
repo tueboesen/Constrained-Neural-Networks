@@ -99,7 +99,7 @@ def LJ_potential(r, sigma=3.405,eps=119.8,rcut=8.4,Energy_conversion=1.564097647
     V *= Energy_conversion
     return V
 
-def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v,cv_max_v,MAEr_t,MAEr_v,csv_file,cv_t,cv_v):
+def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,cv_max_t,loss_r_v,loss_v_v,cv_max_v,MAEr_t,MAEr_v,MAEv_t,MAEv_v,csv_file,cv_t,cv_v,cv_energy_t,cv_energy_max_t,cv_energy_v,cv_energy_max_v):
     """
     Updates the results and saves it to a csv file.
     """
@@ -113,8 +113,14 @@ def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,cv_max_t,loss
         'cv_v': [cv_v],
         'cv_max_t': [cv_max_t],
         'cv_max_v': [cv_max_v],
+        'cv_energy_t': [cv_energy_t],
+        'cv_energy_v': [cv_energy_v],
+        'cv_energy_max_t': [cv_energy_max_t],
+        'cv_energy_max_v': [cv_energy_max_v],
         'MAE_r_t': [MAEr_t],
         'MAE_r_v': [MAEr_v],
+        'MAE_v_t': [MAEv_t],
+        'MAE_v_v': [MAEv_v],
     }, dtype=np.float32)
     result = result.astype({'epoch': np.int64})
     if epoch == 0:
@@ -125,7 +131,7 @@ def update_results_and_save_to_csv(results,epoch,loss_r_t,loss_v_t,cv_max_t,loss
         results.iloc[-1:].to_csv(csv_file, mode='a', header=False, sep='\t')
     return results
 
-def save_test_results_to_csv(loss_r,loss_v,cv_max,MAEr,cv,csv_file):
+def save_test_results_to_csv(loss_r,loss_v,cv_max,MAEr,MAEv,cv,cv_energy,cv_energy_max,csv_file):
     """
     Updates the results and saves it to a csv file.
     """
@@ -134,7 +140,10 @@ def save_test_results_to_csv(loss_r,loss_v,cv_max,MAEr,cv,csv_file):
         'loss_v': [loss_v],
         'cv': [cv],
         'cv_max': [cv_max],
+        'cv_energy': [cv_energy],
+        'cv_energy_max': [cv_energy_max],
         'MAE_r': [MAEr],
+        'MAE_v': [MAEv],
     }, dtype=np.float32)
     results = result
     results.iloc[-1:].to_csv(csv_file, header=True, sep='\t')

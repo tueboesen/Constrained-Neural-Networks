@@ -3,9 +3,14 @@ import os
 
 import torch
 
-from src.batch_jobs import job_planner, job_runner, job_planner3
-
+from src.batch_jobs import job_planner, job_runner, job_planner
+"""
+Standard parameters used for most simulations. Each script overwrites the parameters not used by that particular script.
+"""
 def load_base_parameters_npendulum():
+    """
+    Standard simulation parameters for npendulum
+    """
     parser = argparse.ArgumentParser(description='Constrained MD')
     args = parser.parse_args()
     args.n_train = 100
@@ -38,10 +43,11 @@ def load_base_parameters_npendulum():
     args.ignore_cons = False
     args.con_type = ''
     args.model_specific = {'n': 5,
-                           'dt': 0.01,
+                           'dt': 0.01, #TODO if we want energy conservation constraints, we should set this to 0.001, set nskip to 200 and extra_simulation_steps to 10000 otherwise the energy will change slightly over a simulation
                            'L': [1,1,1,1,1],
                            'M': [1,1,1,1,1],
-                           'angles': False
+                           'angles': False,
+                           'extra_simulation_steps': 1000
                            }
     args.regularization = 0
     args.penalty = 0

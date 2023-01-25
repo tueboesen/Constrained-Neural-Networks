@@ -20,7 +20,7 @@ def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='c
         l = torch.tensor([r0/rscale,r1/rscale,r2/rscale],device=device)
         niter = 100
         shape_transform = 1 #This is the dimensions of coupled constraints, for the water molecules this should be 1 since they are not coupled.
-        con_fnc = Water(l,tol=1e-2/rscale,niter=niter,scale=rscale,shape_transform=shape_transform)
+        con_fnc = Water(l,tol=5e-4,niter=niter,scale=rscale,shape_transform=shape_transform)
     elif con == 'n-pendulum':
         if con_type == 'stabhigh':
             niter = 1
@@ -29,6 +29,17 @@ def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='c
         converged_acc = 1e-4
         L = torch.tensor(con_variables['L'][0])
         con_fnc = MultiPendulum(L,niter=niter,tol=converged_acc,debug_folder=debug_folder)
+    elif con == 'n-pendulum-with-energy':
+        if con_type == 'stabhigh':
+            niter = 1
+        else:
+            niter = 500
+        converged_acc = 1e-3
+        L = torch.tensor(con_variables['L'][0])
+        g = 9.82
+        m = 1
+        E0 = torch.tensor(0.0) # We have fixed our pendulum system such that the energy of it should always be zero.
+        con_fnc = MultiPendulumEnergyConserved(L,niter=niter,tol=converged_acc,m=m,g=g,E0=E0,debug_folder=debug_folder)
     elif con == '':
         con_fnc = None
     else:
@@ -65,7 +76,7 @@ def constraint_hyperparameters(con,con_type,data_type,model_specific):
     elif con == 'pendulum':
         cv['L1'] = 3.0
         cv['L2'] = 2.0
-    elif con == 'n-pendulum' or con == 'n-pendulum-seq' or con == 'n-pendulum-seq-start':
+    elif con == 'n-pendulum' or con == 'n-pendulum-seq' or con == 'n-pendulum-seq-start' or con == 'n-pendulum-with-energy':
         cv['L'] = model_specific['L']
     else:
         NotImplementedError("The combination of constraints={:} and data_type={:} has not been implemented in function {:}".format(con, data_type, inspect.currentframe().f_code.co_name))
@@ -288,7 +299,8 @@ class ConstraintTemplate(nn.Module):
             if j == 0:
                 reg = c_error_mean
                 reg2 = (c*c).mean()
-            cm = c.abs().max(dim=1)[0].max(dim=1)[0]
+            # cm = c.abs().max(dim=2)[0].max(dim=2)[0]
+            cm = c.abs().amax(dim=(1,2))
             M = cm > self.tol
             idx = idx_all[M]
             if len(idx) == 0:
@@ -303,7 +315,8 @@ class ConstraintTemplate(nn.Module):
                 y_try = y[idx] - alpha[idx,None,None] * dy
                 x_try = project(y_try)
                 c_try, c_error_mean_try, c_error_max = self.compute_constraint_violation(x_try)
-                cm_try = c_try.abs().max(dim=1)[0].max(dim=1)[0]
+                # cm_try = c_try.abs().max(dim=1)[0].max(dim=1)[0]
+                cm_try = c_try.abs().amax(dim=(1, 2))
                 M_try = cm_try <= cm[idx]
                 # print(int(lsiter.max().item()), M_try.sum().item(), M_try.shape[0])
                 if M_try.all():
@@ -328,7 +341,7 @@ class ConstraintTemplate(nn.Module):
             y = torch.stack(yall,dim=0)
             j += 1
             if j > self.n:
-                print("Projection failed")
+                # print("Projection failed")
                 break
         return y, reg, reg2
 
@@ -471,6 +484,91 @@ class MultiPendulum(ConstraintTemplate):
         dr[:,-1,:] = c[:, -1,0][:, None] * rnorm[:, -1, :]
         dx = self.insert_positions(dr,x)
         return dx
+
+
+
+
+class MultiPendulumEnergyConserved(ConstraintTemplate):
+    """
+    This constraint function applies multi-body pendulum constraints.
+    Expected input is x of shape [batch_size,npendulums,ndims].
+
+    Input:
+        l: A torch tensor with the length of the different pendulums, can also be a single number if all pendulums have the same length.
+        position_idx: gives the indices for x and y coordinates in ndims.
+    """
+    def __init__(self,l,tol,niter,E0,m,g,position_idx=[0,1],velocity_idx=[2,3],debug_folder=None):
+        super(MultiPendulumEnergyConserved, self).__init__(tol,niter,debug_folder=debug_folder)
+        self.l = l
+        self.position_idx = position_idx
+        self.velocity_idx = velocity_idx
+        self.E0 = E0
+        self.m = m
+        self.g = g
+        return
+
+    def delta_r(self,r):
+        """
+        Computes a vector from each pendulum to the next, including origo.
+        """
+        dr_0 = r[:,0]
+        dr_i = r[:,1:] - r[:,:-1]
+        dr = torch.cat((dr_0[:,None],dr_i),dim=1)
+        return dr
+
+    def extract_positions(self,x):
+        """
+        Extracts positions, r, from x
+        """
+        r = x[:,:,self.position_idx]
+        return r
+
+    def extract_velocity(self,x):
+        """
+        Extracts velocities, v, from x
+        """
+        v = x[:,:,self.velocity_idx]
+        return v
+
+
+    def insert_positions(self,r,x_template):
+        """
+        Inserts, r, back into a zero torch tensor similar to x_template at the appropriate spot.
+        """
+        x = torch.zeros_like(x_template)
+        x[:,:,self.position_idx] = r
+        return x
+
+    def debug(self, x,c,extra='',idx=None):
+        r = self.extract_positions(x)
+        v = self.extract_velocity(x)
+        if idx is None:
+            idx = torch.argmax(c.mean(dim=1))
+        debug_file = f"{self.debug_folder}/{datetime.now():%H_%M_%S.%f}_{extra}.png"
+        plot_pendulum_snapshot_custom(r[idx].detach().cpu(), v[idx].detach().cpu(), file=debug_file, fighandler=None, color='red')
+
+
+    def constraint(self,x,rescale=False):
+        """
+        Computes the constraints.
+
+        For a n multi-body pendulum the length constraint can be given as:
+        c_i = |r_i - r_{i-1}| - l_i,   i=1,n
+        and the energy conservation constraint is given as:
+        c_i = m_i * (0.5 * v_i**2 + g*y) - E0
+        """
+        r = self.extract_positions(x)
+        v = self.extract_velocity(x)
+        dr = self.delta_r(r)
+        if rescale:
+            dr = dr * self.scale
+        drnorm = torch.norm(dr, dim=-1)
+        c_len = drnorm - self.l
+
+        c_energy = torch.sum(self.m * (0.5* torch.sum(v*v,dim=-1) + self.g * r[:,:,-1]) - self.E0,dim=-1)
+        c = torch.cat([c_len,c_energy[:,None]],dim=1)
+        return c[...,None]
+
 
 
 

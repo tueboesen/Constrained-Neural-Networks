@@ -23,14 +23,14 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
         loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
         loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
+        loss_r, loss_v, cv,cv_max, cv_energy, cv_energy_max ,MAEr,MAEv, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
         drmsd = 0
     else:
         raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v, drmsd, cv, cv_max,MAEr,reg, reg2
+    return loss_r, loss_v, drmsd, cv, cv_max,cv_energy,cv_energy_max,MAEr,MAEv,reg, reg2
 
 
-def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=True, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0,viz_paper=False):
+def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=False, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0,viz_paper=False):
     """
     A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
@@ -55,6 +55,8 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
     areg2 = 0.0
     acv = 0.0
     acv_max = 0.0
+    acv_energy = 0.0
+    acv_energy_max = 0.0
     aMAEr = 0.0
     aMAEv = 0.0
     torch.set_grad_enabled(train)
@@ -110,7 +112,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
             wstatic = None
 
         with P.cached():
-            output, cv_mean,cv_max, reg, reg2 = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
+            output, c,cv_max, reg, reg2 = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
         if output.isnan().any():
             raise ValueError("Output returned NaN")
 
@@ -183,6 +185,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
             MAEr = torch.mean(torch.norm(rdiff,dim=1))
         else:
             MAEr = torch.mean(torch.norm((Rpred - Rout_vec)*rscale,dim=1))
+            MAEv = torch.mean(torch.norm((Vpred - Vout_vec)*vscale,dim=1))
 
         if check_equivariance:
             if ndim == 3:
@@ -226,14 +229,32 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
 
             optimizer.step()
 
+
+
         aloss_r += loss_r.item()
         aloss_v += loss_v.item()
-        acv += cv_mean.item()
-        acv_max = max(cv_max.item(),acv_max)
+
+        if ds.data_type == 'n-pendulum' and natoms+1 == c.shape[1]:
+            c_len = c[:,:-1]
+            cabs_len = c_len.abs()
+            c_energy = c[:,-1:]
+            cabs_energy = c_energy.abs()
+        else:
+            cabs_len = c.abs()
+            cabs_energy = torch.tensor(0.0)
+
+
+
+
+        acv += cabs_len.mean().item()
+        acv_max = max(cabs_len.max().item(),acv_max)
+
+        acv_energy += cabs_energy.mean().item()
+        acv_energy_max = max(cabs_energy.max().item(),acv_energy_max)
         areg += reg.item()
         areg2 += reg2.item()
         aMAEr += MAEr.item()
-        # aMAEv += MAEv.item()
+        aMAEv += MAEv.item()
         # dr = delta_r(Rpred.view(-1,32,3,3)*rscale)
         # dr2 = delta_r(Rout_vec.view(-1,32,3,3)*rscale)
         # c_mean = water_con(dr)
@@ -313,12 +334,13 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
     aloss_r /= (i + 1)
     aloss_v /= (i + 1)
     acv /= (i + 1)
+    acv_energy /= (i + 1)
     aMAEr /= (i + 1)
     areg /= (i + 1)
     areg2 /= (i + 1)
-    # aMAEv /= (i + 1)
+    aMAEv /= (i + 1)
 
-    return aloss_r, aloss_v, acv, acv_max, aMAEr, areg, areg2#, aMAEv
+    return aloss_r, aloss_v, acv, acv_max, acv_energy, acv_energy_max, aMAEr,aMAEv, areg, areg2#, aMAEv
 
 
 #
