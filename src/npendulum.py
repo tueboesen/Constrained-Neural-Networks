@@ -8,6 +8,9 @@ import time
 
 
 class NPendulum:
+    """
+    A multibody pendulum class, which enables the simulation of a pendulum with massless rigid strings between n point masses.
+    """
     def __init__(self,n,dt):
         """
         Initiates an n-pendulum class for simulating multi-body pendulums.

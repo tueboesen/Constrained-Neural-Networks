@@ -16,7 +16,7 @@ In that case you should look at the individual packages website and see how they
 ## Project structure
 ### Data
 Data goes here. For instance water.npz which is not included in the github project due to size limitations. But the water.npz dataset for water simulations can be requested by sending an email to the corresponding author of tha paper.
-
+    
 ### Examples
 Scripts to run. 
 The subfolder Paper_results contains scripts used in the generation of the paper results.

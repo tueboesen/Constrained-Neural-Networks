@@ -159,6 +159,7 @@ class PropagationBlock(nn.Module):
 class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
+    This network is made using the mimetic framework https://arxiv.org/abs/2102.03881
     """
     def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=0,regularization=0):
         super().__init__()
@@ -177,19 +178,8 @@ class neural_network_mimetic(nn.Module):
         self.dim = dim
         self.low_dim = node_dim_in
         self.high_dim = node_dim_latent
-        # self.regularization = regularization
-        device = 'cuda:0'
-        # self.PU.make_matrix_semi_unitary()
-        # torch.nn.Linear
-        # w = torch.empty((self.high_dim,self.low_dim))
-        # torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        # self.K = torch.nn.Parameter(w)
         self.lin = torch.nn.Linear(self.low_dim,self.high_dim)
         self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
-        # self.register_buffer("K", self.lin.weight)
-        # self.ortho = torch.nn.utils.parametrizations.orthogonal(torch.nn.Linear(self.high_dim,self.low_dim))
-        # self.K = self.lin.weight
-
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
         self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)

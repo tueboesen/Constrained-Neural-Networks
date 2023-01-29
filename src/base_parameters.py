@@ -11,7 +11,7 @@ def load_base_parameters_npendulum():
     """
     Standard simulation parameters for npendulum
     """
-    parser = argparse.ArgumentParser(description='Constrained MD')
+    parser = argparse.ArgumentParser(description='Constrained Neural Network')
     args = parser.parse_args()
     args.n_train = 100
     args.n_val = 1000

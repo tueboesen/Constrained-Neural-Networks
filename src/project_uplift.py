@@ -67,20 +67,6 @@ class ProjectUpliftEQ(torch.nn.Module):
         x_extract = x[:,idx0:idx1]
         return x_extract
 
-    # def inverse(self,x):
-    #     """
-    #     Takes a low dimensional variable and transforms it into a high dimensional variable, designed to be used initially
-    #     """
-    #     # irreps_in = self.irreps_low
-    #     irreps_out = self.irreps_high
-    #
-    #     # x_vec = self.extract_reps(x,irreps_in)
-    #     x2 = x.view(x.shape[0], -1, 3).transpose(1, 2)
-    #     y2 = x2 @ torch.inverse(self.K.T @ self.K) @ self.K.T
-    #     y_vec = y2.transpose(1,2).reshape(x.shape[0],-1)
-    #     y = self.insert_reps(y_vec,irreps_out)
-    #     return y
-
     def uplift(self,x):
         """
         Takes a low dimensional variable and transforms it into a high dimensional variable
