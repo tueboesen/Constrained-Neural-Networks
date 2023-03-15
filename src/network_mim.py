@@ -160,7 +160,7 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=0,regularization=0):
+    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=0,regularization=0,orthogonal_K=True):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
@@ -177,6 +177,7 @@ class neural_network_mimetic(nn.Module):
         self.dim = dim
         self.low_dim = node_dim_in
         self.high_dim = node_dim_latent
+        self.orthogonal_K = orthogonal_K
         # self.regularization = regularization
         device = 'cuda:0'
         # self.PU.make_matrix_semi_unitary()
@@ -185,14 +186,22 @@ class neural_network_mimetic(nn.Module):
         # torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
         # self.K = torch.nn.Parameter(w)
         self.lin = torch.nn.Linear(self.low_dim,self.high_dim)
-        self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
         # self.register_buffer("K", self.lin.weight)
         # self.ortho = torch.nn.utils.parametrizations.orthogonal(torch.nn.Linear(self.high_dim,self.low_dim))
         # self.K = self.lin.weight
 
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
-        self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
+        # self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-20)
+
+        self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
+        if self.orthogonal_K:
+            # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
+            self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
+        else:
+            # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-3)
+            pass
+
         self.con_fnc = con_fnc
         self.con_type = con_type
         self.embed_node_attr = embed_node_attr
@@ -220,6 +229,7 @@ class neural_network_mimetic(nn.Module):
         # y = x @ self.K.T
         return y
 
+    @property
     def K(self):
         return self.lin.weight.T
 
@@ -245,7 +255,9 @@ class neural_network_mimetic(nn.Module):
         reg2 =  torch.tensor(0.0)
 
         for i in range(self.nlayers):
+            # dt = max(min(self.h[i] ** 2, 0.1),1e-20)
             dt = max(min(self.h[i] ** 2, 0.1),1e-4)
+            # dt = max(min(self.h[i] ** 2, 0.1),1e-6)
             if x.isnan().any():
                 raise ValueError("NaN detected")
             if wstatic is None:
@@ -290,7 +302,7 @@ class neural_network_mimetic(nn.Module):
                 if y.isnan().any():
                     raise ValueError("NaN detected")
                 # y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.K(),self.K().T,weight)
-                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight,K=self.K())
+                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight,K=self.K)
                 y = y.view(-1,ndimy)
                 reg = reg + regi
                 reg2 = reg2 + regi2

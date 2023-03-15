@@ -25,6 +25,7 @@ def load_base_parameters_npendulum():
     args.use_val = True
     args.use_test = True
     args.perform_endstep_MD_propagation = False
+    args.orthogonal_K = True
     args.debug = False
     args.viz = False
     args.lr = 1e-3
