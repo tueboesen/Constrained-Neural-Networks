@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.autograd import grad
 
 from src.vizualization import plot_water, plot_pendulum_snapshot_custom
-
+from abc import ABC, abstractmethod
 
 def load_constraints(con,con_type,con_variables=None,rscale=1,vscale=1,device='cpu',debug_folder=None):
     """
@@ -83,7 +83,7 @@ def constraint_hyperparameters(con,con_type,data_type,model_specific):
         NotImplementedError("The combination of constraints={:} and data_type={:} has not been implemented in function {:}".format(con, data_type, inspect.currentframe().f_code.co_name))
     return cv
 
-class ConstraintTemplate(nn.Module):
+class ConstraintTemplate(ABC):
     """
     This is the template class for all constraints.
     Each constraint should have this class as their parent.
@@ -115,6 +115,7 @@ class ConstraintTemplate(nn.Module):
         raise NotImplementedError(
             "Debug function has not been implemented for {:}".format(self._get_name()))
 
+    @abstractmethod
     def constraint(self,x,rescale=False):
         raise NotImplementedError(
             "Constraint function has not been implemented for {:}".format(self._get_name()))
@@ -517,7 +518,7 @@ class ConstraintTemplate(nn.Module):
         c_error_max = torch.max(cabs)
         return c,c_error_mean, c_error_max
 
-    def forward(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True,K=None):
+    def __call__(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True,K=None):
         if self.shape_transform is not None:
             y_shape = y.shape
             y_shape_new = torch.Size([y_shape[0]*y_shape[1],self.shape_transform,-1])

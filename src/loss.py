@@ -30,7 +30,7 @@ def loss_eq(x_pred, x_out, x_in,reduce=True):
     """
     Computes the relative MSE coordinate loss, which can be used by equivariant networks
     Note that loss and loss_ref should be divided by the batch size if you intend to use either of those numbers.
-    assumes that x has the shape [particles,spatial dims]
+    Assumes that x has the shape [particles,spatial dims]
     """
     # loss = torch.sum(torch.norm(x_pred - x_out, p=2, dim=1))
     # aa=torch.norm(x_pred - x_out, p=2, dim=1)

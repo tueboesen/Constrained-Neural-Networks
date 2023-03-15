@@ -42,7 +42,7 @@ def standard_network_sizes(c,network_type):
 
 def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,regularizationparameter='',gamma=1):
     """
-    Creates a job to be run.
+    Creates a single job to be run.
     """
     c['con'] = con
     c['con_type'] = con_type
@@ -73,7 +73,7 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,
 
 def job_planner(c, mutable_parameters):
     """
-    This function can plan out multiple jobs to be run
+    This function can plan out multiple jobs to be run. This is designed to easily compare a bunch of different configurations while running on exactly the same dataset
     """
     c['result_dir_base'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
         root='results',

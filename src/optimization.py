@@ -19,9 +19,6 @@ def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_f
     if data_type == 'water':
         loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
         drmsd = 0
-    elif data_type == 'protein':
-        loss_r, drmsd = run_model_protein(model,dataloader,train,max_samples,optimizer, loss_fnc, batch_size=1)
-        loss_v = 0
     elif data_type == 'pendulum' or data_type == 'n-pendulum' :
         loss_r, loss_v, cv,cv_max, cv_energy, cv_energy_max ,MAEr,MAEv, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
         drmsd = 0
@@ -206,25 +203,6 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
 
         if train:
             loss.backward()
-            # if debug:
-            #     if loss_type.lower() == 'eq':
-            #         print(f"loss_rel_r:{loss_rel_r:2.2e},loss_rel_v:{loss_rel_v:2.2e}, loss_r:{loss_r:2.2e},loss_rel_v:{loss_v:2.2e}")
-            #     else:
-            #         print(f"lossD_rel_r:{lossD_rel_r:2.2e},lossD_rel_v:{lossD_rel_v:2.2e}, lossD_r:{lossD_r:2.2e},lossD_rel_v:{lossD_v:2.2e}")
-
-
-                # weights = optimizer.param_groups[0]['params']
-                # weights_flat = [torch.flatten(weight) for weight in weights]
-                # weights_1d = torch.cat(weights_flat)
-                # assert not torch.isnan(weights_1d).any()
-                # assert not torch.isinf(weights_1d).any()
-                # print(f"{weights_1d.max()}, {weights_1d.min()}")
-                #
-                # grad_flat = [torch.flatten(weight.grad) for weight in weights]
-                # grad_1d = torch.cat(grad_flat)
-                # assert not torch.isnan(grad_1d).any()
-                # assert not torch.isinf(grad_1d).any()
-                # print(f"{grad_1d.max()}, {grad_1d.min()}")
             torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
 
             optimizer.step()
@@ -255,11 +233,6 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
         areg2 += reg2.item()
         aMAEr += MAEr.item()
         aMAEv += MAEv.item()
-        # dr = delta_r(Rpred.view(-1,32,3,3)*rscale)
-        # dr2 = delta_r(Rout_vec.view(-1,32,3,3)*rscale)
-        # c_mean = water_con(dr)
-        # c_mean2 = water_con(dr2)
-        # print(cv_mean.item(),c_mean.item())
 
         if ds.data_type == 'n-pendulum' and viz == True and i == 0:
             if ndim == 1:
@@ -309,28 +282,6 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
                 fighandler = plot_pendulum_snapshot_custom(Rout_xy[j],  color='green')
                 fighandler = plot_pendulum_snapshot_custom(Rpred_xy[j], fighandler=fighandler, file=filename, color='blue')
 
-        # if (i + 1) * batch_size >= max_samples:
-        #     break
-        # if i == 0:
-        #     snapshot = tracemalloc.take_snapshot()
-        #     top_stats = snapshot.statistics('lineno')
-        #
-        #     print("[ Top 10 ]")
-        #     for stat in top_stats[:10]:
-        #         print(stat)
-        # else:
-        #     snapshot_new = tracemalloc.take_snapshot()
-        #     top_stats = snapshot_new.compare_to(snapshot,'lineno')
-        #     for stat in top_stats[:10]:
-        #         print(stat)
-        #     snapshot = snapshot_new
-        # print(torch.cuda.memory_summary())
-        # print("done")
-
-
-
-
-
     aloss_r /= (i + 1)
     aloss_v /= (i + 1)
     acv /= (i + 1)
@@ -341,173 +292,3 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
     aMAEv /= (i + 1)
 
     return aloss_r, aloss_v, acv, acv_max, acv_energy, acv_energy_max, aMAEr,aMAEv, areg, areg2#, aMAEv
-
-
-#
-# def best_coord_init(coords,scale=3.8,plot_coords=False):
-#     ss = 0.1
-#     x = torch.zeros_like(coords)
-#     i = 0
-#     x[:,i+0] = scale
-#     x[::2,i+1] = ss*scale
-#     x[1::2,i+1] = -ss*scale
-#
-#     i = 3
-#     x[:,i+0] = scale
-#     x[::2,i+1] = ss*scale
-#     x[1::2,i+1] = -ss*scale
-#
-#     i = 6
-#     x[:,i+0] = scale
-#     x[::2,i+2] = ss*scale
-#     x[1::2,i+2] = -ss*scale
-#     x = torch.cumsum(x, dim=0)
-#
-#     x[:,4] = x[:,4]+1.5
-#     x[:,8] = x[:,8]+1.5
-#
-#     if plot_coords:
-#         import matplotlib.pyplot as plt
-#         ax = plt.axes(projection='3d')
-#         cc = x.cpu().numpy()
-#         # ax.plot3D(cc[:, 3],cc[:, 4],cc[:, 5], 'blue')
-#         # ax.plot3D(cc[:, 6],cc[:, 7],cc[:, 8], 'red')
-#         ax.plot3D(cc[:, 0],cc[:, 1],cc[:, 2], 'gray')
-#         for i in range(coords.shape[0]):
-#             ax.plot3D([cc[i,0], cc[i, 3]], [cc[i,1],cc[i, 4]], [cc[i,2],cc[i, 5]], 'blue')
-#             ax.plot3D([cc[i,0], cc[i, 6]], [cc[i,1],cc[i, 7]], [cc[i,2],cc[i, 8]], 'red')
-#             # ax.plot3D(cc[:, 6], cc[:, 7], cc[:, 8], 'red')
-#
-#         ax.set_xlim3d(0, 250)
-#         ax.set_ylim3d(0, 250)
-#         ax.set_zlim3d(0, 250)
-#         plt.show()
-#
-#     return x
-#
-
-
-
-
-def run_model_protein(model,dataloader,train,max_samples,optimizer, loss_type, batch_size=1, debug=False):
-    """
-    A function designed to optimize or test a model on protein predictions data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
-
-    model:          a handler to the neural network used
-    dataloader:     a handler to the dataloader used
-    train:          a boolean determining whether to run in training or evaluation mode
-    max_samples:    the maximum number of samples to run before exiting (typically used when validating to only draw a smaller subset of a large dataset)
-    optimizer:      the optimizing function used to train the model
-    loss_type:      a string that determines which loss to use. ('mim','eq')
-    batch_size:     the batch_size to use during the run. NOTE THAT THE CURRENT CODE ONLY SUPPORTS BATCH_SIZE OF 1 FOR PROTEINS.
-    """
-    alossD = 0.0
-    aDRMSD = 0.0
-    ds = dataloader.dataset
-    rscale = ds.rscale
-    # vscale = ds.vscale
-
-    torch.set_grad_enabled(train)
-    if train:
-        model.train()
-    else:
-        model.eval()
-    for i, (seq,batch, coords, M, pssm, entropy, edge_index,edge_index_all) in enumerate(dataloader):
-        if torch.sum(M) < 5 or len(edge_index_all[0]) == 0:
-            continue # We skip proteins where there are 5 or less known amino acids in, and where there are no edge connections, this should never really be a problem but in unsanitized datasets it might be a problem
-        nb = len(torch.unique(batch))
-        edge_src = edge_index[0]
-        edge_dst = edge_index[1]
-        edge_src_all = edge_index_all[0]
-        edge_dst_all = edge_index_all[1]
-
-        optimizer.zero_grad()
-
-        # We need to define a best guess for the amino acid coordinates
-        coords_init = 0.1*torch.ones_like(coords)
-        coords_init[::2,::3] += 0.1
-        coords_init[:,3:] += 0.5
-        coords_init[:,6:] += 0.5
-        coords_init = torch.cumsum(coords_init,dim=0)
-        seq1hot = F.one_hot(seq,num_classes=20)
-        node_attr = torch.cat([seq1hot,pssm,entropy[:,None]],dim=1)
-
-        coords_pred, reg = model(x=coords_init,batch=batch,node_attr=seq, edge_src=edge_src, edge_dst=edge_dst)
-
-        # loss, loss_ref, loss_rel = loss_eq(coords_pred, coords, coords*0) #Note that we don't use the inital guess here, but rather 0.
-        lossD, lossD_ref, lossD_rel = loss_mim(coords_pred, coords, coords*0, edge_src_all, edge_dst_all) #Note that we don't use the inital guess here, but rather 0.
-
-        loss = lossD_rel + reg
-        if train:
-            loss.backward()
-            optimizer.step()
-            if debug:
-                weights = optimizer.param_groups[0]['params']
-                weights_flat = [torch.flatten(weight) for weight in weights]
-                weights_1d = torch.cat(weights_flat)
-                assert not torch.isnan(weights_1d).any()
-                assert not torch.isinf(weights_1d).any()
-
-                grad_flat = [torch.flatten(weight.grad) for weight in weights]
-                grad_1d = torch.cat(grad_flat)
-                assert not torch.isnan(grad_1d).any()
-                assert not torch.isinf(grad_1d).any()
-
-        coords_pred_vec = coords_pred.reshape(-1,3,3).detach()*rscale #[0,0,:] is Ca, [0,1,:] is Cb,
-        coords_vec = coords.reshape(-1,3,3).detach()*rscale
-
-        D1_pred = Distogram(coords_pred_vec[:,0,:])
-        D1_pred = torch.sqrt(D1_pred)
-        D1 = Distogram(coords_vec[:,0,:])
-        D1 = torch.sqrt(D1)
-
-        D2_pred = Distogram(coords_pred_vec[:,1,:])
-        D2_pred = torch.sqrt(D2_pred)
-        D2 = Distogram(coords_vec[:,1,:])
-        D2 = torch.sqrt(D2)
-
-        D3_pred = Distogram(coords_pred_vec[:,2,:])
-        D3_pred = torch.sqrt(D3_pred)
-        D3 = Distogram(coords_vec[:,2,:])
-        D3 = torch.sqrt(D3)
-
-        Mn = M*1.0
-        MM = Mn[:,None]@Mn[None,:]
-        DRMSD1 = torch.sum(torch.abs(D1-D1_pred)*MM)/torch.sum(MM).item()
-        DRMSD2 = torch.sum(torch.abs(D2-D2_pred)*MM)/torch.sum(MM).item()
-        DRMSD3 = torch.sum(torch.abs(D3-D3_pred)*MM)/torch.sum(MM).item()
-        DRMSD = (DRMSD1 + DRMSD2 + DRMSD3)/3
-        aDRMSD += DRMSD.item()
-        alossD += lossD_rel.item()
-
-        if (i + 1) * batch_size >= max_samples:
-            break
-
-    alossD /= (i + 1)
-    aDRMSD /= (i + 1)
-    return alossD, aDRMSD
-
-
-
-
-
-
-def delta_r(r):
-    """
-    """
-    dr1 = r[:,:,0] - r[:,:,1]
-    dr2 = r[:,:,1] - r[:,:,2]
-    dr3 = r[:,:,2] - r[:,:,0]
-    dr = torch.cat((dr1[:,:,None,:],dr2[:,:,None,:],dr3[:,:,None,:]),dim=2)
-    return dr
-
-def water_con(dr):
-    l = torch.tensor([0.957, 1.513, 0.957]).to(device=dr.device)
-
-    drnorm = torch.norm(dr, dim=-1)
-    c = drnorm - l
-    cabs = torch.abs(c)
-    c_mean = torch.mean(cabs)
-    return c_mean
-
-
