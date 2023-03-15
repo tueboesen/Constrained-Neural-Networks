@@ -5,15 +5,16 @@ from datetime import datetime
 import numpy as np
 
 from src.main import main
-from src.vizualization import plot_training_and_validation_accumulated
+from src.utils import define_data_keys
+from src.vizualization import plot_training_and_validation_accumulated, plot_training_and_validation_accumulated_2, plot_training_and_validation_accumulated_3, \
+    plot_training_and_validation_accumulated_4
 from e3nn import o3
 
 
 def standard_network_sizes(c,network_type):
     """
-    These are the standard networks that are used in this project
+    These are the standard networks that are used in this project. The exception is the multi-body pendulum that works in 2D
     """
-
     if network_type.lower() == 'eq':
         c['network'] = {
             'irreps_inout': o3.Irreps("6x1o"),
@@ -39,9 +40,9 @@ def standard_network_sizes(c,network_type):
 
     return c
 
-def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,regularizationparameter):
+def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,regularizationparameter='',gamma=1):
     """
-    Creates a job to be run.
+    Creates a single job to be run.
     """
     c['con'] = con
     c['con_type'] = con_type
@@ -50,6 +51,7 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,
     c['jobid'] = jobid
     c['network_type'] = network_type
     c['regularizationparameter'] = regularizationparameter
+    c['gamma'] = gamma
     if not ('network' in c):
         c = standard_network_sizes(c,network_type)
     if c['loss'] == '':
@@ -58,16 +60,20 @@ def create_job(c,network_type, con,con_type,seed,use_same_data,jobid,repetition,
         c['use_same_data'] = True
     else:
         c['use_same_data'] = False
-    c['result_dir'] = f"{c['result_dir_base']}/{c['network_type']}_{c['con']}_{c['con_type']}_{c['regularizationparameter']:1.1e}_{repetition}/"
-    legend = f"{network_type} {c['con']:} {c['con_type']:} {regularizationparameter:1.1e}"
+    c['result_dir'] = f"{c['result_dir_base']}/{c['network_type']}_{c['con']}_{c['con_type']}_{c['regularizationparameter']}_{c['gamma']}_{repetition}/"
+    legend = f"{network_type} {c['con']:} {c['con_type']:} {c['gamma']}"
     jobid = jobid + 1
+
+    if con == 'angles':
+        c['model_specific']['angles'] = True
+        c['network']['node_dim_in'] = 1
+        c['con'] = ''
+
     return c,jobid,legend
 
-
-
-def job_planner(c):
+def job_planner(c, mutable_parameters):
     """
-    This function can plan out multiple jobs to be run
+    This function can plan out multiple jobs to be run. This is designed to easily compare a bunch of different configurations while running on exactly the same dataset
     """
     c['result_dir_base'] = "../../{root}/{runner_name}/{date:%Y-%m-%d_%H_%M_%S}".format(
         root='results',
@@ -78,37 +84,44 @@ def job_planner(c):
     c_base = copy.deepcopy(c)
     cs = []
     legends = []
+
+    for i,(key, val) in enumerate(mutable_parameters.items()):
+        if i == 0 :
+            njobs = len(val)
+        else:
+            assert len(val) == njobs, f'the number of jobs differ in the mutable parameters, njobs={njobs}, while {key} has {len(val)} jobs.'
     for i,seed in enumerate(c_base['seed']):
         jobid = 0
-        for network_type in c_base['network_type']:
-            for con in c_base['con']:
-                if con == '':
-                    con_type = 'low'
-                    c_new,jobid,legend = create_job(copy.deepcopy(c),network_type,con,con_type,seed,c_base['use_same_data'],jobid,i,1)
-                    cs.append(c_new)
-                    if i == 0:
-                        legends.append(legend)
-                else:
-                    for con_type in c_base['con_type']:
-                        if con_type == 'reg':
-                            for regularizationparameter in c_base['regularizationparameter']:
-                                c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid,i,regularizationparameter)
-                                cs.append(c_new)
-                                if i == 0:
-                                    legends.append(legend)
-                        else:
-                            c_new, jobid, legend = create_job(copy.deepcopy(c), network_type, con, con_type, seed, c_base['use_same_data'], jobid, i, 1)
-                            cs.append(c_new)
-                            if i == 0:
-                                legends.append(legend)
+        for j in range(njobs):
+            c_new = copy.deepcopy(c)
+            legend = ''
+            for (key, val) in mutable_parameters.items():
+                c_new[key] = val[j]
+                legend = f"{legend}{key}={val[j]}_"
+            c_new['repetition'] = i
+            c_new['result_dir'] = f"{c['result_dir_base']}/{legend}{i}"
+            c_new['seed'] = seed
+            c_new['jobid'] = jobid
+            if not ('network' in c):
+                c_new = standard_network_sizes(c_new, c_new['network_type'])
+            if c_new['loss'] == '':
+                c_new['loss'] = c_new['network_type']
+            if jobid > 0:
+                c_new['use_same_data'] = True
+            else:
+                c_new['use_same_data'] = False
+            if i == 0:
+                legends.append(legend)
+            cs.append(c_new)
+            jobid += 1
 
-    results = np.zeros((len(legends),len(c_base['seed']),4,c['epochs']))
-    return cs, legends, results
+    results = np.zeros((len(legends),len(c_base['seed']),10,c['epochs']))
+    results_test = np.zeros((len(legends),len(c_base['seed']),5))
+    assert len(set(legends)) == len(legends), "Some of the mutable parameter combinations used are identical, remove those"
 
+    return cs, legends, results,results_test
 
-
-
-def job_runner(cs,legends, results):
+def job_runner(cs,legends, results,results_test):
     """
     This function runs a set of jobs, stores the results and plot the training and validation loss
     """
@@ -117,6 +130,7 @@ def job_runner(cs,legends, results):
     dataloader_test = None
     dataloader_endstep = None
     file_legend = f"{cs[0]['result_dir_base']}/legends.txt"
+
     with open(file_legend, 'w') as f:
         for i, legend in enumerate(legends):
             f.write(f"{i}: {legend} \n")
@@ -126,15 +140,42 @@ def job_runner(cs,legends, results):
             dataloader_val = None
             dataloader_test = None
             dataloader_endstep = None
-        result,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
+        else:
+            if dataloader_train is not None:
+                if c['data_type'] == 'n-pendulum' and c['model_specific']['angles'] == True:
+                    dataloader_train.dataset.useprimary = False
+                    dataloader_val.dataset.useprimary = False
+                else:
+                    dataloader_train.dataset.useprimary = True
+                    dataloader_val.dataset.useprimary = True
 
-        results[c['jobid'],c['repetition'],0,:] = result['loss_t']
-        results[c['jobid'],c['repetition'],1,:] = result['loss_v']
-        results[c['jobid'],c['repetition'],2,:] = result['lossD_t']
-        results[c['jobid'],c['repetition'],3,:] = result['lossD_v']
+        result,result_test,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep = main(c,dataloader_train,dataloader_val,dataloader_test,dataloader_endstep)
+
+        # for (key,val) in result.items():
+        #     results[key][c['jobid'],c['repetition'],:] = val
+        results[c['jobid'],c['repetition'],0,:] = result['loss_r_t']
+        results[c['jobid'],c['repetition'],1,:] = result['loss_r_v']
+        results[c['jobid'],c['repetition'],2,:] = result['loss_v_t']
+        results[c['jobid'],c['repetition'],3,:] = result['loss_v_v']
+        results[c['jobid'],c['repetition'],4,:] = result['cv_t']
+        results[c['jobid'],c['repetition'],5,:] = result['cv_v']
+        results[c['jobid'],c['repetition'],6,:] = result['cv_max_t']
+        results[c['jobid'],c['repetition'],7,:] = result['cv_max_v']
+        results[c['jobid'],c['repetition'],8,:] = result['MAE_r_t']
+        results[c['jobid'],c['repetition'],9,:] = result['MAE_r_v']
+
         file = f"{c['result_dir_base']:}/results"
         np.save(file,results)
-        plot_training_and_validation_accumulated(results, legends, c['result_dir_base'])
-        plot_training_and_validation_accumulated(results, legends, c['result_dir_base'],semilogy=True)
 
+        if result_test is not None:
+            results_test[c['jobid'],c['repetition'],0] = result_test['loss_r']
+            results_test[c['jobid'],c['repetition'],1] = result_test['loss_v']
+            results_test[c['jobid'],c['repetition'],2] = result_test['cv']
+            results_test[c['jobid'],c['repetition'],3] = result_test['cv_max']
+            results_test[c['jobid'],c['repetition'],4] = result_test['MAE_r']
+
+            file_test = f"{c['result_dir_base']:}/results_test"
+            np.save(file_test,results_test)
+
+        plot_training_and_validation_accumulated_4(results, legends, c['result_dir_base'],semilogy=True)
     return

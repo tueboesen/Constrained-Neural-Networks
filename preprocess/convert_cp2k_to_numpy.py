@@ -59,8 +59,8 @@ def read_xyz_force(filename,n):
 
 
 if __name__ == '__main__':
-    folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/water300/'
-    # folder = '/media/tue/Data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/argon/'
+    folder = '/media/tue/data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/water300/'
+    # folder = '/media/tue/data/Dropbox/ComputationalGenetics/text/Poincare_MD/MD_calculation/argon/'
     # folder = '/home/tue/data/MD/ethanol_heating/'
     name_ener = 'T300-1.ener'
     name_vel = 'T300-vel-1.xyz'

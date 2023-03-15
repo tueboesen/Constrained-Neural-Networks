@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_scatter import scatter
 
-from src.utils import smooth_cutoff
+from src.utils import smooth_cutoff, atomic_masses
 
 
 class Mixing(nn.Module):
@@ -160,12 +160,11 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_latent, nlayers, PU, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3):
+    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=0,regularization=0,orthogonal_K=True):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
         nlayers:            The number of propagationBlocks to include in the network 
-        PU:                 A handler to a projection uplifting class instance
         nmax_atom_types:    Max number of particle types to handle, for proteins this should be the types of amino acids
         atom_type_embed_dim: The out dimension of the embedding done to the atom_types
         max_radius:         The maximum radius used when building the edges in the graph between the particles
@@ -174,62 +173,157 @@ class neural_network_mimetic(nn.Module):
         dim:                The dimension that the data lives in (default 3)
         """
         self.nlayers = nlayers
-        self.PU = PU
+        self.gamma = gamma
         self.dim = dim
+        self.low_dim = node_dim_in
+        self.high_dim = node_dim_latent
+        self.orthogonal_K = orthogonal_K
+        # self.regularization = regularization
+        device = 'cuda:0'
         # self.PU.make_matrix_semi_unitary()
+        # torch.nn.Linear
+        # w = torch.empty((self.high_dim,self.low_dim))
+        # torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
+        # self.K = torch.nn.Parameter(w)
+        self.lin = torch.nn.Linear(self.low_dim,self.high_dim)
+        # self.register_buffer("K", self.lin.weight)
+        # self.ortho = torch.nn.utils.parametrizations.orthogonal(torch.nn.Linear(self.high_dim,self.low_dim))
+        # self.K = self.lin.weight
 
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
-        self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-2)
+        # self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-20)
+
+        self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
+        if self.orthogonal_K:
+            # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
+            self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
+        else:
+            # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-3)
+            pass
+
         self.con_fnc = con_fnc
         self.con_type = con_type
+        self.embed_node_attr = embed_node_attr
+        self.discretization = discretization
+        assert self.discretization in ['leapfrog', 'euler','rk4']
 
         self.PropagationBlocks = nn.ModuleList()
         for i in range(nlayers):
             block = PropagationBlock(xn_dim=node_dim_latent, xn_attr_dim=atom_type_embed_dim)
             self.PropagationBlocks.append(block)
+        self.params = nn.ModuleDict({
+            "base": self.PropagationBlocks,
+            "h": nn.ParameterList([self.h]),
+            "close": nn.ModuleList([self.lin])
+        })
         return
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst):
+    # def inverse(self,x):
+    #     y = x @ self.K.T @ torch.inverse(self.K @ self.K.T) #This is for the right side
+        # y = x @ torch.inverse(self.K.T @ self.K) @ self.K.T
+        # return y
+
+    def uplift(self,x):
+        y = x @ self.lin.weight.T
+        # y = x @ self.K.T
+        return y
+
+    @property
+    def K(self):
+        return self.lin.weight.T
+
+    def project(self,y):
+        x = y @ self.lin.weight
+        # x = y @ self.K
+        return x
+
+    def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,ignore_con=False,weight=1):
         if x.isnan().any():
             raise ValueError("NaN detected")
 
-        node_attr_embedded = self.node_attr_embedder(node_attr.to(dtype=torch.int64)).squeeze()
-        y = self.PU.uplift(x)
-
+        if self.embed_node_attr:
+            node_attr_embedded = self.node_attr_embedder(node_attr.min(dim=-1)[0].to(dtype=torch.int64)).squeeze()
+        else:
+            node_attr_embedded = node_attr
+        y = self.uplift(x)
+        # y2 = x @ self.K().T
+        ndimx = x.shape[-1]
+        ndimy = y.shape[-1]
         y_old = y
+        reg = torch.tensor(0.0)
+        reg2 =  torch.tensor(0.0)
+
         for i in range(self.nlayers):
+            # dt = max(min(self.h[i] ** 2, 0.1),1e-20)
+            dt = max(min(self.h[i] ** 2, 0.1),1e-4)
+            # dt = max(min(self.h[i] ** 2, 0.1),1e-6)
             if x.isnan().any():
                 raise ValueError("NaN detected")
-            edge_vec = x[:,0:self.dim][edge_src] - x[:,0:self.dim][edge_dst]
-            edge_len = edge_vec.norm(dim=1)
-            w = smooth_cutoff(edge_len / self.max_radius) / edge_len
+            if wstatic is None:
+                edge_vec = x[:,0:self.dim][edge_src] - x[:,0:self.dim][edge_dst]
+                edge_len = edge_vec.norm(dim=1)
+                w = smooth_cutoff(edge_len / self.max_radius) / edge_len
+            else:
+                w = wstatic
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)
 
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
-            tmp = y.clone()
 
-            y = 2*y - y_old - self.h[i]**2 * y_new
-            y_old = tmp
+            if self.gamma > 0:
+                if self.discretization == 'rk4':
+                    q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
+                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
+                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
+                    dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
+                else:
+                    dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                dy = dy.view(-1,ndimy)
+            else:
+                dy = 0
+            if self.discretization == 'leapfrog':
+                tmp = y.clone()
+                y = 2*y - y_old - dt * (y_new + self.gamma*dy)
+                y_old = tmp
+            elif self.discretization == 'euler':
+                y = y + dt * (y_new - self.gamma*dy)
+            elif self.discretization == 'rk4':
+                k1 = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
+                k2 = self.PropagationBlocks[i](y.clone() + k1 * dt / 2, edge_attr, edge_src, edge_dst)
+                k3 = self.PropagationBlocks[i](y.clone() + k2 * dt / 2, edge_attr, edge_src, edge_dst)
+                k4 = self.PropagationBlocks[i](y.clone() + k3 * dt, edge_attr, edge_src, edge_dst)
+                y_new = (k1 + 2*k2 + 2*k3 + k4)/6
+                y = y + dt * (y_new - self.gamma*dy)
+            else:
+                raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
 
-            if self.con_fnc is not None and self.con_type == 'high':
+            if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
-                data = self.con_fnc({'y': y, 'batch': batch,'z':node_attr})
-                y = data['y']
+                # y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.K(),self.K().T,weight)
+                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight,K=self.K)
+                y = y.view(-1,ndimy)
+                reg = reg + regi
+                reg2 = reg2 + regi2
                 if y.isnan().any():
                     raise ValueError("NaN detected")
 
-            x = self.PU.project(y)
+            x = self.project(y)
 
-        if self.con_fnc is not None and self.con_type == 'low':
-            data = self.con_fnc({'x': x, 'batch': batch,'z':node_attr})
-            x = data['x']
-        if self.con_fnc is not None and self.con_type == 'reg':
-            data = self.con_fnc({'x': x, 'batch': batch, 'z': node_attr})
-            reg = data['c']
-        else:
-            reg = 0
+        if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
+            x, reg, reg2 = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x = x.view(-1,ndimx)
         if x.isnan().any():
             raise ValueError("NaN detected")
-        return x, reg
+
+        if self.con_fnc is not None:
+            c, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+            if reg == 0:
+                reg = cv_mean
+            if reg2 == 0:
+                reg2 = (c*c).mean()
+        else:
+            cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
+
+        return x, c, cv_max, reg, reg2
