@@ -1,0 +1,37 @@
+run:
+  epochs: 150
+  debug: false
+  seed: 1234
+  model_type: 'mim'
+
+
+data:
+  n_train: 100
+  n_val: 100
+  n_test: 100
+  batch_size: 10
+  nskip: 200
+
+constraints:
+  orthogonal_projection: True
+
+model_eq:
+  irreps_inout: "6x1o"
+  irreps_hidden: "30x0o+30x0e+20x1o+20x1e"
+  layers: 8
+  max_radius: 15
+  number_of_basis: 8
+  embed_dim: 2
+  max_atom_types: 20
+  radial_neurons: [48]
+  num_neighbors: -1
+
+model_mim:
+  node_dim_in: 9
+  node_dim_latent: 120
+  layers: 8
+  max_radius: 15
+
+optimizer:
+  lr: 0.001
+  momentum: 0.9

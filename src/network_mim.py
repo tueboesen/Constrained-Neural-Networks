@@ -158,9 +158,9 @@ class PropagationBlock(nn.Module):
 
 class neural_network_mimetic(nn.Module):
     """
-    This network is designed to predict the 3D coordinates of a set of particles.
+    This network is designed to predict the 2D/3D coordinates of a set of particles.
     """
-    def __init__(self, node_dim_in, node_dim_latent, nlayers, nmax_atom_types=20,atom_type_embed_dim=8,max_radius=50,con_fnc=None,con_type=None,dim=3,embed_node_attr=True,discretization='leapfrog',gamma=0,regularization=0,orthogonal_K=True):
+    def __init__(self, dim_in, dim_latent, layers, nmax_atom_types=20, atom_type_embed_dim=8, max_radius=50, con_fnc=None, con_type=None, position_indices=(0, 1), embed_node_attr=True, discretization_method='leapfrog', gamma=0, orthogonal_projection=True):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
@@ -172,29 +172,16 @@ class neural_network_mimetic(nn.Module):
         con_type:           The type of constraints being used (high, low, reg)
         dim:                The dimension that the data lives in (default 3)
         """
-        self.nlayers = nlayers
+        self.nlayers = layers
         self.gamma = gamma
-        self.dim = dim
-        self.low_dim = node_dim_in
-        self.high_dim = node_dim_latent
-        self.orthogonal_K = orthogonal_K
-        # self.regularization = regularization
-        device = 'cuda:0'
-        # self.PU.make_matrix_semi_unitary()
-        # torch.nn.Linear
-        # w = torch.empty((self.high_dim,self.low_dim))
-        # torch.nn.init.xavier_normal_(w,gain=1/math.sqrt(self.low_dim)) # Filled according to "Semi-Orthogonal Low-Rank Matrix Factorization for Deep Neural Networks"
-        # self.K = torch.nn.Parameter(w)
-        self.lin = torch.nn.Linear(self.low_dim,self.high_dim)
-        # self.register_buffer("K", self.lin.weight)
-        # self.ortho = torch.nn.utils.parametrizations.orthogonal(torch.nn.Linear(self.high_dim,self.low_dim))
-        # self.K = self.lin.weight
-
+        self.position_indices = position_indices
+        self.dim_in = dim_in
+        self.dim_latent = dim_latent
+        self.orthogonal_K = orthogonal_projection
+        self.lin = torch.nn.Linear(self.dim_in, self.dim_latent)
         self.node_attr_embedder = torch.nn.Embedding(nmax_atom_types,atom_type_embed_dim)
         self.max_radius = max_radius
-        # self.h = torch.nn.Parameter(torch.ones(nlayers)*1e-20)
-
-        self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
+        self.h = torch.nn.Parameter(torch.ones(layers) * 1e-2)
         if self.orthogonal_K:
             # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
             self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
@@ -205,12 +192,12 @@ class neural_network_mimetic(nn.Module):
         self.con_fnc = con_fnc
         self.con_type = con_type
         self.embed_node_attr = embed_node_attr
-        self.discretization = discretization
-        assert self.discretization in ['leapfrog', 'euler','rk4']
+        self.discretization_method = discretization_method
+        assert self.discretization_method in ['leapfrog', 'euler', 'rk4']
 
         self.PropagationBlocks = nn.ModuleList()
-        for i in range(nlayers):
-            block = PropagationBlock(xn_dim=node_dim_latent, xn_attr_dim=atom_type_embed_dim)
+        for i in range(layers):
+            block = PropagationBlock(xn_dim=dim_latent, xn_attr_dim=atom_type_embed_dim)
             self.PropagationBlocks.append(block)
         self.params = nn.ModuleDict({
             "base": self.PropagationBlocks,
@@ -252,16 +239,14 @@ class neural_network_mimetic(nn.Module):
         ndimy = y.shape[-1]
         y_old = y
         reg = torch.tensor(0.0)
-        reg2 =  torch.tensor(0.0)
+        reg2 = torch.tensor(0.0)
 
         for i in range(self.nlayers):
-            # dt = max(min(self.h[i] ** 2, 0.1),1e-20)
             dt = max(min(self.h[i] ** 2, 0.1),1e-4)
-            # dt = max(min(self.h[i] ** 2, 0.1),1e-6)
             if x.isnan().any():
                 raise ValueError("NaN detected")
             if wstatic is None:
-                edge_vec = x[:,0:self.dim][edge_src] - x[:,0:self.dim][edge_dst]
+                edge_vec = x[:,self.position_indices][edge_src] - x[:, self.position_indices][edge_dst]
                 edge_len = edge_vec.norm(dim=1)
                 w = smooth_cutoff(edge_len / self.max_radius) / edge_len
             else:
@@ -271,7 +256,7 @@ class neural_network_mimetic(nn.Module):
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
 
             if self.gamma > 0:
-                if self.discretization == 'rk4':
+                if self.discretization_method == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
                     q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
                     q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
@@ -282,13 +267,13 @@ class neural_network_mimetic(nn.Module):
                 dy = dy.view(-1,ndimy)
             else:
                 dy = 0
-            if self.discretization == 'leapfrog':
+            if self.discretization_method == 'leapfrog':
                 tmp = y.clone()
                 y = 2*y - y_old - dt * (y_new + self.gamma*dy)
                 y_old = tmp
-            elif self.discretization == 'euler':
+            elif self.discretization_method == 'euler':
                 y = y + dt * (y_new - self.gamma*dy)
-            elif self.discretization == 'rk4':
+            elif self.discretization_method == 'rk4':
                 k1 = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
                 k2 = self.PropagationBlocks[i](y.clone() + k1 * dt / 2, edge_attr, edge_src, edge_dst)
                 k3 = self.PropagationBlocks[i](y.clone() + k2 * dt / 2, edge_attr, edge_src, edge_dst)
@@ -296,7 +281,7 @@ class neural_network_mimetic(nn.Module):
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
                 y = y + dt * (y_new - self.gamma*dy)
             else:
-                raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
+                raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
             if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():

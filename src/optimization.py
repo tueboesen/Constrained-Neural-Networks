@@ -1,5 +1,4 @@
 import inspect
-import torch.nn.functional as F
 import torch.nn.utils.parametrize as P
 
 import torch
@@ -7,24 +6,27 @@ from e3nn import o3
 from torch_cluster import radius_graph
 
 from src.loss import loss_eq, loss_mim
-from src.npendulum import get_coordinates_from_angle
-from src.utils import Distogram, define_data_keys, atomic_masses
+from pendulum.npendulum import get_coordinates_from_angle
 from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshot_custom
 
 
-def run_model(data_type,model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=False, max_radius=15, debug=False, epoch=None,output_folder=None,ignore_cons=False,nviz=5,regularization=0,viz_paper=False):
-    """
-    A wrapper function for the different data types currently supported for training/inference
-    """
-    if data_type == 'water':
-        loss_r, loss_v, cv,cv_max ,MAEr, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
-        drmsd = 0
-    elif data_type == 'pendulum' or data_type == 'n-pendulum' :
-        loss_r, loss_v, cv,cv_max, cv_energy, cv_energy_max ,MAEr,MAEv, reg, reg2 = run_model_MD(model, dataloader, train, max_samples, optimizer, loss_fnc, check_equivariance=check_equivariance, max_radius=max_radius, debug=debug, epoch=epoch, output_folder=output_folder,ignore_con=ignore_cons,nviz=nviz,regularization=regularization,viz_paper=viz_paper)
-        drmsd = 0
-    else:
-        raise NotImplementedError("The data_type={:}, you have selected is not implemented for {:}".format(data_type,inspect.currentframe().f_code.co_name))
-    return loss_r, loss_v, drmsd, cv, cv_max,cv_energy,cv_energy_max,MAEr,MAEv,reg, reg2
+def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
+    model = run_model(c,model,dataloaders['train'],optimizer,loss_fnc)
+
+
+def run_model(c,model,dataloader,optimizer,loss_fnc,train=True):
+    model.train(train)
+    for i, (Rin, Rout, Vin, Vout, z, m) in enumerate(dataloader):
+        batch, x, z_vec, m_vec, weights, x_target = dataloader.collate_vars(Rin, Rout, Vin, Vout, z, m)
+        edge_src, edge_dst, wstatic = dataloader.generate_edges(batch,x,model.max_radius)
+        with P.cached():
+            x_pred, cv,cv_max, reg, reg2 = model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
+        loss = loss_fnc(x_pred,x_target,x,edge_src,edge_dst)
+        if train:
+            loss.backward()
+            torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
+            optimizer.step()
+
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=False, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0,viz_paper=False):
@@ -80,33 +82,7 @@ def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, ch
         weights = (1/m).repeat_interleave(ndim//m.shape[-1],dim=-1).repeat(1,1,model_input.shape[-1]//ndim)
 
 
-        if ds.data_type == 'n-pendulum':
-            n=5
-            nb = (torch.max(batch)+1).item()
-            a = torch.tensor([0])
-            b = torch.arange(1,n-1).repeat_interleave(2)
-            c = torch.tensor([n-1])
-            I =torch.cat((a,b,c))
 
-            bb1 = torch.arange(1,n)
-            bb2 = torch.arange(n-1)
-            J = torch.stack((bb1,bb2),dim=1).view(-1)
-
-            shifts = torch.arange(nb).repeat_interleave(I.shape[0])*n
-
-            II = I.repeat(nb)
-            JJ = J.repeat(nb)
-
-            edge_src = (JJ+shifts).to(device=Rin.device)
-            edge_dst = (II+shifts).to(device=Rin.device)
-
-            wstatic = torch.ones_like(edge_dst)
-
-        else:
-            edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
-            edge_src = edge_index[0]
-            edge_dst = edge_index[1]
-            wstatic = None
 
         with P.cached():
             output, c,cv_max, reg, reg2 = model(model_input, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)

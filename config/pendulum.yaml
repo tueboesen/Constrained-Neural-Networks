@@ -1,0 +1,40 @@
+run:
+  epochs: 150
+  debug: false
+  seed: 1234
+  model_type: 'mim'
+  loss: 'eq'
+  precision: torch.float64
+  device: ???
+
+data:
+  type: 'multibodypendulum'
+  file: './../data/multibodypendulum/multibodypendulum.npz'
+  use_val: False
+  use_test: False
+  metafile: ???
+  n_train: 100
+  n_val: 100
+  n_test: 100
+  batchsize: 10
+  nskip: 200
+  data_dim: 2
+  device: ???
+  rscale: 1
+  vscale: 1
+  nvars: 2
+
+
+constraints:
+  name: 'multibodypendulum'
+  type: 'high'
+  max_iter: 200
+  tolerance: 1e-4
+  include_second_order_constraints: False
+
+
+optimizer:
+  lr: 0.001
+  momentum: 0.9
+
+model:

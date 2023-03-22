@@ -10,33 +10,39 @@ import time
 class NPendulum:
     """
     A multibody pendulum class, which enables the simulation of a pendulum with massless rigid strings between n point masses.
+
+    Note that this code only supports pendulums where all pendulums have a length of 1.
     """
-    def __init__(self,n,dt):
+    def __init__(self, npendulums: int, dt: float, g: float = 9.82):
         """
         Initiates an n-pendulum class for simulating multi-body pendulums.
         See https://travisdoesmath.github.io/pendulum-explainer/ or https://github.com/tueboesen/n-pendulum for the equations,
-        :param n: number of pendulums
+        :param npendulums: number of pendulums
         :param dt: time stepping size
         """
-        self.n = n
-        self.A = torch.zeros((n,n))
-        self.b = torch.zeros((n))
-        self.x = torch.zeros((n))
-        self.g = 9.82
+        self.n = npendulums
+        self.g = g
         self.dt = dt
 
-        C = torch.zeros(n,n)
-        for i in range(n):
-            for j in range(n):
+        self.A = torch.zeros((npendulums, npendulums)) #Memory allocations
+        self.b = torch.zeros((npendulums))
+        self.x = torch.zeros((npendulums))
+
+
+        C = torch.zeros(npendulums, npendulums) # A lookup matrix that we use for fast calculation of static information rather than actually compute this in every step
+        for i in range(npendulums):
+            for j in range(npendulums):
                 C[i,j] = self.c(i,j)
         self.C = C
 
-    def c(self,i,j):
+    def c(self,i: int,j: int):
         return self.n - max(i,j)
 
-    def npendulum(self,theta,dtheta):
+    def step(self, theta, dtheta):
         """
-        Sets up and solves the n-pendulum linear system of equations in angular coordinates where the constraints are naturally obeyed.
+        Performs a single step for a multibody pendulum.
+
+        More specifically it sets up and solves the n-pendulum linear system of equations in angular coordinates where the constraints are naturally obeyed.
 
         Note this function should not be used. Use npendulum_fast instead since it is an optimized version of this. This function is still here for comparison and to easily understand the calculations.
 
@@ -62,9 +68,9 @@ class NPendulum:
         ddtheta = torch.linalg.solve(A,b)
         return dtheta,ddtheta
 
-    def npendulum_fast(self,theta,dtheta):
+    def step_fast(self, theta, dtheta):
         """
-        Faster version of npendulum
+        Faster version of step
         """
         n = self.n
         g = self.g
@@ -77,8 +83,6 @@ class NPendulum:
         ddtheta = torch.linalg.solve(A,b)
         return dtheta,ddtheta
 
-
-
     def rk4(self,dt,theta,dtheta):
         """
         Runge kutta 4 integration
@@ -87,18 +91,17 @@ class NPendulum:
         :param dtheta:
         :return:
         """
-        k1 = self.npendulum_fast(theta,dtheta)
-        k2 = self.npendulum_fast(theta+dt/2*k1[0],dtheta+dt/2*k1[1])
-        k3 = self.npendulum_fast(theta+dt/2*k2[0],dtheta+dt/2*k2[1])
-        k4 = self.npendulum_fast(theta+dt*k3[0],dtheta+dt*k3[1])
-
+        k1 = self.step_fast(theta, dtheta)
+        k2 = self.step_fast(theta + dt / 2 * k1[0], dtheta + dt / 2 * k1[1])
+        k3 = self.step_fast(theta + dt / 2 * k2[0], dtheta + dt / 2 * k2[1])
+        k4 = self.step_fast(theta + dt * k3[0], dtheta + dt * k3[1])
 
         theta  = theta + dt/6*(k1[0]+2*k2[0]+2*k3[0]+k4[0])
         dtheta = dtheta + dt / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1])
 
         return theta,dtheta
 
-    def simulate(self,nsteps,theta,dtheta):
+    def simulate(self,nsteps: int, theta_start: torch.FloatTensor, dtheta_start: torch.FloatTensor):
         """
         Simulates an n-pendulum.
         :param nsteps:
@@ -110,9 +113,11 @@ class NPendulum:
         n = self.n
         thetas = torch.zeros(n,nsteps+1)
         dthetas = torch.zeros(n,nsteps+1)
-        thetas[:, 0] = theta
-        dthetas[:, 0] = dtheta
+        thetas[:, 0] = theta_start
+        dthetas[:, 0] = dtheta_start
         t = torch.linspace(0,nsteps * dt, nsteps + 1)
+        theta = theta_start
+        dtheta = dtheta_start
 
         for i in range(nsteps):
             theta, dtheta = self.rk4(dt,theta,dtheta)
@@ -120,67 +125,43 @@ class NPendulum:
             dthetas[:,i+1] = dtheta
         return t, thetas, dthetas
 
-def get_coordinates_from_angle(theta,dtheta):
+def get_coordinates_from_angle(thetas: torch.FloatTensor, dthetas: torch.FloatTensor):
     """
-    Converts angles to cartesian coordinates and velocities
-    :return:
+    Converts angles to cartesian coordinates and velocities.
+    Expects thetas and dthetas to have the shape [npendulums,...]
     """
-    n,ns = theta.shape
-    x = torch.zeros(n+1,ns,device=theta.device)
-    y = torch.zeros(n+1,ns,device=theta.device)
-    vx = torch.zeros(n+1,ns,device=theta.device)
-    vy = torch.zeros(n+1,ns,device=theta.device)
-    for i in range(n):
-        x[i+1] = x[i] + torch.sin(theta[i])
-        y[i+1] = y[i] - torch.cos(theta[i])
-        vx[i+1] = vx[i] + dtheta[i] * torch.cos(theta[i])
-        vy[i+1] = vy[i] + dtheta[i] * torch.sin(theta[i])
+    assert thetas.shape == dthetas.shape
+    n = thetas.shape[0]
+    x = torch.empty_like(thetas)
+    y = torch.empty_like(thetas)
+    vx = torch.empty_like(thetas)
+    vy = torch.empty_like(thetas)
+
+    x[0] = torch.sin(thetas[0])
+    y[0] = - torch.cos(thetas[0])
+    vx[0] = dthetas[0] * torch.cos(thetas[0])
+    vy[0] = dthetas[0] * torch.sin(thetas[0])
+    for i in range(1,n):
+        x[i] = x[i-1] + torch.sin(thetas[i])
+        y[i] = y[i-1] - torch.cos(thetas[i])
+        vx[i] = vx[i-1] + dthetas[i] * torch.cos(thetas[i])
+        vy[i] = vy[i-1] + dthetas[i] * torch.sin(thetas[i])
     return x, y, vx, vy
 
-def animate_pendulum(x,y,vx=None,vy=None,save=None):
+def get_angles_from_coordinates(x,y,vx,vy):
     """
-    Animates the pendulum.
-    If save is None it will show a movie in python
-    otherwise it will save a gif to the location specified in save
+    Converts cartesian coordinates and velocities to angles.
+    Expects the input to have shape [npendulums,...]
     """
-
-    import matplotlib;
-    matplotlib.use("TkAgg")
-    import numpy as np
-    import matplotlib.pyplot as plt
-    import matplotlib.animation as animation
-
-    fig, ax = plt.subplots()
-    n,nsteps = x.shape
-
-    line, = ax.plot(x[:,0], y[:,0])
-    line2, = ax.plot(x[:,0], y[:,0], 'ro')
-    lines = [line,line2]
-
-    v_origo =np.asarray([x[1:,0], y[1:,0]])
-    arrows = plt.quiver(*v_origo, vx[1:, 0], vy[1:, 0], color='r', scale=100,width=0.003)
-    lines.append(arrows)
-
-    def init():
-        ax.set_xlim(-n,n)
-        ax.set_ylim(-n,n)
-        return lines
-
-    def update(i):
-        for j in range(2):
-            lines[j].set_xdata(x[:,i])
-            lines[j].set_ydata(y[:,i])
-        origo = np.asarray([x[1:, i], y[1:, i]]).transpose()
-        lines[-1].set_offsets(origo)
-        lines[-1].set_UVC(vx[1:, i], vy[1:, i])
-        return lines
-
-    ani = animation.FuncAnimation(fig, update, frames=np.arange(1, nsteps), init_func=init, interval=25, blit=True)
-    if save is None:
-        plt.show()
-    else:
-        writergif = animation.PillowWriter(fps=30)
-        ani.save(save, writer=writergif)
+    assert x.shape == y.shape == vx.shape == vy.shape
+    thetas = torch.empty_like(x)
+    dthetas = torch.empty_like(x)
+    thetas[0] = torch.atan(y[0]/x[0])
+    dthetas[0] = torch.atan(vy[0]/vx[0])
+    for i in range(1,x.shape[0]):
+        thetas[i] = torch.atan((y[i]-y[i-1])/(x[i]-x[i-1]))
+        dthetas[i] = torch.atan((vy[i]-vy[i-1])/(vx[i]-vx[i-1]))
+    return thetas, dthetas
 
 
 
@@ -191,7 +172,7 @@ if __name__ == '__main__':
     g = Npend.g
     theta0 = 0.5*math.pi*torch.ones(n)
     dtheta0 = 0.0*torch.ones(n)
-    nsteps = 100000
+    nsteps = 10000
 
     t0 = time.time()
     times, thetas, dthetas = Npend.simulate(nsteps,theta0,dtheta0)

@@ -1,3 +1,5 @@
+import os
+
 import torch
 import random
 
@@ -7,6 +9,33 @@ import pandas as pd
 import torch
 from torch_cluster import radius_graph
 import math
+from hydra import compose, initialize
+from omegaconf import OmegaConf
+
+
+def configuration_processor(c):
+    """
+    Processes the configuration file, adding dynamic variables, and sanity checking.
+    The metadata file should be given a name that is canonical for that particular configuration
+    """
+
+
+    # initialize(config_path="conf", job_name="test_app")
+    cfg = compose(config_name="models")
+    c.model = getattr(cfg,f"model_{c.run.model_type}")
+
+    if 'metafile' not in c.data:
+        path = os.path.dirname(c.data.file)
+        metapath = f"{path}/metadata/"
+        c.data.metafile = os.path.join(metapath,f"split_{c.run.seed}_{c.data.n_train}_{c.data.n_val}_{c.data.n_test}_{c.data.nskip}.npz")
+    if 'device' not in c.run:
+        c.run.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+        c.run.device = 'cpu'
+        c.data.device = c.run.device
+    c.model.dim_in = c.data.data_dim * c.data.nvars
+
+    return c
+
 
 def smooth_cutoff(x):
     """
