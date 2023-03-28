@@ -1,4 +1,7 @@
 import inspect
+
+import mlflow.pytorch
+from tqdm import tqdm
 import torch.nn.utils.parametrize as P
 
 import torch
@@ -11,22 +14,105 @@ from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshot_cus
 
 
 def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
-    model = run_model(c,model,dataloaders['train'],optimizer,loss_fnc)
+    names = ['train', 'val']
+    with mlflow.start_run() as run:
+        artifact_path = "model"
+        mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
+        # mlflow.pytorch.save_model(model, "model")
+        mlflow.log_params(c)
+        metrics = Metrics(name='train')
+        for epoch in range(c.run.epochs):
+            for name in names:
+                if name in dataloaders:
+                    loss = run_model(epoch,c,model,dataloaders[name],optimizer,loss_fnc,metrics,type=name)
+        if 'test' in dataloaders:
+            loss = run_model(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
+    return loss
+
+class Metrics:
+    def __init__(self,name,report_every_n_step=0):
+        self.report_every_n_step = report_every_n_step
+        self.reset(name)
+
+    def reset(self,name):
+        self.name = name
+        self.cv_mean = 0.0
+        self.cv_max = 0.0
+        self.reg = 0.0
+        self.loss_predict = 0.0
+        self.loss = 0.0
+        self.mae_r = 0.0
+        self.mae_v = 0.0
+        self.counter = 0
+        self.epoch = 0
+
+    def update(self,epoch,cv_mean,cv_max,reg,loss_predict,loss,mae_r,mae_v):
+        self.epoch = epoch
+        self.cv_mean += cv_mean.item()
+        self.cv_max += cv_max.item()
+        self.reg += reg.item()
+        self.loss_predict += loss_predict.item()
+        self.loss += loss.item()
+        self.mae_r += mae_r.item()
+        self.mae_v += mae_v.item()
+        self.counter += 1
+        self.report()
+
+    def report(self,end_of_epoch=False):
+        if end_of_epoch or ((self.report_every_n_step > 0) and ((self.counter % self.report_every_n_step) == 0)):
+            mlflow.log_metric("epoch",self.epoch)
+            mlflow.log_metric(f"{self.name}_cv_mean",self.cv_mean/self.counter)
+            mlflow.log_metric(f"{self.name}_cv_max",self.cv_max/self.counter)
+            mlflow.log_metric(f"{self.name}_reg",self.reg/self.counter)
+            mlflow.log_metric(f"{self.name}_loss_predict",self.loss_predict/self.counter)
+            mlflow.log_metric(f"{self.name}_loss",self.loss/self.counter)
+            mlflow.log_metric(f"{self.name}_mae_r",self.mae_r/self.counter)
+            mlflow.log_metric(f"{self.name}_mae_v",self.mae_v/self.counter)
+
+def compute_mae(c,x_pred,x_target,rscale,vscale):
+    """
+    Computes the Mean absolute error for both positions and velocities.
+    rscale,vscale are used to scale the data back to original units
+    """
+    for key,idx in c.data.data_id.items():
+        if key == 'r':
+            pred = x_pred[...,idx]
+            target = x_target[...,idx]
+            mae_r = torch.mean(torch.norm((pred - target)*rscale,dim=1))
+        elif key == 'v':
+            pred = x_pred[...,idx]
+            target = x_target[...,idx]
+            mae_v = torch.mean(torch.norm((pred - target)*vscale,dim=1))
+        else:
+            raise(f"{key} data type not implemented for MAE calculation.")
+    return mae_r, mae_v
 
 
-def run_model(c,model,dataloader,optimizer,loss_fnc,train=True):
+
+def run_model(epoch,c,model,dataloader,optimizer,loss_fnc,metrics,type):
+    """
+    Runs the model for a single epoch
+    """
+    train = type == 'train'
     model.train(train)
-    for i, (Rin, Rout, Vin, Vout, z, m) in enumerate(dataloader):
+    metrics.reset(name=type)
+    # for i, (Rin, Rout, Vin, Vout, z, m) in enumerate(dataloader):
+    for i, (Rin, Rout, Vin, Vout, z, m) in enumerate((pbar := tqdm(dataloader, desc=f"Epoch: {epoch}"))):
         batch, x, z_vec, m_vec, weights, x_target = dataloader.collate_vars(Rin, Rout, Vin, Vout, z, m)
         edge_src, edge_dst, wstatic = dataloader.generate_edges(batch,x,model.max_radius)
         with P.cached():
-            x_pred, cv,cv_max, reg, reg2 = model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
-        loss = loss_fnc(x_pred,x_target,x,edge_src,edge_dst)
+            x_pred, cv_mean,cv_max, reg,= model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
+        loss_pred = loss_fnc(x_pred,x_target,x,edge_src,edge_dst)
+        loss = loss_pred + reg
+        mae_r, mae_v = compute_mae(c,x_pred,x_target,c.data.rscale,c.data.vscale)
+        metrics.update(epoch,cv_mean,cv_max,reg,loss_pred,loss,mae_r,mae_v)
         if train:
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
             optimizer.step()
-
+        pbar.set_postfix(loss=metrics.loss)
+    metrics.report(end_of_epoch=True)
+    return metrics.loss
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=False, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0,viz_paper=False):

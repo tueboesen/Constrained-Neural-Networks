@@ -16,6 +16,8 @@ def generate_constraints(c,rscale=1,vscale=1):
     """
     if c.name == 'multibodypendulum':
         con_fnc = MultiBodyPendulum(max_iter=c.max_iter, tol=c.tolerance, include_second_order=c.include_second_order_constraints)
+    elif c.name == 'water':
+        raise NotImplementedError(f"The constraint {c.name} has not been implemented.")
     else:
         raise NotImplementedError(f"The constraint {c.name} has not been implemented.")
     return con_fnc
@@ -36,9 +38,10 @@ class ConstraintTemplate(ABC):
         niter: Maximum number of gradient descent steps taken.
     """
 
-    def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='cg',scale=1,shape_transform=None):
-    # def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='gradient_descent',scale=1,shape_transform=None):
+    # def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='cg',scale=1,shape_transform=None):
+    def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='gradient_descent',scale=1,shape_transform=None):
         super(ConstraintTemplate, self).__init__()
+
         self.tol = tol
         self.n = niter
         self.sanity_check = sanity_check_upon_first_run
@@ -123,7 +126,7 @@ class ConstraintTemplate(ABC):
         c = self.constraint(x)
         # c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
         dx = self.jacobian_transpose_times_constraint(x,c)
-        dx = weight * dx
+        dx = weight[...,None] * dx
         dy = uplift(dx)
         return dy
 
@@ -189,7 +192,7 @@ class ConstraintTemplate(ABC):
                 k = 0
             i += 1
         c = f(x)
-        print(f"{i},  {c.abs().mean():2.2e}")
+        # print(f"{i},  {c.abs().mean():2.2e}")
         if c.abs().mean() > tol:
             print("here")
         return x, 0, 0
@@ -405,7 +408,7 @@ class ConstraintTemplate(ABC):
             if debug_idx is not None:
                 self.debug(x, c, extra=j, idx=debug_idx)
             dx = self.jacobian_transpose_times_constraint(x[idx],c[idx])
-            dx = weight[idx] * dx
+            dx = weight[idx][...,None] * dx
             dy = uplift(dx)
             lsiter = torch.zeros(len(idx),device=y.device)
             while True:
@@ -440,7 +443,7 @@ class ConstraintTemplate(ABC):
             if j > self.n:
                 # print("Projection failed")
                 break
-        print(f"projection {j} steps. Max violation: {cm_norm_init.item():2.2e} -> {cm_norm.max().item():2.2e}")
+        # print(f"projection {j} steps. Max violation: {cm_norm_init.item():2.2e} -> {cm_norm.max().item():2.2e}")
         return y, reg, reg2
 
     def compute_constraint_violation(self, x):
@@ -597,7 +600,7 @@ class MultiBodyPendulum(ConstraintTemplate):
         """
         Computes the constraints.
 
-        For a n multi-body pendulum the constraint can be given as:
+        For an n multi-body pendulum the constraint can be given as:
         c_i = ||r_i - r_{i-1}||_2 - l_i,   i=1,n
         """
         r = self.extract_positions(x)

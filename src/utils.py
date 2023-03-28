@@ -32,7 +32,9 @@ def configuration_processor(c):
         c.run.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
         c.run.device = 'cpu'
         c.data.device = c.run.device
-    c.model.dim_in = c.data.data_dim * c.data.nvars
+    var_lens = [len(val) for val in c.data.data_id.values()]
+    c.model.dim_in = sum(var_lens)
+    # c.run.loss_indices = c.data.data_id
 
     return c
 

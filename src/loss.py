@@ -1,3 +1,5 @@
+import mlflow
+import torch.nn as nn
 import torch
 import torch.nn.functional as F
 
@@ -6,15 +8,55 @@ import torch
 import torch.nn.functional as F
 
 from src.utils import LJ_potential
+
+class Loss:
+    def __init__(self,var_ids,loss_type):
+        self.loss_type = loss_type
+        self.var_ids = var_ids
+        if loss_type == 'eq':
+            loss_fnc = loss_eq
+        elif loss_type == 'mim':
+            loss_fnc = loss_mim
+        else:
+            raise NotImplementedError(f"The loss {loss_type} has not been implemented yet.")
+        self.loss_fnc = loss_fnc
+
+    def __call__(self,x_pred, x_out, x_in,edge_src,edge_dst,reduce=True):
+        loss = 0
+        for (var_name,idx) in self.var_ids.items():
+            var_pred = x_pred[...,idx]
+            var_out = x_out[...,idx]
+            var_in = x_in[...,idx]
+            loss_abs, loss_ref, loss_rel = self.loss_fnc(var_pred,var_out,var_in,edge_src,edge_dst,reduce=reduce)
+            # mlflow.log_metric(f"{var_name}_rel",loss_rel.item())
+            # mlflow.log_metric(f"{var_name}_abs",loss_abs.item())
+            # mlflow.log_metric(f"{var_name}_ref",loss_ref.item())
+            loss = loss + loss_rel
+        n = len(self.var_ids)
+        return loss / n
+
+
+
 
 def generate_loss_fnc(c):
     if c.loss == 'eq':
-        loss_fnc = loss_eq
+        loss_fnc_inner = loss_eq
     elif c.loss == 'mim':
-        loss_fnc = loss_mim
+        loss_fnc_inner = loss_mim
     else:
         raise NotImplementedError(f"The loss {c.loss} has not been implemented yet.")
+    loss_fnc = loss_fnc_wrapper(loss_fnc_inner, c.variable_indices)
+
     return loss_fnc
+
+def loss_fnc_wrapper(loss_fnc,var_indices):
+    loss = 0
+    # for idx in var_indices:
+
+
+
+# class Loss()
+
 
 def find_relevant_loss(loss_t,lossD_t,loss_v,lossD_v,use_validation,loss_fnc):
     """

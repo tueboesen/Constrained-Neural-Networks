@@ -8,7 +8,7 @@ from src import log
 from src.constraints import generate_constraints
 from src.dataloader import load_data_wrapper
 from src.log import log_all_parameters, close_logger
-from src.loss import find_relevant_loss, generate_loss_fnc
+from src.loss import find_relevant_loss, generate_loss_fnc, Loss
 from src.network_e3 import neural_network_equivariant
 # from src.network_eq_simple import neural_network_equivariant_simple
 from src.network_mim import neural_network_mimetic
@@ -29,14 +29,13 @@ def main(c):
     fix_seed(c.run.seed)  # Set a seed, so we make reproducible results.
     dataloaders = load_data_wrapper(c.data)
     con_fnc = generate_constraints(c.constraints,c.data.rscale,c.data.vscale)
-    model = generate_neural_network(c.model,c.run.model_type,con_fnc=con_fnc)
-
+    model = generate_neural_network(c.model,c.run.model_type,con_fnc=con_fnc,con_type=c.constraints.type)
     # Load previous model?
 
     model.to(c.run.device)
     optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
                                   {"params": model.params.h.parameters()},
                                   {'params': model.params.close.parameters(), 'lr': c.optimizer.lr*0.1}], lr=c.optimizer.lr)
-    loss_fnc = generate_loss_fnc(c.run)
-    optimize_model(c.run,model,dataloaders,optimizer,loss_fnc)
-    return
+    loss_fnc = Loss(c.run.loss_indices,c.run.loss_type)
+    loss = optimize_model(c,model,dataloaders,optimizer,loss_fnc)
+    return loss

@@ -164,7 +164,7 @@ class Dataloader_ext(DataLoader):
         Rout_vec = Rout.reshape(-1, Rout.shape[-1])
         Vin_vec = Vin.reshape(-1, Vin.shape[-1])
         Vout_vec = Vout.reshape(-1, Vout.shape[-1])
-        z_vec = z.reshape(1, -1)
+        z_vec = z.reshape(-1, 1)
 
         batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
@@ -172,7 +172,7 @@ class Dataloader_ext(DataLoader):
 
         x = torch.cat([Rin_vec, Vin_vec], dim=-1)
         xout = torch.cat([Rout_vec, Vout_vec], dim=-1)
-        weights = (1 / m).repeat_interleave(ndim // m.shape[-1], dim=-1).repeat(1, 1, x.shape[-1] // ndim)
+        weights = (1 / m) #.reshape(-1,1)
         return batch, x, z_vec, m_vec, weights, xout
 
     @classmethod

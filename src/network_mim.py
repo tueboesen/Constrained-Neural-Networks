@@ -1,6 +1,7 @@
 import math
 
 import e3nn.o3
+import mlflow
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -160,7 +161,7 @@ class neural_network_mimetic(nn.Module):
     """
     This network is designed to predict the 2D/3D coordinates of a set of particles.
     """
-    def __init__(self, dim_in, dim_latent, layers, nmax_atom_types=20, atom_type_embed_dim=8, max_radius=50, con_fnc=None, con_type=None, position_indices=(0, 1), embed_node_attr=True, discretization_method='leapfrog', gamma=0, orthogonal_projection=True):
+    def __init__(self, dim_in, dim_latent, layers, nmax_atom_types=20, atom_type_embed_dim=8, max_radius=50, con_fnc=None, con_type=None, position_indices=(0, 1), embed_node_attr=True, discretization_method='leapfrog', penalty_strength=0, regularization_strength=0, orthogonal_projection=True):
         super().__init__()
         """
         node_dimn_latent:   The dimension of the latent space
@@ -173,7 +174,8 @@ class neural_network_mimetic(nn.Module):
         dim:                The dimension that the data lives in (default 3)
         """
         self.nlayers = layers
-        self.gamma = gamma
+        self.penalty_strength = penalty_strength
+        self.regularization_strength = regularization_strength
         self.position_indices = position_indices
         self.dim_in = dim_in
         self.dim_latent = dim_latent
@@ -239,7 +241,6 @@ class neural_network_mimetic(nn.Module):
         ndimy = y.shape[-1]
         y_old = y
         reg = torch.tensor(0.0)
-        reg2 = torch.tensor(0.0)
 
         for i in range(self.nlayers):
             dt = max(min(self.h[i] ** 2, 0.1),1e-4)
@@ -255,7 +256,7 @@ class neural_network_mimetic(nn.Module):
 
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
 
-            if self.gamma > 0:
+            if self.penalty_strength > 0:
                 if self.discretization_method == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
                     q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
@@ -269,17 +270,17 @@ class neural_network_mimetic(nn.Module):
                 dy = 0
             if self.discretization_method == 'leapfrog':
                 tmp = y.clone()
-                y = 2*y - y_old - dt * (y_new + self.gamma*dy)
+                y = 2*y - y_old - dt * (y_new + self.penalty_strength * dy)
                 y_old = tmp
             elif self.discretization_method == 'euler':
-                y = y + dt * (y_new - self.gamma*dy)
+                y = y + dt * (y_new - self.penalty_strength * dy)
             elif self.discretization_method == 'rk4':
                 k1 = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
                 k2 = self.PropagationBlocks[i](y.clone() + k1 * dt / 2, edge_attr, edge_src, edge_dst)
                 k3 = self.PropagationBlocks[i](y.clone() + k2 * dt / 2, edge_attr, edge_src, edge_dst)
                 k4 = self.PropagationBlocks[i](y.clone() + k3 * dt, edge_attr, edge_src, edge_dst)
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
-                y = y + dt * (y_new - self.gamma*dy)
+                y = y + dt * (y_new - self.penalty_strength * dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
@@ -287,28 +288,24 @@ class neural_network_mimetic(nn.Module):
                 if y.isnan().any():
                     raise ValueError("NaN detected")
                 # y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.K(),self.K().T,weight)
-                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight,K=self.K)
+                y, _, regi = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight,K=self.K)
                 y = y.view(-1,ndimy)
                 reg = reg + regi
-                reg2 = reg2 + regi2
                 if y.isnan().any():
                     raise ValueError("NaN detected")
 
             x = self.project(y)
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
-            x, reg, reg2 = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
             x = x.view(-1,ndimx)
         if x.isnan().any():
             raise ValueError("NaN detected")
 
         if self.con_fnc is not None:
-            c, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+            cv, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
             if reg == 0:
-                reg = cv_mean
-            if reg2 == 0:
-                reg2 = (c*c).mean()
+                reg = (cv*cv).mean()
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
-
-        return x, c, cv_max, reg, reg2
+        return x, cv_mean, cv_max, reg * self.regularization_strength
