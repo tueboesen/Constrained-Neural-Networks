@@ -156,18 +156,17 @@ class neural_network_equivariant(torch.nn.Module):
         ndimy = y.shape[-1]
         y_old = y
         reg = torch.tensor(0.0)
-        reg2 =  torch.tensor(0.0)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
             dt = max(min(self.h[i]**2,0.1),1e-4)
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
-            if self.gamma > 0:
+            if self.penalty_strength > 0:
                 if self.discretization_method == 'rk4':
-                    q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
-                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
-                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
-                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
+                    q1 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                    q2 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
+                    q3 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
+                    q4 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
                     dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
                 else:
                     dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
@@ -177,32 +176,31 @@ class neural_network_equivariant(torch.nn.Module):
             if self.discretization_method == 'leapfrog':
                 y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 tmp = y.clone()
-                y = 2*y - y_old + dt *(y_new + self.gamma*dy)
+                y = 2*y - y_old + dt *(y_new + self.penalty_strength*dy)
                 y_old = tmp
             elif self.discretization_method == 'euler':
                 y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
-                y = y + dt * (y_new - self.gamma * dy)
+                y = y + dt * (y_new - self.penalty_strength * dy)
             elif self.discretization_method == 'rk4':
                 k1 = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k2 = self.forward_propagation(y.clone() + k1 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k3 = self.forward_propagation(y.clone() + k2 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k4 = self.forward_propagation(y.clone() + k3 * dt, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
-                y = y + dt * (y_new - self.gamma*dy)
+                y = y + dt * (y_new - self.penalty_strength*dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
 
             if self.con_fnc is not None and self.con_type == 'high':
-                y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                y, _, regi = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
                 y = y.view(-1,ndimy)
                 reg = reg + regi
-                reg2 = reg2 + regi2
 
 
             x = self.project(y)
         if self.con_fnc is not None and self.con_type == 'low':
-            x, reg, reg2 = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x, _, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
             x = x.view(-1,ndimx)
 
         if self.con_fnc is not None:
@@ -210,7 +208,7 @@ class neural_network_equivariant(torch.nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 
-        return x, cv_mean, cv_max, reg, reg2
+        return x, cv_mean, cv_max, reg * self.regularization_strength
 
     def get_water_viz(self, y_new, y_old, batch):
         x_new = self.PU.project(y_new)

@@ -48,7 +48,7 @@ class ProjectUpliftEQ(torch.nn.Module):
         """
         Takes an irrep and inserts it into a larger irreps.
         """
-        nd_out = irreps_out.position_indices
+        nd_out = irreps_out.dim
         y = torch.zeros((x.shape[0],nd_out),dtype=x.dtype,device=x.device)
         idx0=0
         for mul, ir in irreps_out:

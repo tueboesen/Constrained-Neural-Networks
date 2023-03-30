@@ -302,7 +302,7 @@ class neural_network_mimetic(nn.Module):
             print(f"Inner {t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f}")
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
-            x, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
+            x, _, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
             x = x.view(-1,ndimx)
         if x.isnan().any():
             raise ValueError("NaN detected")
