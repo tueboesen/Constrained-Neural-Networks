@@ -2,7 +2,7 @@
 defaults:
   - constraint: water
   - data: water
-  - model: mimetic
+  - model: equivariant
   - logging: standard
 
 hydra:
@@ -16,7 +16,7 @@ hydra:
 
 
 run:
-  epochs: 1
+  epochs: 10
   debug: false
   seed: 1234
   loss_type: 'eq'

@@ -10,6 +10,7 @@ from e3nn.math import soft_one_hot_linspace
 from e3nn.nn import Gate
 
 from src.EQ_operations import SelfInteraction, Convolution, tp_path_exists
+from src.project_uplift import ProjectUpliftEQ
 from src.utils import smooth_cutoff, atomic_masses
 from src.vizualization import plot_water
 
@@ -32,12 +33,15 @@ class neural_network_equivariant(torch.nn.Module):
         max_atom_types,
         con_fnc=None,
         con_type=None,
-        PU=None,
         particles_pr_node=1,
-        discretization='leapfrog',
-        gamma=1
+        discretization_method='leapfrog',
+        penalty_strength=0,
+        regularization_strength=1
     ) -> None:
         super().__init__()
+        irreps_inout = o3.Irreps(irreps_inout)
+        irreps_hidden = o3.Irreps(irreps_hidden)
+
         self.max_radius = max_radius
         self.number_of_basis = number_of_basis
         self.num_neighbors = num_neighbors
@@ -48,11 +52,12 @@ class neural_network_equivariant(torch.nn.Module):
         self.irreps_edge_attr = o3.Irreps(irreps_inout)
         self.con_fnc = con_fnc
         self.con_type = con_type
-        self.PU = PU
+        self.PU = ProjectUpliftEQ(irreps_inout,irreps_hidden)
         self.project = self.PU.project
         self.uplift = self.PU.uplift
-        self.discretization = discretization
-        self.gamma = gamma
+        self.discretization_method = discretization_method
+        self.penalty_strength = penalty_strength
+        self.regularization_strength = regularization_strength
         self.particles_pr_nodes = particles_pr_node
         if self.num_neighbors < 0:
             self.automatic_neighbors = True
@@ -158,7 +163,7 @@ class neural_network_equivariant(torch.nn.Module):
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
             if self.gamma > 0:
-                if self.discretization == 'rk4':
+                if self.discretization_method == 'rk4':
                     q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
                     q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
                     q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
@@ -169,15 +174,15 @@ class neural_network_equivariant(torch.nn.Module):
                 dy = dy.view(-1, ndimy)
             else:
                 dy = 0
-            if self.discretization == 'leapfrog':
+            if self.discretization_method == 'leapfrog':
                 y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 tmp = y.clone()
                 y = 2*y - y_old + dt *(y_new + self.gamma*dy)
                 y_old = tmp
-            elif self.discretization == 'euler':
+            elif self.discretization_method == 'euler':
                 y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 y = y + dt * (y_new - self.gamma * dy)
-            elif self.discretization == 'rk4':
+            elif self.discretization_method == 'rk4':
                 k1 = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k2 = self.forward_propagation(y.clone() + k1 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k3 = self.forward_propagation(y.clone() + k2 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
@@ -185,7 +190,7 @@ class neural_network_equivariant(torch.nn.Module):
                 y_new = (k1 + 2*k2 + 2*k3 + k4)/6
                 y = y + dt * (y_new - self.gamma*dy)
             else:
-                raise NotImplementedError(f"Discretization method {self.discretization} not implemented.")
+                raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
 
             if self.con_fnc is not None and self.con_type == 'high':

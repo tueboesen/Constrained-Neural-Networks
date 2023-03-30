@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from e3nn import o3
 from torch_cluster import radius_graph
 import math
 from hydra import compose, initialize
@@ -34,7 +35,13 @@ def configuration_processor(c):
         c.data.device = c.run.device
 
     var_lens = [len(val) for val in c.data.data_id.values()]
-    c.model.dim_in = sum(var_lens)
+    if 'dim_in' in c.model.keys() and 'dim_in' not in c.model:
+        c.model.dim_in = sum(var_lens)
+    # if 'irreps_inout' in c.model:
+    #     c.model.irreps_inout = o3.Irreps(c.model.irreps_inout)
+    # if 'irreps_hidden' in c.model:
+    #     c.model.irreps_hidden = o3.Irreps(c.model.irreps_hidden)
+
     # c.run.loss_indices = c.data.data_id
 
     return c

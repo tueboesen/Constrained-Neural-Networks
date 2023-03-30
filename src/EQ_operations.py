@@ -129,7 +129,7 @@ class SelfInteraction(torch.nn.Module):
         self.irreps_out = irreps_out
         self.tp = o3.FullyConnectedTensorProduct(irreps_in,irreps_in,irreps_out)
 
-        nd = irreps_out.position_indices
+        # nd = irreps_out.position_indices
         nr = irreps_out.num_irreps
         degen = torch.empty(nr, dtype=torch.int64)
         m_degen = torch.empty(nr, dtype=torch.bool)

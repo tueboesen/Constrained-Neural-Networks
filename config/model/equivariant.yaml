@@ -4,10 +4,13 @@ irreps_hidden: "30x0o+30x0e+20x1o+20x1e"
 layers: 8
 max_radius: 15
 number_of_basis: 8
-embed_dim: 2
-max_atom_types: 20
 radial_neurons: [48]
 num_neighbors: -1
+num_nodes: 32
+embed_dim: 2
+max_atom_types: 20
+con_type: 'high'
+particles_pr_node: 3
+discretization_method: 'rk4'
 penalty_strength: 1
 regularization_strength: 1
-con_type: 'high'
