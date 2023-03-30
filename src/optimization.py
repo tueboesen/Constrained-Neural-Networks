@@ -1,4 +1,5 @@
 import inspect
+import time
 
 import mlflow.pytorch
 from tqdm import tqdm
@@ -9,16 +10,16 @@ from e3nn import o3
 from torch_cluster import radius_graph
 
 from src.loss import loss_eq, loss_mim
-from pendulum.npendulum import get_coordinates_from_angle
 from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshot_custom
 
 
 def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
     names = ['train', 'val']
+    mlflow.set_tracking_uri(c.logging.mlflow_folder)
     with mlflow.start_run() as run:
-        artifact_path = "model"
+        artifact_path = "models"
         mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
-        # mlflow.pytorch.save_model(model, "model")
+        # mlflow.pytorch.save_model(models, "models")
         mlflow.log_params(c)
         metrics = Metrics(name='train')
         for epoch in range(c.run.epochs):
@@ -91,39 +92,46 @@ def compute_mae(c,x_pred,x_target,rscale,vscale):
 
 def run_model(epoch,c,model,dataloader,optimizer,loss_fnc,metrics,type):
     """
-    Runs the model for a single epoch
+    Runs the models for a single epoch
     """
     train = type == 'train'
     model.train(train)
     metrics.reset(name=type)
     # for i, (Rin, Rout, Vin, Vout, z, m) in enumerate(dataloader):
     for i, (Rin, Rout, Vin, Vout, z, m) in enumerate((pbar := tqdm(dataloader, desc=f"Epoch: {epoch}"))):
+        t1 = time.time()
         batch, x, z_vec, m_vec, weights, x_target = dataloader.collate_vars(Rin, Rout, Vin, Vout, z, m)
+        t2 = time.time()
         edge_src, edge_dst, wstatic = dataloader.generate_edges(batch,x,model.max_radius)
+        t3 = time.time()
         with P.cached():
             x_pred, cv_mean,cv_max, reg,= model(x, batch, z_vec, edge_src, edge_dst,wstatic=wstatic,weight=weights)
+        t4 = time.time()
         loss_pred = loss_fnc(x_pred,x_target,x,edge_src,edge_dst)
         loss = loss_pred + reg
-        mae_r, mae_v = compute_mae(c,x_pred,x_target,c.data.rscale,c.data.vscale)
+        mae_r, mae_v = compute_mae(c,x_pred,x_target,dataloader.dataset.rscale,dataloader.dataset.vscale)
         metrics.update(epoch,cv_mean,cv_max,reg,loss_pred,loss,mae_r,mae_v)
+        t5 = time.time()
         if train:
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
             optimizer.step()
-        pbar.set_postfix(loss=metrics.loss)
+        pbar.set_postfix(loss=metrics.loss/metrics.counter)
+        t6 = time.time()
+        print(f"{t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f},{t5-t4:2.2f},{t6-t5:2.2f}")
     metrics.report(end_of_epoch=True)
     return metrics.loss
 
 
 def run_model_MD(model, dataloader, train, max_samples, optimizer, loss_type, check_equivariance=False, max_radius=15, debug=False,predict_pos_only=False, viz=True,epoch=None,output_folder=None,ignore_con=False,nviz=5,regularization=0,viz_paper=False):
     """
-    A function designed to optimize or test a model on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
+    A function designed to optimize or test a models on molecular dynamics data. Note this function will only run a maximum of one full sweep through the dataloader (1 epoch)
 
-    model:          a handler to the neural network used
+    models:          a handler to the neural network used
     dataloader:     a handler to the dataloader used
     train:          a boolean determining whether to run in training or evaluation mode
     max_samples:    the maximum number of samples to run before exiting (typically used when validating to only draw a smaller subset of a large dataset)
-    optimizer:      the optimizing function used to train the model
+    optimizer:      the optimizing function used to train the models
     loss_type:      a string that determines which loss to use. ('mim','eq')
     batch_size:     the batch_size to use during the run
     check_equivariance:     Checks whether the network is equivariant, should only be used for debugging.

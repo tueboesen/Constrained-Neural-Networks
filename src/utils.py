@@ -21,8 +21,8 @@ def configuration_processor(c):
 
 
     # initialize(config_path="conf", job_name="test_app")
-    cfg = compose(config_name="models")
-    c.model = getattr(cfg,f"model_{c.run.model_type}")
+    # cfg = compose(config_name="models")
+    # c.model = getattr(cfg,f"model_{c.run.model_type}")
 
     if 'metafile' not in c.data:
         path = os.path.dirname(c.data.file)
@@ -30,8 +30,9 @@ def configuration_processor(c):
         c.data.metafile = os.path.join(metapath,f"split_{c.run.seed}_{c.data.n_train}_{c.data.n_val}_{c.data.n_test}_{c.data.nskip}.npz")
     if 'device' not in c.run:
         c.run.device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-        c.run.device = 'cpu'
+        # c.run.device = 'cpu'
         c.data.device = c.run.device
+
     var_lens = [len(val) for val in c.data.data_id.values()]
     c.model.dim_in = sum(var_lens)
     # c.run.loss_indices = c.data.data_id

@@ -1,0 +1,25 @@
+name: 'multibodypendulum'
+file: './../data/multibodypendulum/multibodypendulum.npz'
+use_val: False
+use_test: False
+metafile: ???
+n_train: 100
+n_val: 100
+n_test: 100
+batchsize_train: 10
+batchsize_val: 1000
+nskip: 200
+device: ???
+data_id: {'r':[0,1], 'v':[2,3]}
+#data_id: {'r':[0,1,2,3,4,5,6,7,8,9], 'v':[10,11,12,13,14,15,16,17,18,19]}
+
+#
+# We need to specify the data dimensions in a single data sample
+# We need the number of particles, and the dimensions for each of those particles
+# In the most general case we should support systems where it is just a single vector
+# [particle_1_dim_1, particle_1_dim_2,...,particle_1_dim_n,particle_2_dim_1,...,particle_2_dim_m,...]
+# Such a system would support any number of dimensions, and support that some particles have more dimensions than others.
+# For now we restrict ourselves to a less general system where we assume that each particle has the same number of variables
+# In that casea we can have a data structure with 2 dimensions:
+# [...,Nparticles,Ndim]
+# Hence now we have

@@ -1,7 +1,7 @@
 
 defaults:
-  - constraint: water
-  - data: water
+  - constraint: multibodypendulum
+  - data: multibodypendulum
   - model: mimetic
   - logging: standard
 
@@ -16,7 +16,7 @@ hydra:
 
 
 run:
-  epochs: 1
+  epochs: 150
   debug: false
   seed: 1234
   loss_type: 'eq'

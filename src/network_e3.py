@@ -1,4 +1,4 @@
-"""model with self-interactions and gates
+"""models with self-interactions and gates
 Exact equivariance to :math:`E(3)`
 version of february 2021
 """
@@ -201,7 +201,7 @@ class neural_network_equivariant(torch.nn.Module):
             x = x.view(-1,ndimx)
 
         if self.con_fnc is not None:
-            _, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+            _, cv_mean,cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 

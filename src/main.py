@@ -28,9 +28,9 @@ def main(c):
     torch.set_default_dtype(eval(c.run.precision))
     fix_seed(c.run.seed)  # Set a seed, so we make reproducible results.
     dataloaders = load_data_wrapper(c.data)
-    con_fnc = generate_constraints(c.constraints,c.data.rscale,c.data.vscale)
-    model = generate_neural_network(c.model,c.run.model_type,con_fnc=con_fnc,con_type=c.constraints.type)
-    # Load previous model?
+    con_fnc = generate_constraints(c.constraint)
+    model = generate_neural_network(c.model,con_fnc=con_fnc)
+    # Load previous models?
 
     model.to(c.run.device)
     optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},

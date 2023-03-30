@@ -30,4 +30,4 @@ if __name__ == '__main__':
     dt = 0.001
     file = '../data/multibodypendulum/multibodypendulum.npz'
     create_and_save_multibodypendulum_data(nsamples,npenduls,dt,file)
-# model.animate_pendulum()
+# models.animate_pendulum()

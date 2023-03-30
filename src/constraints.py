@@ -1,29 +1,39 @@
 import inspect
+import numbers
 import time
 from datetime import datetime
 
 import torch
 import torch.nn as nn
+from omegaconf import OmegaConf
 from torch.autograd import grad
 
 from src.vizualization import plot_water, plot_pendulum_snapshot_custom
 from abc import ABC, abstractmethod
 
-def generate_constraints(c,rscale=1,vscale=1):
+def generate_constraints(c):
     """
     This is a wrapper function for generating/loading constraints.
     #TODO add a minimum change amount to constraints which might enable non-convex constraints to still work
     """
-    if c.name == 'multibodypendulum':
-        con_fnc = MultiBodyPendulum(max_iter=c.max_iter, tol=c.tolerance, include_second_order=c.include_second_order_constraints)
-    elif c.name == 'water':
-        raise NotImplementedError(f"The constraint {c.name} has not been implemented.")
+    # c_copy = c.copy()
+    # del c_copy.name
+
+    c_dict = OmegaConf.to_container(c)
+    name = c_dict.pop("name", None)
+
+    if name == 'multibodypendulum':
+        con_fnc = MultiBodyPendulum(**c_dict)
+    elif name == 'water':
+        con_fnc = Water(**c_dict)
+    elif name == None:
+        con_fnc = None
     else:
-        raise NotImplementedError(f"The constraint {c.name} has not been implemented.")
+        raise NotImplementedError(f"The constraint {name} has not been implemented.")
     return con_fnc
 
 
-class ConstraintTemplate(ABC):
+class ConstraintTemplate(ABC, nn.Module):
     """
     This is the template class for all constraints.
     Each constraint should have this class as their parent.
@@ -36,20 +46,36 @@ class ConstraintTemplate(ABC):
     Input:
         tol: the error tolerance for early stopping of the gradient descent operation.
         niter: Maximum number of gradient descent steps taken.
+
+    The expected input shape of a parameter being minimized is:
+    [nb,nc,nv,dim]
+    where
+    nb is the number of batches (so separate samples that have no constraint connection) Note that this does not have to be the same as regular batch_size
+    nc is the number of coupled constraints in a batch
+    nv is the number of variables in play (is it position, velocity or is it (
+    dim is the number of dimensions for each variable (
+
+
+    We assume particle constraints here. The constraints assume the following:
+    [nb,nc,np,dim]
+    nb is the number of batches (so separate samples that have no constraint connection) Note that this does not have to be the same as regular batch_size
+    nc is the number of coupled constraints in a batch
+    np is the number of particles in play (is it position, velocity or is it (
+
+    The constraints for water should be applied
+
+
     """
 
-    # def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='cg',scale=1,shape_transform=None):
-    def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='gradient_descent',scale=1,shape_transform=None):
+    # def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='cg',scale=1):
+    def __init__(self, tolerance, max_iter, mode='gradient_descent', n_constraints=None, scale=1,include_second_order_constraints=False):
         super(ConstraintTemplate, self).__init__()
-
-        self.tol = tol
-        self.n = niter
-        self.sanity_check = sanity_check_upon_first_run
-        self.debug_folder=debug_folder
-        self.use_newton_steps = use_newton_steps
-        self.mode = mode
+        self.include_second_order_constraints = include_second_order_constraints
+        self.tolerance = tolerance
+        self.max_iter = max_iter
         self.scale = scale
-        self.shape_transform = shape_transform
+        self.mode = mode
+        self.n_constraints = n_constraints
         return
 
     def debug(self,x):
@@ -57,22 +83,18 @@ class ConstraintTemplate(ABC):
             "Debug function has not been implemented for {:}".format(self._get_name()))
 
     @abstractmethod
-    def constraint(self,x,rescale=False):
+    def _constraint(self, x, rescale=False):
         raise NotImplementedError(
             "Constraint function has not been implemented for {:}".format(self._get_name()))
 
-    def jacobian_transpose_times_constraint(self,x,c):
-        _, JTc = torch.autograd.functional.vjp(self.constraint,x,c,strict=True,create_graph=True)
+    def _jacobian_transpose_times_constraint(self, x, c):
+        _, JTc = torch.autograd.functional.vjp(self._constraint, x, c, strict=True, create_graph=True)
         return JTc
 
-    def jacobian_transpose_times_constraint2(self,x,c):
-        _, JTc = torch.autograd.functional.vjp(self.constraint,x,c)
-        return JTc
-
-    def constraint_violation(self,x,rescale=False):
+    def _constraint_violation(self, x, rescale=False):
         raise NotImplementedError(
             "constraint_violation function has not been implemented for {:}".format(self._get_name()))
-    def second_order_constraint(self,func,x,v):
+    def _second_order_constraint(self, func, x, v):
         """
         The second order constraint is the constraint
 
@@ -86,47 +108,47 @@ class ConstraintTemplate(ABC):
 
 
 
-    def newton_step_simple(self,x,c,K=None):
-        """
-        """
-        J = torch.autograd.functional.jacobian(self.constraint, x)
-        JK = J @ K
-        J2 = J.view(-1, *(J.size()[3:]))
-        J2 = J2.view(J2.size(0), -1)
-        JK2 = JK.view(-1, *(JK.size()[3:]))
-        JK2 = JK2.view(JK2.size(0), -1)
+    # def newton_step_simple(self,x,c,K=None):
+    #     """
+    #     """
+    #     J = torch.autograd.functional.jacobian(self._constraint, x)
+    #     JK = J @ K
+    #     J2 = J.view(-1, *(J.size()[3:]))
+    #     J2 = J2.view(J2.size(0), -1)
+    #     JK2 = JK.view(-1, *(JK.size()[3:]))
+    #     JK2 = JK2.view(JK2.size(0), -1)
+    #
+    #     if K is None:
+    #         B = J2 @ J2.T
+    #     else:
+    #         B = JK2 @ JK2.T
+    #     Binv = torch.linalg.inv(B)
+    #     dx = c[:,:,0] @ Binv @ J2
+    #     dx = dx.view(x.shape)
+    #     return dx
+    #
+    # def newton_step(self,x,c,K):
+    #     """
+    #     https://stackoverflow.com/questions/63559139/efficient-way-to-compute-jacobian-x-jacobian-t
+    #     Do something like the above
+    #     """
+    #     J = torch.autograd.functional.jacobian(self._constraint, x)
+    #     B = J @ K @ K.T @ J.T
+    #     Binv = torch.linalg.inv(B)
+    #     dx = J.T @ Binv @ c
+    #     return dx
 
-        if K is None:
-            B = J2 @ J2.T
-        else:
-            B = JK2 @ JK2.T
-        Binv = torch.linalg.inv(B)
-        dx = c[:,:,0] @ Binv @ J2
-        dx = dx.view(x.shape)
-        return dx
-
-    def newton_step(self,x,c,K):
-        """
-        https://stackoverflow.com/questions/63559139/efficient-way-to-compute-jacobian-x-jacobian-t
-        Do something like the above
-        """
-        J = torch.autograd.functional.jacobian(self.constraint, x)
-        B = J @ K @ K.T @ J.T
-        Binv = torch.linalg.inv(B)
-        dx = J.T @ Binv @ c
-        return dx
 
 
-
-    def constrain_stabilization(self, y,project=nn.Identity(),uplift=nn.Identity(),weight=1):
+    def constraint_penalty(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1):
         """
         Calculates constraint stabilization as dy = J^T c
         """
         x = project(y)
-        c = self.constraint(x)
+        c = self._constraint(x)
         # c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
-        dx = self.jacobian_transpose_times_constraint(x,c)
-        dx = weight[...,None] * dx
+        dx = self._jacobian_transpose_times_constraint(x, c)
+        dx = weight.view(dx.shape) * dx
         dy = uplift(dx)
         return dy
 
@@ -137,7 +159,7 @@ class ConstraintTemplate(ABC):
         on page 52
         """
         def f(x):
-            c = self.constraint(x)
+            c = self._constraint(x)
             return c.abs().mean()
 
         imax = 1000
@@ -196,158 +218,30 @@ class ConstraintTemplate(ABC):
         if c.abs().mean() > tol:
             print("here")
         return x, 0, 0
-    #
-    # def conjugate_gradient(self,y,K=None,weight=1,debug=False):
-    #     """
-    #     based on non-linear CG found in
-    #     https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-    #     on page 52
-    #     """
-    #     def f(x):
-    #         c = self.constraint(x)
-    #         return c.abs().mean()
-    #
-    #     def f2(x):
-    #         c = self.constraint(x)
-    #         return c
-    #
-    #     jmax = 10
-    #     n_restart = 5
-    #     epsilon = 1e-4
-    #     i = 0
-    #     k = 0
-    #     if K is None:
-    #         x = y
-    #     else:
-    #         x = y @ K.T
-    #
-    #     c = f(x)
-    #     df = torch.autograd.functional.jacobian(f,x,strict=True,create_graph=True).view(-1,1)
-    #     r = - df
-    #     d = r.clone()
-    #     delta_new = r.T @ r
-    #     # delta0 = delta_new.clone()
-    #     while i < self.n and delta_new > self.tol:
-    #         j = 0
-    #         deltad = d.T @ d
-    #         while True:
-    #             ddf = torch.autograd.functional.hessian(f,x,create_graph=True,strict=True).view(r.shape[0],r.shape[0])
-    #             alpha = - (df.T @ d) / (d.T @ ddf @ d)
-    #             x = x + alpha * d.view(x.shape)
-    #             c_try = f(x)
-    #             print(f"{c.abs().mean():2.2e} -> {c_try.abs().mean()}")
-    #             j += 1
-    #             if j >= jmax or alpha**2 * deltad <= epsilon**2 or c_try.abs().mean() < self.tol:
-    #                 break
-    #             df = torch.autograd.functional.jacobian(f, x,strict=True,create_graph=True).view(-1, 1)
-    #             r = - df
-    #             delta_old = delta_new
-    #             delta_new =  r.T @ r
-    #             # print(f"{delta[0, 0]:2.2e},{c_error_max:2.2e}")
-    #             beta = delta_new / delta_old
-    #             d = r + beta * d
-    #             k += 1
-    #             if k == n_restart or r.T @ d <= 0:
-    #                 d = r
-    #                 k = 0
-    #         i += 1
-    #     # print(f"{delta[0,0]:2.2e},{c_error_max:2.2e}")
-    #     print(f"{i} - {c.abs().mean():2.2e}")
-    #     return x, 0, 0
-
-    def conjugate_gradient_old(self,y,K=None,weight=1,debug=False):
-        """
-        based on non-linear CG found in
-        https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
-        on page 52
-        """
-        def f(x):
-            c = self.constraint(x)
-            return c.abs().mean()
-
-        def f2(x):
-            c = self.constraint(x)
-            return c
-
-        jmax = 10
-        n_restart = 5
-        epsilon = 1e-4
-        i = 0
-        k = 0
-        if K is None:
-            x = y
-        else:
-            x = y @ K.T
-
-        # result = minimize(f, x)
-        # result = minimize(f, x, method='newton-cg',disp=2,tol=1e-5)
-        # result = minimize(f, x, method='newton-cg',tol=1e-5)
-        # result = minimize(f, x, method='bfgs',tol=1e-5)
-        # result = minimize(f2, x, method='bfgs',tol=1e-5)
-        # if result.success:
-        #     xnew = result.x
-        # # f = self.constraint
-        # assert result.success
-        c = f(x)
-        # cnew = f(xnew)
-        # print(f"success: {result.success} nfev:{result.nfev}, nit:{result.nit}, {c:2.2e} -> {cnew:2.2e}")
-        # print(f"success: {result.success} ncg:{result.ncg}, nfev:{result.nfev}, nit:{result.nit}, {c:2.2e} -> {cnew:2.2e}")
-        df = torch.autograd.functional.jacobian(f,x,strict=True,create_graph=True).view(-1,1)
-        r = - df
-        d = r.clone()
-        delta_new = r.T @ r
-        # delta0 = delta_new.clone()
-        while i < self.n and delta_new > self.tol:
-            j = 0
-            deltad = d.T @ d
-            while True:
-                ddf = torch.autograd.functional.hessian(f,x,create_graph=True,strict=True).view(r.shape[0],r.shape[0])
-                alpha = - (df.T @ d) / (d.T @ ddf @ d)
-                x = x + alpha * d.view(x.shape)
-                c_try = f(x)
-                print(f"{c.abs().mean():2.2e} -> {c_try.abs().mean()}")
-                j += 1
-                if j >= jmax or alpha**2 * deltad <= epsilon**2 or c_try.abs().mean() < self.tol:
-                    break
-                df = torch.autograd.functional.jacobian(f, x,strict=True,create_graph=True).view(-1, 1)
-                r = - df
-                delta_old = delta_new
-                delta_new =  r.T @ r
-                # print(f"{delta[0, 0]:2.2e},{c_error_max:2.2e}")
-                beta = delta_new / delta_old
-                d = r + beta * d
-                k += 1
-                if k == n_restart or r.T @ d <= 0:
-                    d = r
-                    k = 0
-            i += 1
-        # print(f"{delta[0,0]:2.2e},{c_error_max:2.2e}")
-        print(f"{i} - {c.abs().mean():2.2e}")
-        return x, 0, 0
 
     def gradient_descent(self,y,project,uplift,K=None,weight=1,debug=False,):
         """
         This function has squeezed out the batch dimension, which allows us to use the constraints as written in the paper, for a batch version everything needs to be flipped.
         """
         problems = False
-        for j in range(self.n):
+        for j in range(self.max_iter):
             # if K is not None:
             #     x = y @ K.T
             # else:
             #     x = y
             x = project(y)
-            c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
+            c, c_error_mean, c_error_max = self.constraint_violation(x)
             if j == 0:
                 reg = c_error_mean
                 reg2 = (c * c).mean()
-            if c_error_max < self.tol:
+            if c_error_max < self.tolerance:
                 break
             if debug:
                 self.debug(x, c, extra=j)
             if self.use_newton_steps:
                 dx = self.newton_step_simple(x, c, K)
             else:
-                dx = self.jacobian_transpose_times_constraint(x,c)
+                dx = self._jacobian_transpose_times_constraint(x, c)
                 # dx = self.jacobian_transpose_times_constraint2(x,c)
             # dx2 = self.newton_step_simple(x,c,K)
             dx = weight * dx
@@ -366,7 +260,7 @@ class ConstraintTemplate(ABC):
                 #     x_try = y_try @ K.T
                 # else:
                 #     x_try = y_try
-                c_try, c_error_mean_try, c_error_max_try = self.compute_constraint_violation(x_try)
+                c_try, c_error_mean_try, c_error_max_try = self.constraint_violation(x_try)
                 if c_error_max_try < c_error_max:
                     break
                 alpha = alpha / 2
@@ -379,42 +273,43 @@ class ConstraintTemplate(ABC):
                 y = y - alpha * dy
             if lsiter == 0:
                 alpha = alpha * 1.5
-        if j+1 >= self.n:
+        if j+1 >= self.max_iter:
             problems = True
         return y, reg, reg2, problems
 
     def gradient_descent_batch(self,y,project=nn.Identity(),uplift=nn.Identity(),weight=1,debug_idx=None):
-        # y_org = y.clone()
+        if isinstance(weight, numbers.Number):
+            weight = weight * torch.ones(y.shape[:-1],device=y.device)
         nb = y.shape[0]
         alpha = torch.ones(nb,device=y.device)
         j = 0
         while True:
             idx_all = torch.arange(nb,device=y.device)
             x = project(y)
-            c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
+            c, c_error_mean, c_error_max = self.constraint_violation(x)
             if j == 0:
                 reg = c_error_mean
                 reg2 = (c*c).mean()
                 cm_norm_init = c.abs().max()
             # cm = c.abs().max(dim=2)[0].max(dim=2)[0]
             cm_norm = c.abs().amax(dim=(1,2))
-            M = cm_norm > self.tol
+            M = cm_norm > self.tolerance
             idx = idx_all[M]
             if len(idx) == 0:
                 break
             else:
-                c = self.constraint(x)
+                c = self._constraint(x)
                 cm = c.abs().mean(dim=(1,2))
             if debug_idx is not None:
                 self.debug(x, c, extra=j, idx=debug_idx)
-            dx = self.jacobian_transpose_times_constraint(x[idx],c[idx])
-            dx = weight[idx][...,None] * dx
+            dx = self._jacobian_transpose_times_constraint(x[idx], c[idx])
+            dx = weight[idx].view(dx.shape) * dx
             dy = uplift(dx)
             lsiter = torch.zeros(len(idx),device=y.device)
             while True:
                 y_try = y[idx] - alpha[idx,None,None] * dy
                 x_try = project(y_try)
-                c_try = self.constraint(x_try)
+                c_try = self._constraint(x_try)
                 # cm_try = c_try.abs().max(dim=1)[0].max(dim=1)[0]
                 cm_try = c_try.abs().mean(dim=(1,2))
                 M_try = cm_try <= cm[idx]
@@ -440,31 +335,26 @@ class ConstraintTemplate(ABC):
                     yall.append(y[i])
             y = torch.stack(yall,dim=0)
             j += 1
-            if j > self.n:
+            if j > self.max_iter:
                 # print("Projection failed")
                 break
         # print(f"projection {j} steps. Max violation: {cm_norm_init.item():2.2e} -> {cm_norm.max().item():2.2e}")
         return y, reg, reg2
 
-    def compute_constraint_violation(self, x):
+    def constraint_violation(self, x):
         """
         Computes the constraint violation.
         """
         try:
-            c = self.constraint_violation(x,rescale=True)
+            c = self._constraint_violation(x, rescale=True)
         except:
-            c = self.constraint(x,rescale=True)
+            c = self._constraint(x, rescale=True)
         cabs = torch.abs(c)
         c_error_mean = torch.mean(cabs)
         c_error_max = torch.max(cabs)
         return c,c_error_mean, c_error_max
 
     def __call__(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True,K=None):
-        if self.shape_transform is not None:
-            y_shape = y.shape
-            y_shape_new = torch.Size([y_shape[0]*y_shape[1],self.shape_transform,-1])
-            y = y.view(y_shape_new)
-            weight = weight.view(y_shape_new)
         if use_batch and self.mode == 'gradient_descent':
             y, reg, reg2 = self.gradient_descent_batch(y,project,uplift,weight)
         else:
@@ -485,10 +375,6 @@ class ConstraintTemplate(ABC):
                 reg = reg + regi
                 reg2 = reg2 + regi2
             y = torch.cat(y_new, dim=0)
-        if self.shape_transform is not None:
-            y = y.view(y_shape)
-
-
         return y, reg, reg2
 
 class MultiBodyPendulum(ConstraintTemplate):
@@ -500,15 +386,14 @@ class MultiBodyPendulum(ConstraintTemplate):
         l: A torch tensor with the length of the different pendulums, can also be a single number if all pendulums have the same length.
         position_idx: gives the indices for x and y coordinates in ndims.
     """
-    def __init__(self,max_iter,tol,include_second_order=False,position_idx=(0,1),velocity_idx=(2,3),debug_folder=None):
-        super(MultiBodyPendulum, self).__init__(tol, max_iter, debug_folder=debug_folder)
+    def __init__(self, position_idx=(0, 1), velocity_idx=(2, 3), **kwargs):
+        super(MultiBodyPendulum, self).__init__(**kwargs)
         self.l = 1
         self.position_idx = position_idx
         self.velocity_idx = velocity_idx
-        self.include_second_order = include_second_order
         return
 
-    def delta_r(self,r):
+    def _delta_r(self, r):
         """
         Computes a vector from each pendulum to the next, including origo.
         """
@@ -517,14 +402,14 @@ class MultiBodyPendulum(ConstraintTemplate):
         dr = torch.cat((dr_0[:,None],dr_i),dim=1)
         return dr
 
-    def extract_positions(self,x):
+    def _extract_positions(self, x):
         """
         Extracts positions, r, from x
         """
         r = x[:,:,self.position_idx]
         return r
 
-    def extract_velocity(self,x):
+    def _extract_velocity(self, x):
         """
         Extracts velocities, v, from x
         """
@@ -532,7 +417,7 @@ class MultiBodyPendulum(ConstraintTemplate):
         return v
 
 
-    def insert_positions(self,r,x_template):
+    def _insert_positions(self, r, x_template):
         """
         Inserts, r, back into a zero torch tensor similar to x_template at the appropriate spot.
         """
@@ -540,7 +425,7 @@ class MultiBodyPendulum(ConstraintTemplate):
         x[:,:,self.position_idx] = r
         return x
 
-    def insert_velocities(self,v,x_template):
+    def _insert_velocities(self, v, x_template):
         """
         Inserts, v, back into a zero torch tensor similar to x_template at the appropriate spot.
         """
@@ -549,15 +434,7 @@ class MultiBodyPendulum(ConstraintTemplate):
         return x
 
 
-    def debug(self, x,c,extra='',idx=None):
-        r = self.extract_positions(x)
-        v = self.extract_velocity(x)
-        if idx is None:
-            idx = torch.argmax(c.mean(dim=1))
-        debug_file = f"{self.debug_folder}/{datetime.now():%H_%M_%S.%f}_{extra}.png"
-        plot_pendulum_snapshot_custom(r[idx].detach().cpu(), v[idx].detach().cpu(), file=debug_file, fighandler=None, color='red')
-
-    def constraint_base(self,x,rescale=False):
+    def _constraint_base(self, x, rescale=False):
         """
         Computes the constraints.
 
@@ -566,8 +443,8 @@ class MultiBodyPendulum(ConstraintTemplate):
 
         Note that this should not be used when computing the constraint violation since that should be done with the unsquared norm.
         """
-        r = self.extract_positions(x)
-        dr = self.delta_r(r)
+        r = self._extract_positions(x)
+        dr = self._delta_r(r)
         if rescale:
             dr = dr * self.scale
         # drnorm = torch.norm(dr, dim=-1)
@@ -575,7 +452,7 @@ class MultiBodyPendulum(ConstraintTemplate):
         c = dr2 - self.l*self.l
         return c[:,:,None]
 
-    def constraint(self,x,rescale=False):
+    def _constraint(self, x, rescale=False):
         """
         Computes the constraints.
 
@@ -584,11 +461,11 @@ class MultiBodyPendulum(ConstraintTemplate):
 
         Note that this is the unsquared norm, which is not differentiable at r_i = r_{i-1}
         """
-        c1 = self.constraint_base(x,rescale=rescale)
-        if self.include_second_order:
-            v = self.extract_velocity(x)
-            r = self.extract_positions(x)
-            c2 = self.second_order_constraint(self.constraint_base,r,v)
+        c1 = self._constraint_base(x, rescale=rescale)
+        if self.include_second_order_constraints:
+            v = self._extract_velocity(x)
+            r = self._extract_positions(x)
+            c2 = self._second_order_constraint(self._constraint_base, r, v)
             # c3 = self.second_order_constraint2(r,v)
             # assert torch.allclose(c2,c3)
             c = torch.cat((c1,c2),dim=-1)
@@ -596,27 +473,27 @@ class MultiBodyPendulum(ConstraintTemplate):
             c = c1
         return c
 
-    def constraint_violation_base(self,x,rescale=False):
+    def _constraint_violation_base(self, x, rescale=False):
         """
         Computes the constraints.
 
         For an n multi-body pendulum the constraint can be given as:
         c_i = ||r_i - r_{i-1}||_2 - l_i,   i=1,n
         """
-        r = self.extract_positions(x)
-        dr = self.delta_r(r)
+        r = self._extract_positions(x)
+        dr = self._delta_r(r)
         if rescale:
             dr = dr * self.scale
         drnorm = torch.norm(dr, dim=-1)
         c = drnorm - self.l
         return c[:,:,None]
 
-    def constraint_violation(self,x,rescale=False):
-        c1 = self.constraint_violation_base(x,rescale=rescale)
-        if self.include_second_order:
-            v = self.extract_velocity(x)
-            r = self.extract_positions(x)
-            c2 = self.second_order_constraint(self.constraint_violation_base,r,v)
+    def _constraint_violation(self, x, rescale=False):
+        c1 = self._constraint_violation_base(x, rescale=rescale)
+        if self.include_second_order_constraints:
+            v = self._extract_velocity(x)
+            r = self._extract_positions(x)
+            c2 = self._second_order_constraint(self._constraint_violation_base, r, v)
             # c3 = self.second_order_constraint2(r,v)
             # assert torch.allclose(c2,c3)
             c = torch.cat((c1,c2),dim=-1)
@@ -625,36 +502,113 @@ class MultiBodyPendulum(ConstraintTemplate):
         return c
 
 
-    def second_order_constraint(self,func,r,v):
-        dr = self.delta_r(r)
-        dv = self.delta_r(v)
+    def _second_order_constraint(self, func, r, v):
+        dr = self._delta_r(r)
+        dv = self._delta_r(v)
         c = 2*(dr*dv).sum(dim=-1)
 
         return c[:,:,None]
-    #
-    # def jacobian_transpose_times_constraint(self,x,c):
-    #     """
-    #     Computes the Jacobian transpose times the constraints.
-    #
-    #     J^Tc =  (c_1 d_1 - c_2 d_2)
-    #             (c_2 d_2 - c_3 d_3)
-    #                     ...
-    #             (c_{n-1} d_{n-1} - c_n d_n)
-    #             (c_n d_n)
-    #     where
-    #     d_i = \frac{r_i - r_{i-1}}{|r_i - r_{i-1}|}
-    #
-    #     Note that we do not even have to create this function, since we could also just have let pytorch autograd library do all this.
-    #     In fact you can delete this function and the code will still run since the autograd version is made in the template code, and will in that case just take over the computation.
-    #     """
-    #     r = self.extract_positions(x)
-    #     npend = r.shape[1]
-    #     diffr = self.delta_r(r)
-    #     rnorm = diffr / torch.norm(diffr,dim=-1,keepdim=True)
-    #     dr = torch.zeros_like(r)
-    #     for i in range(npend-1):
-    #         dr[:, i, :] = c[:, i,0][:, None] * rnorm[:, i, :] - c[:, i+1,0][:, None] * rnorm[:, i+1, :]
-    #     dr[:,-1,:] = c[:, -1,0][:, None] * rnorm[:, -1, :]
-    #     dx = self.insert_positions(dr,x)
-    #     return dx
+
+
+
+class Water(ConstraintTemplate):
+    """
+    This constraint function applies constraints to water molecules.
+    Expected input is x of shape [batch_size,nwater,ndims].
+
+    Note that technically this keeps applying the constraint to water molecules that falls within the acceptable limit
+     until all water molecules in the batch falls within that limit, so a more correct approach would be to put each molecule in the batch_size
+     and have a shape that looks like [nwater*batch_size,1,ndims].
+
+    Input:
+        l: A torch tensor with the binding lengths of the different bonds, can also be a single number if all bonds have the same length.
+        position_idx: gives the indices for x,y,z coordinates in ndims for the different particles.
+    """
+
+    def __init__(self, length, position_idx=(0, 1, 2, 3, 4, 5, 6, 7, 8), velocity_idx=(9,10,11,12,13,14,15,16,17), **kwargs):
+        super(Water, self).__init__(**kwargs)
+        if not isinstance(length, torch.Tensor):
+            length = torch.tensor(length)
+        self.register_buffer('l', length)
+        # self.l = length
+        self.position_idx = position_idx
+        self.velocity_idx = velocity_idx
+        return
+
+    def _extract_positions(self, x):
+        """
+        Extracts positions, r, from x
+        """
+        r = x[:,:,self.position_idx]
+        r = r.view(r.shape[0],r.shape[1],-1,3)
+        return r
+
+    def _insert_positions(self, r, x_template):
+        """
+        Inserts, r, back into a zero torch tensor similar to x_template at the appropriate spot.
+        """
+        x = torch.zeros_like(x_template)
+        x[:,:,self.position_idx] = r.view(r.shape[0],r.shape[1],-1)
+        return x
+
+    def _delta_r(self, r):
+        """
+        """
+        dr1 = r[:,:,0] - r[:,:,1]
+        dr2 = r[:,:,1] - r[:,:,2]
+        dr3 = r[:,:,2] - r[:,:,0]
+        dr = torch.cat((dr1[:,:,None,:],dr2[:,:,None,:],dr3[:,:,None,:]),dim=2)
+        return dr
+
+
+    def _constraint(self,x,extract_position=True, rescale=False):
+        """
+        Computes the constraints.
+
+        For a water molecule the constraint can be given as:
+        c_1 = |r_1 - r_2| - l_1
+        c_2 = |r_2 - r_3| - l_2
+        c_3 = |r_3 - r_1| - l_3
+        """
+        if extract_position:
+            r = self._extract_positions(x)
+        else:
+            r = x
+        dr = self._delta_r(r)
+        if rescale:
+            l = self.l * self.scale
+            dr = dr * self.scale
+        else:
+            l = self.l
+        drnorm = torch.norm(dr, dim=-1)
+        # drnorm2 = torch.norm(dr, dim=-1)
+
+        c = drnorm - l
+        return c
+
+
+if __name__ == '__main__':
+
+    """We test that the water molecule constraint is sensible."""
+
+    torch.set_default_dtype(torch.float64)
+    torch.set_printoptions(precision=10)
+    l0 = torch.tensor(0.957)
+    l1 = torch.tensor(1.513)
+    l2 = torch.tensor(0.957)
+
+    alpha_rad = torch.acos((l0**2+l2**2-l1**2)/(2*l0*l2))
+    alpha_degree = alpha_rad / torch.pi * 180
+
+    l = torch.tensor([l0 , l1 , l2 ])
+    beta = (180-alpha_degree)/2  # degrees
+    b = torch.tensor(beta / 180 * torch.pi)
+
+    r1 = torch.tensor([[0.0, 0.0, 0.0], [torch.cos(b) * l0, torch.sin(b) * l0, 0.0], [-torch.cos(b) * l0, torch.sin(b) * l0, 0.0]])
+    r = r1[None, None, :]
+
+    con_fnc = Water(l, tolerance=1e-2, max_iter=100)
+    c = con_fnc.constraint(r,extract_position=False)
+    assert c.allclose(torch.tensor(0.0))
+
 

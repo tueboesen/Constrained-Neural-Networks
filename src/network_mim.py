@@ -1,4 +1,5 @@
 import math
+import time
 
 import e3nn.o3
 import mlflow
@@ -230,7 +231,6 @@ class neural_network_mimetic(nn.Module):
     def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,ignore_con=False,weight=1):
         if x.isnan().any():
             raise ValueError("NaN detected")
-
         if self.embed_node_attr:
             node_attr_embedded = self.node_attr_embedder(node_attr.min(dim=-1)[0].to(dtype=torch.int64)).squeeze()
         else:
@@ -243,6 +243,7 @@ class neural_network_mimetic(nn.Module):
         reg = torch.tensor(0.0)
 
         for i in range(self.nlayers):
+            t1 = time.time()
             dt = max(min(self.h[i] ** 2, 0.1),1e-4)
             if x.isnan().any():
                 raise ValueError("NaN detected")
@@ -252,19 +253,20 @@ class neural_network_mimetic(nn.Module):
                 w = smooth_cutoff(edge_len / self.max_radius) / edge_len
             else:
                 w = wstatic
+            t2 = time.time()
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:,None]],dim=-1)
 
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
 
             if self.penalty_strength > 0:
                 if self.discretization_method == 'rk4':
-                    q1 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
-                    q2 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
-                    q3 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
-                    q4 = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
+                    q1 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                    q2 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q1 / 2 * dt, self.project, self.uplift, weight)
+                    q3 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q2 / 2 * dt, self.project, self.uplift, weight)
+                    q4 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
                     dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
                 else:
-                    dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
+                    dy = self.con_fnc.constraint_penalty(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
                 dy = dy.view(-1,ndimy)
             else:
                 dy = 0
@@ -284,6 +286,7 @@ class neural_network_mimetic(nn.Module):
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
+            t3 = time.time()
             if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
                 if y.isnan().any():
                     raise ValueError("NaN detected")
@@ -295,6 +298,8 @@ class neural_network_mimetic(nn.Module):
                     raise ValueError("NaN detected")
 
             x = self.project(y)
+            t4 = time.time()
+            print(f"Inner {t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f}")
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
             x, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
@@ -302,10 +307,13 @@ class neural_network_mimetic(nn.Module):
         if x.isnan().any():
             raise ValueError("NaN detected")
 
+        t1 = time.time()
         if self.con_fnc is not None:
-            cv, cv_mean,cv_max = self.con_fnc.compute_constraint_violation(x.view(batch.max() + 1,-1,ndimx))
+            cv, cv_mean,cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
             if reg == 0:
                 reg = (cv*cv).mean()
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
+        t2 = time.time()
+        print(f"Con time = {t2-t1:2.2f}")
         return x, cv_mean, cv_max, reg * self.regularization_strength
