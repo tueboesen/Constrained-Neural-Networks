@@ -73,7 +73,7 @@ def collate_vars_water(Rin, Rout, Vin, Vout, z, m):
     Rout_vec = Rout.reshape(-1, Rin.shape[2]*Rin.shape[3])
     Vin_vec = Vin.reshape(-1, Rin.shape[2]*Rin.shape[3])
     Vout_vec = Vout.reshape(-1, Rin.shape[2]*Rin.shape[3])
-    z_vec = z.reshape(-1, 1)
+    z_vec = z[:,:,:,0].reshape(-1, z.shape[-2])
 
     batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
 
