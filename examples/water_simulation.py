@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
 
     c = load_base_parameters_npendulum()
-    c['data'] = './../data/water.npz'
+    c['data'] = './../data/water/water.npz'
     c['data_type'] = 'water'
     c['con'] = 'water'
     c['epochs'] = 50

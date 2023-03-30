@@ -1,7 +1,6 @@
 import inspect
 import time
 from datetime import datetime
-from torchmin import minimize
 
 import torch
 import torch.nn as nn
