@@ -299,7 +299,7 @@ class neural_network_mimetic(nn.Module):
 
             x = self.project(y)
             t4 = time.time()
-            print(f"Inner {t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f}")
+            # print(f"Inner {t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f}")
 
         if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
             x, _, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
@@ -315,5 +315,5 @@ class neural_network_mimetic(nn.Module):
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
         t2 = time.time()
-        print(f"Con time = {t2-t1:2.2f}")
+        # print(f"Con time = {t2-t1:2.2f}")
         return x, cv_mean, cv_max, reg * self.regularization_strength

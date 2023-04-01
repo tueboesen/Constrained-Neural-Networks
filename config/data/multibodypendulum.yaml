@@ -1,7 +1,7 @@
 name: 'multibodypendulum'
 file: './../data/multibodypendulum/multibodypendulum.npz'
-use_val: False
-use_test: False
+use_val: True
+use_test: True
 metafile: ???
 n_train: 100
 n_val: 100
