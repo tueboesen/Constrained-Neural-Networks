@@ -17,11 +17,12 @@ if __name__ == '__main__':
         'con_type': ['','','','low','high'],
         'penalty': [0,0,10,10,10],
         'regularization': [0, 10, 0, 10, 10],
-        'nskip': [20]*5
+        'nskip': [200]*5
     }
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
     c['epochs'] = 10
     c['con'] = 'n-pendulum'
+    c['data'] = './../data/multibodypendulum/multibodypendulum.npz'
 
     cs, legends, results,results_test = job_planner(c, mutable_parameters)
     job_runner(cs,legends,results,results_test)
