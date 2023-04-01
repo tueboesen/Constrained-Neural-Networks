@@ -20,7 +20,7 @@ if __name__ == '__main__':
         'nskip': [200]*5
     }
     c['basefolder'] = os.path.basename(__file__).split(".")[0]
-    c['epochs'] = 10
+    c['epochs'] = 150
     c['con'] = 'n-pendulum'
     c['data'] = './../data/multibodypendulum/multibodypendulum.npz'
 

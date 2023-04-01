@@ -46,24 +46,52 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_
             v_tuple_sel.append(vector_sel)
         return v_tuple_sel
 
-    assert len(L) == n
-    assert len(M) == n
+    # assert len(L) == n
+    # assert len(M) == n
+    #
+    # L = torch.tensor(L)
+    # M = torch.tensor(M)
+    # assert (L == 1).all(), f"Current implementation only supports npendulums with Lengths=1, you selected {L}"
+    # assert (M == 1).all(), f"Current implementation only supports npendulums with Mass=1, you selected {M}"
+    #
+    # theta0 = 0.5*math.pi*torch.ones(n)
+    # dtheta0 = 0.0*torch.ones(n)
+    # nsteps = n_train + use_val * n_val + use_test * n_test + nskip + n_extra
+    #
+    # Npend = NPendulum(n,dt)
+    #
+    # t0 = time.time()
+    # times, thetas, dthetas = Npend.simulate(nsteps,theta0,dtheta0)
+    # t1 = time.time()
+    # print(f"simulated {nsteps} steps for a {n}-pendulum in {t1-t0:2.2f}s")
+    file = './../data/multibodypendulum/multibodypendulum.npz'
+    with np.load(file) as data:
+        theta = data['theta']
+        dtheta = data['dtheta']
+    thetas = torch.from_numpy(theta)
+    dthetas = torch.from_numpy(dtheta)
+    # import multibodypendulum as mbp
+    # x,y,vx,vy = mbp.MultiBodyPendulum.get_coordinates_from_angles(theta,dtheta)
+    #
+    # R = torch.cat((x.T[:,None,:,None],y.T[:,None,:,None]),dim=-1)
+    # V = torch.cat((vx.T[:,None,:,None],vy.T[:,None,:,None]),dim=-1)
+    # Rin, Rout = convert_snapshots_to_future_state_dataset(nskip, R)
+    # Vin, Vout = convert_snapshots_to_future_state_dataset(nskip, V)
+    # particle_type = torch.ones_like(Rin).repeat(1,1,1,2) # we repeat it twice for R and V, which constitute our vector at the end
+    # particle_mass = torch.ones_like(Rin).repeat(1,1,1,2)
+    # # particle_type = torch.ones((Rin.shape[0],Rin.shape[1],Rin.shape[2]))
+    # # particle_mass = torch.ones((Rin.shape[0],Rin.shape[1],Rin.shape[2]))
+    #
+    # features = {}
+    # features['Rin'] = Rin.to(device)
+    # features['Rout'] = Rout.to(device)
+    # features['Vin'] = Vin.to(device)
+    # features['Vout'] = Vout.to(device)
+    # features['particle_type'] = particle_type.to(device)
+    # features['particle_mass'] = particle_mass.to(device)
+    # return features
 
-    L = torch.tensor(L)
-    M = torch.tensor(M)
-    assert (L == 1).all(), f"Current implementation only supports npendulums with Lengths=1, you selected {L}"
-    assert (M == 1).all(), f"Current implementation only supports npendulums with Mass=1, you selected {M}"
 
-    theta0 = 0.5*math.pi*torch.ones(n)
-    dtheta0 = 0.0*torch.ones(n)
-    nsteps = n_train + use_val * n_val + use_test * n_test + nskip + n_extra
-
-    Npend = NPendulum(n,dt)
-
-    t0 = time.time()
-    times, thetas, dthetas = Npend.simulate(nsteps,theta0,dtheta0)
-    t1 = time.time()
-    print(f"simulated {nsteps} steps for a {n}-pendulum in {t1-t0:2.2f}s")
 
     Ra = (thetas.clone().T)[:,:,None]
     Va = (dthetas.clone().T)[:,:,None]
@@ -97,15 +125,24 @@ def load_npendulum_data(data_type,device,nskip,n_train,n_val,n_test,use_val,use_
     print(f'Number of data: {ndata}')
     assert n_train+n_val <= ndata, f"The number of datasamples: {ndata} is less than the number of training samples: {n_train} + the number of validation samples: {n_val}"
 
-    ndata_rand = 0 + np.arange(ndata)
-    if shuffle:
-        np.random.shuffle(ndata_rand)
-    train_idx = ndata_rand[:n_train]
-    val_idx = ndata_rand[n_train:n_train + n_val]
-    test_idx = ndata_rand[n_train+n_val:n_train + n_val+n_test]
+    metafile = './../data/multibodypendulum/metadata/split_1234_100_100_100_200.npz'
+    with np.load(metafile) as mf:
+        # ndata = mf['ndata']
+        # assert len(features[list(features)[0]]) == ndata, "The number of data points in the dataset does not match the number in the metadata."
+        train_idx = mf['idx_train']
+        val_idx = mf['idx_val']
+        test_idx = mf['idx_test']
+
+    # ndata_rand = 0 + np.arange(ndata)
+    # if shuffle:
+    #     np.random.shuffle(ndata_rand)
+    # train_idx = ndata_rand[:n_train]
+    # val_idx = ndata_rand[n_train:n_train + n_val]
+    # test_idx = ndata_rand[n_train+n_val:n_train + n_val+n_test]
 
     z = torch.arange(1,n+1)
     z = z.to(device)
+    M = torch.tensor(M)
     M = M.to(device)
 
     v_tuple = (Rin,Rout,Vin,Vout,Rina,Routa,Vina,Vouta)
