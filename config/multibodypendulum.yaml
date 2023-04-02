@@ -16,6 +16,7 @@ hydra:
 
 
 run:
+  name: ???
   epochs: 150
   debug: false
   seed: 1234
@@ -30,3 +31,5 @@ optimizer:
 
 model:
   con_type: ''
+  penalty_strength: 0
+  regularization_strength: 10

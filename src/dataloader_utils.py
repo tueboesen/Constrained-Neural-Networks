@@ -134,7 +134,7 @@ class Dataloader_ext(DataLoader):
         # Vout_vec = Vout.reshape(-1, Rin.shape[2]*Rin.shape[3])
         z_vec = z.reshape(-1, 1)
 
-        batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[1]).to(device=Rin.device)
+        batch = torch.arange(Rin.shape[0]).repeat_interleave(Rin.shape[2]).to(device=Rin.device)
 
         m_vec = m.view(-1, m.shape[-1])
 

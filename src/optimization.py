@@ -9,15 +9,34 @@ from tqdm import tqdm
 from src.loss import loss_eq, loss_mim
 from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshot_custom
 
+def log_parameters(c):
+
+    # mlflow.log_params({'all_parameters':c})
+
+    for key,val in c.items():
+        for keyi,vali in c[key].items():
+            mlflow.log_param(f"{key}.{keyi}",vali)
+
+    # for key,val in c.items():
+    #     if key == 'data':
+    #         for keyi, vali in c[key].items():
+    #             if keyi == 'n_train':
+    #                 mlflow.log_param(keyi,vali)
+    #     if key == 'model':
+    #         for keyi, vali in c[key].items():
+    #             if keyi in ['penalty_strength','regularization_strength','con_type']:
+    #                 mlflow.log_param(keyi,vali)
+
 
 def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
     names = ['train', 'val']
     mlflow.set_tracking_uri(c.logging.mlflow_folder)
-    with mlflow.start_run() as run:
+    with mlflow.start_run(run_name=c.run.name) as run:
         artifact_path = "models"
         mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
         # mlflow.pytorch.save_model(models, "models")
-        mlflow.log_params(c)
+        log_parameters(c)
+        # mlflow.log_params(c)
         metrics = Metrics(name='train')
         for epoch in range(c.run.epochs):
             for name in names:
@@ -58,14 +77,14 @@ class Metrics:
 
     def report(self,end_of_epoch=False):
         if end_of_epoch or ((self.report_every_n_step > 0) and ((self.counter % self.report_every_n_step) == 0)):
-            mlflow.log_metric("epoch",self.epoch)
-            mlflow.log_metric(f"{self.name}_cv_mean",self.cv_mean/self.counter)
-            mlflow.log_metric(f"{self.name}_cv_max",self.cv_max/self.counter)
-            mlflow.log_metric(f"{self.name}_reg",self.reg/self.counter)
-            mlflow.log_metric(f"{self.name}_loss_predict",self.loss_predict/self.counter)
-            mlflow.log_metric(f"{self.name}_loss",self.loss/self.counter)
-            mlflow.log_metric(f"{self.name}_mae_r",self.mae_r/self.counter)
-            mlflow.log_metric(f"{self.name}_mae_v",self.mae_v/self.counter)
+            # mlflow.log_metric("epoch",self.epoch)
+            mlflow.log_metric(f"{self.name}_cv_mean",self.cv_mean/self.counter,step=self.epoch)
+            mlflow.log_metric(f"{self.name}_cv_max",self.cv_max/self.counter,step=self.epoch)
+            mlflow.log_metric(f"{self.name}_reg",self.reg/self.counter,step=self.epoch)
+            mlflow.log_metric(f"{self.name}_loss_predict",self.loss_predict/self.counter,step=self.epoch)
+            mlflow.log_metric(f"{self.name}_loss",self.loss/self.counter,step=self.epoch)
+            mlflow.log_metric(f"{self.name}_mae_r",self.mae_r/self.counter,step=self.epoch)
+            mlflow.log_metric(f"{self.name}_mae_v",self.mae_v/self.counter,step=self.epoch)
 
 def compute_mae(c,x_pred,x_target,rscale,vscale):
     """
@@ -93,9 +112,12 @@ def run_model(epoch,c,model,dataloader,optimizer,loss_fnc,metrics,type):
     """
     train = type == 'train'
     model.train(train)
+    torch.set_grad_enabled(train)
     metrics.reset(name=type)
     # for i, (Rin, Rout, Vin, Vout, z, m) in enumerate(dataloader):
-    for i, (Rin, Rout, Vin, Vout, z, m) in enumerate((pbar := tqdm(dataloader, desc=f"Epoch: {epoch}"))):
+    for i, (Rin, Rout, Vin, Vout, z, m) in enumerate((pbar := tqdm(dataloader, desc=f"{type} Epoch: {epoch}"))):
+        optimizer.zero_grad()
+
         t1 = time.time()
         batch, x, z_vec, m_vec, weights, x_target = dataloader.collate_vars(Rin, Rout, Vin, Vout, z, m)
         t2 = time.time()

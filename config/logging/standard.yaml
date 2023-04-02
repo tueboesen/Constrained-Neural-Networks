@@ -1,2 +1,2 @@
 hydra_folder: ./../../results/${now:%Y-%m-%d}/${now:%H-%M-%S}
-mlflow_folder: ./../../results/mlflow
+mlflow_folder: /home/tue/PycharmProjects/results/mlflow

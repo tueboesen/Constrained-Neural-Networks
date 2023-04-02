@@ -37,6 +37,8 @@ def configuration_processor(c):
     var_lens = [len(val) for val in c.data.data_id.values()]
     if 'dim_in' in c.model.keys() and 'dim_in' not in c.model:
         c.model.dim_in = sum(var_lens)
+    if 'name' not in c.run:
+        c.run.name = f"{c.constraint.name}_{c.model.con_type}_{c.model.penalty_strength}_{c.model.regularization_strength}"
     # if 'irreps_inout' in c.model:
     #     c.model.irreps_inout = o3.Irreps(c.model.irreps_inout)
     # if 'irreps_hidden' in c.model:

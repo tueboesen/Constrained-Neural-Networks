@@ -33,7 +33,8 @@ def feature_transform_multibodypendulum(file,nskip,device):
     V = torch.cat((vx.T[:,None,:,None],vy.T[:,None,:,None]),dim=-1)
     Rin, Rout = convert_snapshots_to_future_state_dataset(nskip, R)
     Vin, Vout = convert_snapshots_to_future_state_dataset(nskip, V)
-    particle_type = torch.ones_like(Rin).repeat(1,1,1,2) # we repeat it twice for R and V, which constitute our vector at the end
+    particle_type = (torch.arange(Rin.shape[2])+1)[None,:].repeat(Rin.shape[0],1)
+    # particle_type = torch.ones_like(Rin).repeat(1,1,1,2) # we repeat it twice for R and V, which constitute our vector at the end
     particle_mass = torch.ones_like(Rin).repeat(1,1,1,2)
     # particle_type = torch.ones((Rin.shape[0],Rin.shape[1],Rin.shape[2]))
     # particle_mass = torch.ones((Rin.shape[0],Rin.shape[1],Rin.shape[2]))
