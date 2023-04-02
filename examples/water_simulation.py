@@ -11,11 +11,16 @@ The dataset water.npz is too large for github, but send an email to me on tue.bo
 """
 
 if __name__ == '__main__':
+    # mutable_parameters = {
+    #     'con_type': ['','','','low','high'],
+    #     'penalty': [0,0,1,1,1],
+    #     'regularization': [0, 1, 0, 100, 100],
+    # }
 
     mutable_parameters = {
-        'con_type': ['','','','low','high'],
-        'penalty': [0,0,1,1,1],
-        'regularization': [0, 1, 0, 100, 100],
+        'con_type': ['low','high'],
+        'penalty': [10,1],
+        'regularization': [10, 100],
     }
 
 
@@ -23,10 +28,10 @@ if __name__ == '__main__':
     c['data'] = './../data/water/water.npz'
     c['data_type'] = 'water'
     c['con'] = 'water'
-    c['epochs'] = 50
+    c['epochs'] = 150
     c['lr_adjustment'] = 0.99
     c['lr'] = 1e-2
-    c['nskip'] = 49
+    c['nskip'] = 200
     c['n_val'] = 100
     c['n_train'] = 100
     c['use_test'] = True
