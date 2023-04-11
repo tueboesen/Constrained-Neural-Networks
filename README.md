@@ -2,6 +2,14 @@
 
 This project tests various ways of adding constraints into a neural network, as detailed in https://arxiv.org/pdf/2211.14302.pdf.
 
+We introduce several constraint methods and compare those with previous methods as well as no constraints.
+
+The results for a 5-body pendulum are:
+
+![CV_mean](https://github.com/tueboesen/Constrained-Neural-Networks/blob/main/figures/ntrain_10000_nskip_100_cv_mean.png)
+
+![MAE_r](https://github.com/tueboesen/Constrained-Neural-Networks/blob/main/figures/ntrain_10000_nskip_100_mae_r.png)
+
 
 ## Installation
 
@@ -15,33 +23,24 @@ Note that it might not always work to install the packages through the requireme
 In that case you should look at the individual packages website and see how they each should be installed.
 
 ## Project structure
-### Data
+The project uses MLflow for experiment tracking, Hydra for configuration file management and multiruns and Optuna for optimization.
+The core of this project is the constraint class, which can be found in src/constraints.py. In order to create your own constraints you inherit from the ConstraintTemplate class and define the required methods.  
+
+### data
 Data goes here. For instance water.npz which is not included in the github project due to size limitations. But the water.npz dataset for water simulations can be requested by sending an email to the corresponding author of tha paper.
     
-### Examples
+### examples
 Scripts to run. 
-The subfolder Paper_results contains scripts used in the generation of the paper results.
-
-### postprocess
-Scripts used to evaluate the results and produce tables or figures for the paper. 
 
 ### preprocess
 Scripts that were used in order to get data into a format used in this project. Currently contains scripts for converting a cp2k dataset to a npz file, and for preparing proteinnet datasets.
 
-### scripts_to_run
-Empty folder. If you want to run many scripts sequentially, you can put them in here and run the run_all_scripts.py file from the examples folder. 
-
 ### src
 The source code folder.
 
-### verlet_integration
-scripts for running a Verlet integration using a pretrained neural network for predicting future MD states.
+## Getting started
+As a starting point I would suggest running the multibody pendulum example "train_pendulum.py" in the examples folder.
 
-## Running it
-As a starting point I would suggest running some of the scripts in Examples
 
-The code can be run from the commandline if desired, but generally I would suggest that you start by running the code through one of the pre-made examples, and then modify one of those to fit your need.
-
-Pendulum simulations can be run without a dataset, since the source code includes a multi-body pendulum simulator that will generate datasets on the fly.
 
 
