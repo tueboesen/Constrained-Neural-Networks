@@ -29,7 +29,10 @@ optimizer:
   lr: 0.001
 #  momentum: 0.9
 
+data:
+  nskip: 100
+
 model:
   con_type: ''
-  penalty_strength: 0
-  regularization_strength: 10
+  penalty_strength: 10
+  regularization_strength: 0

@@ -12,6 +12,11 @@ from torch.utils.data import DataLoader
 from torch_cluster import radius_graph
 
 def data_split(features,metafile,n_train,n_val,n_test):
+    """
+    Splits the features into train, val and test.
+    If a relevant metafile already exist, it gets the splitting indices from that.
+    Otherwise, a new metafile is generated such that future runs with this configuration will have the same split.
+    """
     if exists(metafile):
         with np.load(metafile) as mf:
             ndata = mf['ndata']
@@ -39,6 +44,11 @@ def data_split(features,metafile,n_train,n_val,n_test):
     return f_train, f_val, f_test
 
 def attach_edge_generator(dataloaders,edge_generator):
+    """
+    This function attaches an edge generator to all dataloaders in a dataloader dict.
+
+    Edge generators tells the dataloader how to generate edge connections between nodes for data samples in that dataloader.
+    """
     for key, dataloader in dataloaders.items():
         dataloader.generate_edges = edge_generator
     return dataloaders
@@ -46,6 +56,9 @@ def attach_edge_generator(dataloaders,edge_generator):
 
 
 def generate_dataloaders(f_train,f_val,f_test,batchsize_train,batchsize_val,use_val,use_test,rscale=1,vscale=1,collate_vars_fnc=None):
+    """
+    Returns a dict containing the requested dataloaders (note that a training dataloader is mandatory at this point).
+    """
 
     dataloaders = {}
     dataset_train = DatasetFutureState(rscale=rscale,vscale=vscale,**f_train)
@@ -93,7 +106,7 @@ class DatasetFutureState(data.Dataset):
         Vout = self.Vout[index]
         particle_type = self.particle_type[index]
         particle_mass = self.particle_mass[index]
-        data_id = self.data_id
+        # data_id = self.data_id
 
         return Rin, Rout, Vin, Vout, particle_type, particle_mass
 
@@ -120,7 +133,7 @@ class Dataloader_ext(DataLoader):
         """
 
 
-        nb, nm, np, nd = Rin.shape
+        # nb, nm, np, nd = Rin.shape
 
         Rin_vec = Rin.reshape(-1, Rin.shape[-1])
         Rout_vec = Rout.reshape(-1, Rin.shape[-1])
@@ -145,6 +158,9 @@ class Dataloader_ext(DataLoader):
 
     @classmethod
     def generate_edges(cls,batch,x,max_radius):
+        """
+        The standard edge generator connects a node to all other nodes within a certain radius (maximum 120 connections).
+        """
         Rin_vec = x[...,...]
         edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
         edge_src = edge_index[0]

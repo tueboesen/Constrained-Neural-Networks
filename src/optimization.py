@@ -10,33 +10,32 @@ from src.loss import loss_eq, loss_mim
 from src.vizualization import plot_pendulum_snapshot, plot_pendulum_snapshot_custom
 
 def log_parameters(c):
-
-    # mlflow.log_params({'all_parameters':c})
-
+    """
+    We log all the parameters in the configuration using mlflow.
+    We assume that each parameter is part of a configuration group and does not have any configuration subgroups. #TODO this is something we should make more flexible at some point.
+    Hence a parametere will be logged as {group_key}.{key}
+    """
     for key,val in c.items():
         for keyi,vali in c[key].items():
             mlflow.log_param(f"{key}.{keyi}",vali)
 
-    # for key,val in c.items():
-    #     if key == 'data':
-    #         for keyi, vali in c[key].items():
-    #             if keyi == 'n_train':
-    #                 mlflow.log_param(keyi,vali)
-    #     if key == 'model':
-    #         for keyi, vali in c[key].items():
-    #             if keyi in ['penalty_strength','regularization_strength','con_type']:
-    #                 mlflow.log_param(keyi,vali)
-
 
 def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
+    """
+    Used to optimize and run inference of models.
+    Tracking is done with MLFlow.
+
+    c :: configuration OmegaConf
+    model: pytorch model
+    dataloaders: A dict containing various dataloaders saved with keys such as 'train' 'val' 'test'.
+    """
+
     names = ['train', 'val']
     mlflow.set_tracking_uri(c.logging.mlflow_folder)
     with mlflow.start_run(run_name=c.run.name) as run:
         artifact_path = "models"
         mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
-        # mlflow.pytorch.save_model(models, "models")
         log_parameters(c)
-        # mlflow.log_params(c)
         metrics = Metrics(name='train')
         for epoch in range(c.run.epochs):
             for name in names:
@@ -47,6 +46,9 @@ def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
     return loss
 
 class Metrics:
+    """
+    The metrics which we want to save to mlflow.
+    """
     def __init__(self,name,report_every_n_step=0):
         self.report_every_n_step = report_every_n_step
         self.reset(name)
@@ -108,13 +110,13 @@ def compute_mae(c,x_pred,x_target,rscale,vscale):
 
 def run_model(epoch,c,model,dataloader,optimizer,loss_fnc,metrics,type):
     """
-    Runs the models for a single epoch
+    Runs the models for a single epoch.
+    Supports both training and evaluation mode.
     """
     train = type == 'train'
     model.train(train)
     torch.set_grad_enabled(train)
     metrics.reset(name=type)
-    # for i, (Rin, Rout, Vin, Vout, z, m) in enumerate(dataloader):
     for i, (Rin, Rout, Vin, Vout, z, m) in enumerate((pbar := tqdm(dataloader, desc=f"{type} Epoch: {epoch}"))):
         optimizer.zero_grad()
 

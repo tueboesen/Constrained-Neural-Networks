@@ -5,7 +5,10 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 @hydra.main(version_base=None, config_path="./../config", config_name="multibodypendulum_tables")
+# @hydra.main(version_base=None, config_path="./../config", config_name="multibodypendulum")
 def my_app(cfg: DictConfig) -> None:
+    # print(cfg.run.seed)
+    # return
     main(cfg)
     # print(OmegaConf.to_yaml(cfg))
 

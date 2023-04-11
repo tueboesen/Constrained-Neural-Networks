@@ -1,0 +1,45 @@
+defaults:
+  - constraint: multibodypendulum
+  - data: multibodypendulum
+  - model: mimetic
+  - logging: standard
+#  - override hydra/sweeper: optuna
+#  - override hydra/sweeper/sampler: tpe
+#  - override hydra/sweeper/sampler: grid
+
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: ${logging.hydra_folder}
+  sweeper:
+    params:
+      ++model.penalty_strength: 1,3,5,7,10,15
+
+#      +constraints.type: ['','high','low']
+
+
+
+run:
+  experiment_name: 'Penalty_tuning, nskip=100'
+  name: ???
+  epochs: 50
+  debug: false
+  seed: 1234
+  loss_type: 'eq'
+  precision: torch.float64
+  device: ???
+  loss_indices: ${data.data_id}
+
+optimizer:
+  lr: 0.001
+#  momentum: 0.9
+
+data:
+  nskip: 100
+  n_train: 1000
+
+model:
+  con_type: ''
+  penalty_strength: 10
+  regularization_strength: 0

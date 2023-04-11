@@ -12,6 +12,7 @@ from torch_cluster import radius_graph
 import math
 from hydra import compose, initialize
 from omegaconf import OmegaConf
+import os
 
 
 def configuration_processor(c):
@@ -19,12 +20,11 @@ def configuration_processor(c):
     Processes the configuration file, adding dynamic variables, and sanity checking.
     The metadata file should be given a name that is canonical for that particular configuration
     """
-
+    os.environ['MLFLOW_EXPERIMENT_NAME'] = c.run.experiment_name
 
     # initialize(config_path="conf", job_name="test_app")
     # cfg = compose(config_name="models")
     # c.model = getattr(cfg,f"model_{c.run.model_type}")
-
     if 'metafile' not in c.data:
         path = os.path.dirname(c.data.file)
         metapath = f"{path}/metadata/"
@@ -38,7 +38,7 @@ def configuration_processor(c):
     if 'dim_in' in c.model.keys() and 'dim_in' not in c.model:
         c.model.dim_in = sum(var_lens)
     if 'name' not in c.run:
-        c.run.name = f"{c.constraint.name}_{c.model.con_type}_{c.model.penalty_strength}_{c.model.regularization_strength}"
+        c.run.name = f"{c.constraint.name}_{c.data.nskip}_{c.model.con_type}_{c.model.penalty_strength}_{c.model.regularization_strength}"
     # if 'irreps_inout' in c.model:
     #     c.model.irreps_inout = o3.Irreps(c.model.irreps_inout)
     # if 'irreps_hidden' in c.model:

@@ -10,6 +10,12 @@ import torch.nn.functional as F
 from src.utils import LJ_potential
 
 class Loss:
+    """
+    A loss class that can handle both equivariant loss (where we do a coordinate loss using MSE), and mimetic loss (where we compute inter-particle distances).
+    For both methods we compute the absolute loss, a reference loss, and the relative loss.
+    The losses are computed for each group of indices given in var_ids and the average is taken.
+    This enables us to compute the loss for both position and velocity separately.
+    """
     def __init__(self,var_ids,loss_type):
         self.loss_type = loss_type
         self.var_ids = var_ids
@@ -28,62 +34,17 @@ class Loss:
             var_out = x_out[...,idx]
             var_in = x_in[...,idx]
             loss_abs, loss_ref, loss_rel = self.loss_fnc(var_pred,var_out,var_in,edge_src,edge_dst,reduce=reduce)
-            # mlflow.log_metric(f"{var_name}_rel",loss_rel.item())
-            # mlflow.log_metric(f"{var_name}_abs",loss_abs.item())
-            # mlflow.log_metric(f"{var_name}_ref",loss_ref.item())
             loss = loss + loss_rel
         n = len(self.var_ids)
         return loss / n
 
 
-
-
-def generate_loss_fnc(c):
-    if c.loss == 'eq':
-        loss_fnc_inner = loss_eq
-    elif c.loss == 'mim':
-        loss_fnc_inner = loss_mim
-    else:
-        raise NotImplementedError(f"The loss {c.loss} has not been implemented yet.")
-    loss_fnc = loss_fnc_wrapper(loss_fnc_inner, c.variable_indices)
-
-    return loss_fnc
-
-def loss_fnc_wrapper(loss_fnc,var_indices):
-    loss = 0
-    # for idx in var_indices:
-
-
-
-# class Loss()
-
-
-def find_relevant_loss(loss_t,lossD_t,loss_v,lossD_v,use_validation,loss_fnc):
-    """
-    This function determines which loss function is the relevant to use.
-    """
-    if loss_fnc.lower() == 'mim':
-        if use_validation:
-            loss = lossD_v
-        else:
-            loss = lossD_t
-    elif loss_fnc.lower() == 'eq':
-        if use_validation:
-            loss = loss_v
-        else:
-            loss = loss_t
-    else:
-        raise NotImplementedError("Loss function not implemented.")
-    return loss
-
-def loss_eq(x_pred, x_out, x_in,edge_src,edge_dst,reduce=True):
+def loss_eq(x_pred, x_out, x_in,edge_src=None,edge_dst=None,reduce=True):
     """
     Computes the relative MSE coordinate loss, which can be used by equivariant networks
     Note that loss and loss_ref should be divided by the batch size if you intend to use either of those numbers.
     Assumes that x has the shape [particles,spatial dims]
     """
-    # loss = torch.sum(torch.norm(x_pred - x_out, p=2, dim=1))
-    # aa=torch.norm(x_pred - x_out, p=2, dim=1)
     if reduce:
         loss = torch.mean(torch.sum((x_pred - x_out)**2,dim=-1))
         loss_ref = torch.mean(torch.sum((x_in - x_out)**2,dim=-1))

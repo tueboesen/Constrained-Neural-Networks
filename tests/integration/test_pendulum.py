@@ -1,4 +1,3 @@
-from src.batch_jobs import job_runner
 from src.main import main
 
 import hydra

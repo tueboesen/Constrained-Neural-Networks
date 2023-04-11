@@ -68,13 +68,14 @@ class ConstraintTemplate(ABC, nn.Module):
     """
 
     # def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='cg',scale=1):
-    def __init__(self, tolerance, max_iter, mode='gradient_descent', n_constraints=None, scale=1,include_second_order_constraints=False):
+    def __init__(self, tolerance, max_iter, minimizer='gradient_descent', n_constraints=None, scale=1, include_second_order_constraints=False):
         super(ConstraintTemplate, self).__init__()
         self.include_second_order_constraints = include_second_order_constraints
         self.tolerance = tolerance
         self.max_iter = max_iter
         self.scale = scale
-        self.mode = mode
+        self.minimizer = minimizer
+        assert minimizer in ['cg','gradient_descent']
         self.n_constraints = n_constraints
         return
 
@@ -143,12 +144,15 @@ class ConstraintTemplate(ABC, nn.Module):
     def constraint_penalty(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1):
         """
         Calculates constraint stabilization as dy = J^T c
+        Note that we have added a clamp, which prevents this penalty creating changes larger than 10% of the value of x.
         """
         x = project(y)
         c = self._constraint(x)
         # c, c_error_mean, c_error_max = self.compute_constraint_violation(x)
         dx = self._jacobian_transpose_times_constraint(x, c)
         dx = weight.view(dx.shape) * dx
+        clampval = x.abs() * 0.1
+        dx = torch.clamp(dx,min=-clampval, max=clampval)
         dy = uplift(dx)
         return dy
 
@@ -162,7 +166,6 @@ class ConstraintTemplate(ABC, nn.Module):
             c = self._constraint(x)
             return c.abs().mean()
 
-        imax = 1000
         tol = 1e-5
         jmax = 100
         n_restart = 10
@@ -175,14 +178,14 @@ class ConstraintTemplate(ABC, nn.Module):
         else:
             x = y @ K.T
 
-        x_org = x.clone()
+        # x_org = x.clone()
 
         df = torch.autograd.functional.jacobian(f, x, strict=True, create_graph=True).view(-1, 1)
         r = - df
         d = r.clone()
         delta_new = r.T @ r
         delta0 = delta_new.clone()
-        while i < imax and delta_new > epsilon ** 2 * delta0:
+        while i < self.max_iter and delta_new > epsilon ** 2 * delta0:
             j = 0
             deltad = d.T @ d
             c = f(x)
@@ -355,7 +358,7 @@ class ConstraintTemplate(ABC, nn.Module):
         return c,c_error_mean, c_error_max
 
     def __call__(self, y, project=nn.Identity(), uplift=nn.Identity(), weight=1, use_batch=True,K=None):
-        if use_batch and self.mode == 'gradient_descent':
+        if use_batch and self.minimizer == 'gradient_descent':
             y, reg, reg2 = self.gradient_descent_batch(y,project,uplift,weight)
         else:
             nb = y.shape[0]
@@ -363,11 +366,11 @@ class ConstraintTemplate(ABC, nn.Module):
             reg = 0
             reg2 = 0
             for i in range(nb):
-                if self.mode == 'gradient_descent':
+                if self.minimizer == 'gradient_descent':
                     tmp, regi,regi2,problems = self.gradient_descent(y[i:i+1],project,uplift, K, weight[i:i+1])
                     if problems:
                         tmp, regi, regi2, problems = self.gradient_descent(y[i:i + 1], project, uplift, K, weight[i:i + 1])
-                elif self.mode == 'cg':
+                elif self.minimizer == 'cg':
                     tmp, regi,regi2 = self.conjugate_gradient(y[i:i+1],K=K,weight=weight[i:i+1])
                 else:
                     raise NotImplementedError("the mode you have selected is not implemented yet")

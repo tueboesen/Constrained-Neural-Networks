@@ -5,6 +5,9 @@ from src.network_mim import neural_network_mimetic
 
 
 def generate_neural_network(c,con_fnc):
+    """
+    A wrapper function for various neural networks currently supported.
+    """
     c_dict = OmegaConf.to_container(c)
     name = c_dict.pop("name", None)
 
