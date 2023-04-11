@@ -14,6 +14,8 @@ class ProjectUpliftEQ(torch.nn.Module):
     '''
     def __init__(self,irreps_low,irreps_high):
         super(ProjectUpliftEQ, self).__init__()
+        irreps_low = o3.Irreps(irreps_low)
+        irreps_high = o3.Irreps(irreps_high)
         self.irreps_low = irreps_low
         self.irreps_high = irreps_high
         self.n_vec_low = ExtractIr(irreps_low, '1o').irreps_out.num_irreps
