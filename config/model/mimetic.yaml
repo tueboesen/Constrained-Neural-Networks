@@ -1,0 +1,10 @@
+name: "mimetic"
+dim_in: ???
+dim_latent: 120
+layers: 8
+max_radius: 15
+discretization_method: 'rk4'
+orthogonal_projection: True
+penalty_strength: 0
+regularization_strength: 0
+con_type: 'high'

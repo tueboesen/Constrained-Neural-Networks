@@ -1,0 +1,15 @@
+name: 'water'
+#file: './data/water/water.npz'
+file: './../data/water/water.npz'
+use_val: False
+use_test: False
+metafile: ???
+n_train: 100
+n_val: 100
+n_test: 100
+batchsize_train: 10
+batchsize_val: 1000
+nskip: 20
+device: ???
+
+data_id: {'r':[0, 1, 2, 3, 4, 5, 6, 7, 8], 'v':[9,10,11,12,13,14,15,16,17]}

@@ -1,0 +1,46 @@
+
+defaults:
+  - constraint: multibodypendulum
+  - data: multibodypendulum
+  - model: mimetic
+  - logging: standard
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: ${logging.hydra_folder}
+  sweeper:
+    params:
+#      +model: "{con_type : '', penalty_strength : 3, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 3},{con_type : 'low', penalty_strength : 3, regularization_strength : 3},{con_type : 'high', penalty_strength : 3, regularization_strength : 3}"
+#      ++run.seed: 1234,1235,1236
+      +model: "{con_type : 'high', penalty_strength : 3, regularization_strength : 3}"
+      ++run.seed: 1235,1236
+#      ++data.n_train: 100,1235,1236
+
+
+data:
+  n_train: 10000
+  n_val: 10000
+  nskip: 100
+
+run:
+  experiment_name: 'mbp - tables n_train=10000, nskip=100'
+  name: ???
+  epochs: 100
+  debug: false
+  seed: 1234
+  loss_type: 'eq'
+  precision: torch.float64
+  device: ???
+  loss_indices: ${data.data_id}
+
+optimizer:
+  lr: 0.001
+#  momentum: 0.9
+
+model:
+  con_type: ''
+  penalty_strength: 0
+  regularization_strength: 10
+
+#To see the results use: mlflow ui --backend-store-uri /home/tue/PycharmProjects/results/mlflow (where path can be found in the logging yaml

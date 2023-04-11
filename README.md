@@ -2,6 +2,7 @@
 
 This project tests various ways of adding constraints into a neural network, as detailed in https://arxiv.org/pdf/2211.14302.pdf.
 
+
 ## Installation
 
 The requirements for running this code can be found in requirements.txt and can be installed by running:
