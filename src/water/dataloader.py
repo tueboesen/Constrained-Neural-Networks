@@ -35,8 +35,8 @@ def feature_transform_water(file,nskip,device):
     particle_mass = atomic_masses(particle_type).view(-1,3)
     particle_type = particle_type.view(-1, 3)
 
-    rscale = torch.sqrt(R.pow(2).mean())
-    vscale = torch.sqrt(V.pow(2).mean())
+    rscale = torch.sqrt(R.pow(2).mean()).item()
+    vscale = torch.sqrt(V.pow(2).mean()).item()
     R /= rscale
     V /= vscale
 

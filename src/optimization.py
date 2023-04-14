@@ -33,8 +33,7 @@ def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
     names = ['train', 'val']
     mlflow.set_tracking_uri(c.logging.mlflow_folder)
     with mlflow.start_run(run_name=c.run.name) as run:
-        artifact_path = "models"
-        mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
+        # artifact_path = "models"
         log_parameters(c)
         metrics = Metrics(name='train')
         for epoch in range(c.run.epochs):
@@ -43,6 +42,12 @@ def optimize_model(c,model,dataloaders,optimizer,loss_fnc):
                     loss = run_model(epoch,c,model,dataloaders[name],optimizer,loss_fnc,metrics,type=name)
         if 'test' in dataloaders:
             loss = run_model(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
+        mlflow.pytorch.log_state_dict(model.state_dict(), 'models')
+        mlflow.pytorch.get_default_pip_requirements()
+        # mlflow.pytorch.save_model(model,'modelsdfs')
+        # mlflow.pytorch.log_model(model.to(device='cpu'), "models")
+        # mlflow.pytorch.get_default_conda_env()
+        # mlflow.pytorch.get_default_pip_requirements()
     return loss
 
 class Metrics:

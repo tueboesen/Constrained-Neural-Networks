@@ -68,7 +68,7 @@ class ConstraintTemplate(ABC, nn.Module):
     """
 
     # def __init__(self, tol,niter,sanity_check_upon_first_run=True,debug_folder=None,use_newton_steps=False,mode='cg',scale=1):
-    def __init__(self, tolerance, max_iter, minimizer='gradient_descent', n_constraints=None, scale=1, include_second_order_constraints=False):
+    def __init__(self, tolerance, max_iter, minimizer='gradient_descent', n_constraints=None, scale=1, include_second_order_constraints=False, abs_tol=None):
         super(ConstraintTemplate, self).__init__()
         self.include_second_order_constraints = include_second_order_constraints
         self.tolerance = tolerance
@@ -77,6 +77,9 @@ class ConstraintTemplate(ABC, nn.Module):
         self.minimizer = minimizer
         assert minimizer in ['cg','gradient_descent']
         self.n_constraints = n_constraints
+        if abs_tol is None:
+            abs_tol = tolerance*0.01
+        self.abs_tol = abs_tol
         return
 
     def debug(self,x):
@@ -322,8 +325,9 @@ class ConstraintTemplate(ABC, nn.Module):
                 idx_sel = idx[~M_try]
                 alpha[idx_sel] = alpha[idx_sel] / 2
                 lsiter[~M_try] = lsiter[~M_try] + 1
-                if lsiter.max() > 100:
+                if lsiter.max() > 20:
                     break
+            # if ((1 - cm_try)/cm[idx]).abs() < self.rel_tol
             M_increase = lsiter == 0
             idx_sel = idx[M_increase]
             ysel = y[idx] - alpha[idx,None,None] * dy
@@ -338,10 +342,18 @@ class ConstraintTemplate(ABC, nn.Module):
                     yall.append(y[i])
             y = torch.stack(yall,dim=0)
             j += 1
+            if alpha.min() < self.tolerance:
+                print("Alpha too small")
+                break
+            # if (cm[idx] - cm_try).abs().max() < self.abs_tol:
+            #     print("abs tol early stopping")
+                # break
+
             if j > self.max_iter:
-                # print("Projection failed")
+                print("Projection failed")
                 break
         # print(f"projection {j} steps. Max violation: {cm_norm_init.item():2.2e} -> {cm_norm.max().item():2.2e}")
+        # print(alpha.min().item())
         return y, reg, reg2
 
     def constraint_violation(self, x):
@@ -531,7 +543,7 @@ class Water(ConstraintTemplate):
     def __init__(self, length, position_idx=(0, 1, 2, 3, 4, 5, 6, 7, 8), velocity_idx=(9,10,11,12,13,14,15,16,17), **kwargs):
         super(Water, self).__init__(**kwargs)
         if not isinstance(length, torch.Tensor):
-            length = torch.tensor(length)
+            length = torch.tensor(length) / self.scale
         self.register_buffer('l', length)
         # self.l = length
         self.position_idx = position_idx

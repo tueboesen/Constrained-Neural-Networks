@@ -1,12 +1,12 @@
 name: 'water'
 #file: './data/water/water.npz'
 file: './../data/water/water.npz'
-use_val: False
-use_test: False
+use_val: True
+use_test: True
 metafile: ???
 n_train: 100
 n_val: 100
-n_test: 100
+n_test: 1000
 batchsize_train: 10
 batchsize_val: 1000
 nskip: 20

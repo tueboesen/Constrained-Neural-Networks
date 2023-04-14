@@ -18,6 +18,7 @@ def main(c):
     torch.set_default_dtype(eval(c.run.precision))
     fix_seed(c.run.seed)  # Set a seed, so we make reproducible results.
     dataloaders = load_data_wrapper(c.data)
+    c.constraint.scale = dataloaders['train'].dataset.rscale
     con_fnc = generate_constraints(c.constraint)
     model = generate_neural_network(c.model,con_fnc=con_fnc)
     model.to(c.run.device)

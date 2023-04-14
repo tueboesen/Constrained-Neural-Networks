@@ -17,12 +17,12 @@ hydra:
 
 
 data:
-  n_train: 100
-  n_val: 100
+  n_train: 1000
+  n_val: 1000
   nskip: 200
 
 run:
-  experiment_name: 'mbp - tables n_train=100, nskip=200'
+  experiment_name: 'mbp - tables n_train=1000, nskip=200'
   name: ???
   epochs: 100
   debug: false

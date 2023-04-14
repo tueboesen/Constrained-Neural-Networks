@@ -8,3 +8,4 @@ orthogonal_projection: True
 penalty_strength: 0
 regularization_strength: 0
 con_type: 'high'
+load_state: ''

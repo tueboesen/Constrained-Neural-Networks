@@ -81,6 +81,7 @@ class neural_network_equivariant(torch.nn.Module):
             self.self_interaction.append(SelfInteraction(self.irreps_hidden,self.irreps_hidden))
         self.convolutions = torch.nn.ModuleList()
         self.gates = torch.nn.ModuleList()
+        # self.h = torch.nn.Parameter(torch.ones(layers)*1e-5)
         self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
         # self.h = torch.ones(layers)*1e-2
         self.mix = torch.nn.Parameter(torch.ones(layers)*0.75)
@@ -158,6 +159,7 @@ class neural_network_equivariant(torch.nn.Module):
         reg = torch.tensor(0.0)
 
         for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
+            # dt = max(min(self.h[i]**2,0.1),1e-10)
             dt = max(min(self.h[i]**2,0.1),1e-4)
             edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
 
@@ -204,7 +206,10 @@ class neural_network_equivariant(torch.nn.Module):
             x = x.view(-1,ndimx)
 
         if self.con_fnc is not None:
-            _, cv_mean,cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
+            cv, cv_mean,cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
+            if reg == 0:
+                reg = (cv*cv).mean()
+
         else:
             cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
 

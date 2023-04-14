@@ -26,18 +26,6 @@ In that case you should look at the individual packages website and see how they
 The project uses MLflow for experiment tracking, Hydra for configuration file management and multiruns and Optuna for optimization.
 The core of this project is the constraint class, which can be found in src/constraints.py. In order to create your own constraints you inherit from the ConstraintTemplate class and define the required methods.  
 
-### data
-Data goes here. For instance water.npz which is not included in the github project due to size limitations. But the water.npz dataset for water simulations can be requested by sending an email to the corresponding author of tha paper.
-    
-### examples
-Scripts to run. 
-
-### preprocess
-Scripts that were used in order to get data into a format used in this project. Currently contains scripts for converting a cp2k dataset to a npz file, and for preparing proteinnet datasets.
-
-### src
-The source code folder.
-
 ## Getting started
 As a starting point I would suggest running the multibody pendulum example "train_pendulum.py" in the examples folder.
 
