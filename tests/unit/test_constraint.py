@@ -1,10 +1,10 @@
+import os
 import random
 
-import torch
-from hydra import compose, initialize
-from omegaconf import OmegaConf
-import os
 import pytest
+import torch
+from omegaconf import OmegaConf
+
 from src.constraints import generate_constraints, ConstraintTemplate
 
 
@@ -21,10 +21,11 @@ def test_constraint_yaml(config_path):
     """
     for filename in os.listdir(config_path):
         if filename.endswith(".yaml"):
-            file = os.path.join(config_path,filename)
+            file = os.path.join(config_path, filename)
             cfg = OmegaConf.load(file)
             con_fnc = generate_constraints(cfg)
             assert isinstance(con_fnc, ConstraintTemplate)
+
 
 def test_constraint_consitency(config_path):
     """
@@ -39,19 +40,18 @@ def test_constraint_consitency(config_path):
     n_batch = 10
     for filename in os.listdir(config_path):
         if filename.endswith(".yaml"):
-            file = os.path.join(config_path,filename)
+            file = os.path.join(config_path, filename)
             cfg = OmegaConf.load(file)
             con_fnc = generate_constraints(cfg)
             pos = con_fnc.position_idx
             vel = con_fnc.velocity_idx
             if con_fnc.n_constraints is None:
-                ncon = random.randint(1,10)
+                ncon = random.randint(1, 10)
             else:
                 ncon = con_fnc.n_constraints
-            dim_in = len(pos)+len(vel)
-            x = torch.randn(n_batch,ncon,dim_in)
+            dim_in = len(pos) + len(vel)
+            x = torch.randn(n_batch, ncon, dim_in)
             x_con, reg, reg2 = con_fnc(x)
             cv_after, cv_mean_after, cv_max_after = con_fnc.constraint_violation(x_con)
             cv, cv_mean, cv_max = con_fnc.constraint_violation(x)
             assert (cv_mean_after < cv_mean) and (cv_max_after < cv_max)
-

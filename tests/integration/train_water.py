@@ -1,7 +1,8 @@
+import hydra
+from omegaconf import DictConfig
+
 from src.main import main
 
-import hydra
-from omegaconf import DictConfig, OmegaConf
 
 @hydra.main(version_base=None, config_path="./../config", config_name="water")
 def my_app(cfg: DictConfig) -> None:

@@ -1,4 +1,3 @@
-
 defaults:
   - constraint: water
   - data: water
@@ -11,22 +10,17 @@ hydra:
     dir: ${logging.hydra_folder}
   sweeper:
     params:
-#      +model: "{con_type : '', penalty_strength : 5, regularization_strength : 0},{con_type : '', penalty_strength : 10, regularization_strength : 0},{con_type : '', penalty_strength : 50, regularization_strength : 0},{con_type : '', penalty_strength : 100, regularization_strength : 0},{con_type : '', penalty_strength : 500, regularization_strength : 0}"
-#      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 1, regularization_strength : 0},{con_type : '', penalty_strength : 5, regularization_strength : 0},{con_type : '', penalty_strength : 10, regularization_strength : 0},{con_type : '', penalty_strength : 20, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 1},{con_type : '', penalty_strength : 0, regularization_strength : 3},{con_type : '', penalty_strength : 0, regularization_strength : 5},{con_type : '', penalty_strength : 0, regularization_strength : 10},{con_type : '', penalty_strength : 0, regularization_strength : 20}"
-      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 1, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 1},{con_type : 'low', penalty_strength : 1, regularization_strength : 1},{con_type : 'high', penalty_strength : 1, regularization_strength : 1}"
-#      +model: "{con_type : 'low', penalty_strength : 1, regularization_strength : 1},{con_type : 'high', penalty_strength : 1, regularization_strength : 1}"
-#      +model: "{con_type : 'high', penalty_strength : 1, regularization_strength : 1}"
-#      +model: "{con_type : 'low', penalty_strength : 1, regularization_strength : 1}"
-      ++run.seed: 1234
+      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 1},{con_type : 'low', penalty_strength : 1, regularization_strength : 1},{con_type : 'high', penalty_strength : 1, regularization_strength : 1},{con_type : '', penalty_strength : 1, regularization_strength : 0}"
+      ++run.seed: 1234,1235,1236
 
 
 data:
-  n_train: 1000
-  n_val: 1000
+  n_train: 10000
+  n_val: 10000
   nskip: 50
 
 run:
-  experiment_name: 'water - tables ntrain=1000'
+  experiment_name: 'water - tables ntrain=10000'
   name: ???
   epochs: 30
   debug: false
@@ -34,15 +28,15 @@ run:
   loss_type: 'eq'
   precision: torch.float64
   device: ???
-  loss_indices: ${data.data_id}
+  loss_indices: { 'r': [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ] }
+#  loss_indices: ${data.data_id}
 
 optimizer:
   lr: 0.001
-#  momentum: 0.9
 
 model:
   con_type: ''
   penalty_strength: 0
   regularization_strength: 1
 
-#To see the results use: mlflow ui --backend-store-uri /home/tue/PycharmProjects/results/mlflow (where path can be found in the logging yaml
+#To see the results use: mlflow ui --backend-store-uri /home/tue/PycharmProjects/results/mlflow (where path can be found in the logging yaml)

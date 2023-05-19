@@ -4,14 +4,13 @@ version of february 2021
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from e3nn import o3
 from e3nn.math import soft_one_hot_linspace
 from e3nn.nn import Gate
 
 from src.EQ_operations import SelfInteraction, Convolution, tp_path_exists
 from src.project_uplift import ProjectUpliftEQ
-from src.utils import smooth_cutoff, atomic_masses
+from src.utils import smooth_cutoff
 from src.vizualization import plot_water
 
 
@@ -19,24 +18,25 @@ class neural_network_equivariant(torch.nn.Module):
     """
     An equivariant neural network built in e3nn inspired by their MD simulating neural network paper (the network has not been published at this time)
     """
+
     def __init__(
-        self,
-        irreps_inout,
-        irreps_hidden,
-        layers,
-        max_radius,
-        number_of_basis,
-        radial_neurons,
-        num_neighbors,
-        num_nodes,
-        embed_dim,
-        max_atom_types,
-        con_fnc=None,
-        con_type=None,
-        particles_pr_node=1,
-        discretization_method='leapfrog',
-        penalty_strength=0,
-        regularization_strength=1
+            self,
+            irreps_inout,
+            irreps_hidden,
+            layers,
+            max_radius,
+            number_of_basis,
+            radial_neurons,
+            num_neighbors,
+            num_nodes,
+            embed_dim,
+            max_atom_types,
+            con_fnc=None,
+            con_type=None,
+            particles_pr_node=1,
+            discretization_method='leapfrog',
+            penalty_strength=0,
+            regularization_strength=1
     ) -> None:
         super().__init__()
         irreps_inout = o3.Irreps(irreps_inout)
@@ -52,7 +52,7 @@ class neural_network_equivariant(torch.nn.Module):
         self.irreps_edge_attr = o3.Irreps(irreps_inout)
         self.con_fnc = con_fnc
         self.con_type = con_type
-        self.PU = ProjectUpliftEQ(irreps_inout,irreps_hidden)
+        self.PU = ProjectUpliftEQ(irreps_inout, irreps_hidden)
         self.project = self.PU.project
         self.uplift = self.PU.uplift
         self.discretization_method = discretization_method
@@ -71,21 +71,21 @@ class neural_network_equivariant(torch.nn.Module):
             1: torch.sigmoid,
             -1: torch.tanh,
         }
-        self.node_embedder = torch.nn.Embedding(max_atom_types,embed_dim)
+        self.node_embedder = torch.nn.Embedding(max_atom_types, embed_dim)
         self.irreps_node_attr = o3.Irreps("{:}x0e".format(embed_dim))
 
         self.self_interaction = torch.nn.ModuleList()
         irreps = self.irreps_hidden
-        self.self_interaction.append(SelfInteraction(irreps,irreps))
-        for _ in range(1,layers):
-            self.self_interaction.append(SelfInteraction(self.irreps_hidden,self.irreps_hidden))
+        self.self_interaction.append(SelfInteraction(irreps, irreps))
+        for _ in range(1, layers):
+            self.self_interaction.append(SelfInteraction(self.irreps_hidden, self.irreps_hidden))
         self.convolutions = torch.nn.ModuleList()
         self.gates = torch.nn.ModuleList()
         # self.h = torch.nn.Parameter(torch.ones(layers)*1e-5)
-        self.h = torch.nn.Parameter(torch.ones(layers)*1e-2)
+        self.h = torch.nn.Parameter(torch.ones(layers) * 1e-2)
         # self.h = torch.ones(layers)*1e-2
-        self.mix = torch.nn.Parameter(torch.ones(layers)*0.75)
-        radial_neurons_prepend = [2*particles_pr_node*self.number_of_basis] + radial_neurons
+        self.mix = torch.nn.Parameter(torch.ones(layers) * 0.75)
+        radial_neurons_prepend = [2 * particles_pr_node * self.number_of_basis] + radial_neurons
         for _ in range(layers):
             irreps_scalars = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l == 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
             irreps_gated = o3.Irreps([(mul, ir) for mul, ir in self.irreps_hidden if ir.l > 0 and tp_path_exists(irreps, self.irreps_edge_attr, ir)])
@@ -110,17 +110,17 @@ class neural_network_equivariant(torch.nn.Module):
             self.gates.append(gate)
         self.params = nn.ModuleDict({
             "base": nn.ModuleList([self.convolutions, self.gates, self.self_interaction]),
-            "h": nn.ParameterList([self.h,self.mix]),
+            "h": nn.ParameterList([self.h, self.mix]),
             "close": nn.ModuleList([self.PU.lin])
         })
         return
 
-    def get_edge_info(self,x,edge_src,edge_dst):
+    def get_edge_info(self, x, edge_src, edge_dst):
         nvec = x.shape[-1] // 3
-        edge_features =[]
+        edge_features = []
         edge_attrs = []
         for i in range(nvec):
-            edge_vec = x[:,i*3:i*3+3][edge_src] - x[:,i*3:i*3+3][edge_dst]
+            edge_vec = x[:, i * 3:i * 3 + 3][edge_src] - x[:, i * 3:i * 3 + 3][edge_dst]
             edge_sh = o3.spherical_harmonics(o3.Irreps("1x1o"), edge_vec, True, normalization='component')
             edge_length = edge_vec.norm(dim=1)
             edge_feature = soft_one_hot_linspace(
@@ -138,19 +138,19 @@ class neural_network_equivariant(torch.nn.Module):
         edge_features = torch.cat(edge_features, dim=-1)
         return edge_features, edge_attrs
 
-    def forward_propagation(self,y,node_attr_embedded,edge_src,edge_dst,edge_attr,edge_features,num_neighbors,i):
+    def forward_propagation(self, y, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, num_neighbors, i):
         y_new = self.convolutions[i](y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, num_neighbors)
         y_new = self.gates[i](y_new)
         y_new2 = self.self_interaction[i](y.clone())
-        y_out = min(self.mix[i]**2,1) * y_new + (1 - min(self.mix[i]**2,1)) * y_new2
+        y_out = min(self.mix[i] ** 2, 1) * y_new + (1 - min(self.mix[i] ** 2, 1)) * y_new2
         return y_out
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst,wstatic=None,weight=1) -> torch.Tensor:
+    def forward(self, x, batch, node_attr, edge_src, edge_dst, wstatic=None, weight=1) -> torch.Tensor:
 
         if self.automatic_neighbors:
-            self.num_neighbors = edge_dst.shape[0]/x.shape[0]
+            self.num_neighbors = edge_dst.shape[0] / x.shape[0]
 
-        node_attr_embedded = self.node_embedder(torch.min(node_attr,dim=-1)[0].to(dtype=torch.int64)).squeeze()
+        node_attr_embedded = self.node_embedder(torch.min(node_attr, dim=-1)[0].to(dtype=torch.int64)).squeeze()
         y = self.uplift(x)
 
         ndimx = x.shape[-1]
@@ -158,10 +158,10 @@ class neural_network_equivariant(torch.nn.Module):
         y_old = y
         reg = torch.tensor(0.0)
 
-        for i,(conv,gate) in enumerate(zip(self.convolutions,self.gates)):
+        for i, (conv, gate) in enumerate(zip(self.convolutions, self.gates)):
             # dt = max(min(self.h[i]**2,0.1),1e-10)
-            dt = max(min(self.h[i]**2,0.1),1e-4)
-            edge_features,edge_attr = self.get_edge_info(x,edge_src,edge_dst)
+            dt = max(min(self.h[i] ** 2, 0.1), 1e-4)
+            edge_features, edge_attr = self.get_edge_info(x, edge_src, edge_dst)
 
             if self.penalty_strength > 0:
                 if self.discretization_method == 'rk4':
@@ -178,7 +178,7 @@ class neural_network_equivariant(torch.nn.Module):
             if self.discretization_method == 'leapfrog':
                 y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 tmp = y.clone()
-                y = 2*y - y_old + dt *(y_new + self.penalty_strength*dy)
+                y = 2 * y - y_old + dt * (y_new + self.penalty_strength * dy)
                 y_old = tmp
             elif self.discretization_method == 'euler':
                 y_new = self.forward_propagation(y.clone(), node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
@@ -188,30 +188,28 @@ class neural_network_equivariant(torch.nn.Module):
                 k2 = self.forward_propagation(y.clone() + k1 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k3 = self.forward_propagation(y.clone() + k2 * dt / 2, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
                 k4 = self.forward_propagation(y.clone() + k3 * dt, node_attr_embedded, edge_src, edge_dst, edge_attr, edge_features, self.num_neighbors, i)
-                y_new = (k1 + 2*k2 + 2*k3 + k4)/6
-                y = y + dt * (y_new - self.penalty_strength*dy)
+                y_new = (k1 + 2 * k2 + 2 * k3 + k4) / 6
+                y = y + dt * (y_new - self.penalty_strength * dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
-
             if self.con_fnc is not None and self.con_type == 'high':
-                y, _, regi = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.project,self.uplift,weight)
-                y = y.view(-1,ndimy)
+                y, _, regi = self.con_fnc(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                y = y.view(-1, ndimy)
                 reg = reg + regi
-
 
             x = self.project(y)
         if self.con_fnc is not None and self.con_type == 'low':
-            x, _, reg = self.con_fnc(x.view(batch.max() + 1,-1,ndimx),weight=weight)
-            x = x.view(-1,ndimx)
+            x, _, reg = self.con_fnc(x.view(batch.max() + 1, -1, ndimx), weight=weight)
+            x = x.view(-1, ndimx)
 
         if self.con_fnc is not None:
-            cv, cv_mean,cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
+            cv, cv_mean, cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
             if reg == 0:
-                reg = (cv*cv).mean()
+                reg = (cv * cv).mean()
 
         else:
-            cv_mean,cv_max = torch.tensor(-1.0),  torch.tensor(-1.0)
+            cv_mean, cv_max = torch.tensor(-1.0), torch.tensor(-1.0)
 
         return x, cv_mean, cv_max, reg * self.regularization_strength
 
@@ -226,7 +224,7 @@ class neural_network_equivariant(torch.nn.Module):
         x_old = self.PU.project(y_old)
         r_old = x_old[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
         v_old = x_old[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
-        plot_water(r_new,v_new,r_old,v_old)
+        plot_water(r_new, v_new, r_old, v_old)
 
     def get_water_viz_low(self, x_new, x_old, x_org, batch):
         ndim = x_new.shape[-1] // 2
@@ -241,5 +239,4 @@ class neural_network_equivariant(torch.nn.Module):
         r_org = x_org[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
         v_org = x_org[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
 
-        plot_water(r_new,v_new,r_old,v_old,r_org,v_org)
-
+        plot_water(r_new, v_new, r_old, v_old, r_org, v_org)

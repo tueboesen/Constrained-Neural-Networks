@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 
 
-def setup_custom_logger(name,logfile_loc,debug):
+def setup_custom_logger(name, logfile_loc, debug):
     '''
     Starts a logger that prints to a file and to the screen.
     '''
@@ -20,13 +20,15 @@ def setup_custom_logger(name,logfile_loc,debug):
     logger.info('Starting logfile at {}.'.format(datetime.now()))
     return logger
 
-def log_all_parameters(LOG,args):
+
+def log_all_parameters(LOG, args):
     """
     Logs all parameters in the dictionary args
     """
     LOG.info('---------Listing all parameters-------')
     for key, value in args.items():
         LOG.info("{:30s} : {}".format(key, value))
+
 
 def close_logger(log):
     '''

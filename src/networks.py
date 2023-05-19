@@ -5,7 +5,7 @@ from src.network_e3 import neural_network_equivariant
 from src.network_mim import neural_network_mimetic
 
 
-def generate_neural_network(c,con_fnc):
+def generate_neural_network(c, con_fnc):
     """
     A wrapper function for various neural networks currently supported.
     """
@@ -13,11 +13,10 @@ def generate_neural_network(c,con_fnc):
     name = c_dict.pop("name", None)
     load_state = c_dict.pop("load_state", None)
 
-
     if name == 'mimetic':
-        model = neural_network_mimetic(con_fnc=con_fnc,**c_dict)
+        model = neural_network_mimetic(con_fnc=con_fnc, **c_dict)
     elif name == 'equivariant':
-        model = neural_network_equivariant(con_fnc=con_fnc,**c_dict)
+        model = neural_network_equivariant(con_fnc=con_fnc, **c_dict)
     else:
         raise NotImplementedError(f"model name {name} not implemented yet.")
 

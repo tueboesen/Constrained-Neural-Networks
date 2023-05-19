@@ -1,17 +1,14 @@
-import inspect
-import math
 import os
-import time
 from os.path import exists
 
 import numpy as np
 import torch
 import torch.utils.data as data
-from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from torch_cluster import radius_graph
 
-def data_split(features,metafile,n_train,n_val,n_test):
+
+def data_split(features, metafile, n_train, n_val, n_test):
     """
     Splits the features into train, val and test.
     If a relevant metafile already exist, it gets the splitting indices from that.
@@ -32,7 +29,7 @@ def data_split(features,metafile,n_train,n_val,n_test):
         idx_val = ndata_rand[n_train:n_train + n_val]
         idx_test = ndata_rand[n_train + n_val:n_train + n_val + n_test]
         os.makedirs(os.path.dirname(metafile), exist_ok=True)
-        np.savez(metafile, idx_train=idx_train, idx_val=idx_val, idx_test=idx_test,ndata=ndata)
+        np.savez(metafile, idx_train=idx_train, idx_val=idx_val, idx_test=idx_test, ndata=ndata)
 
     f_train = {}
     f_val = {}
@@ -43,7 +40,8 @@ def data_split(features,metafile,n_train,n_val,n_test):
         f_test[key] = feature[idx_test]
     return f_train, f_val, f_test
 
-def attach_edge_generator(dataloaders,edge_generator):
+
+def attach_edge_generator(dataloaders, edge_generator):
     """
     This function attaches an edge generator to all dataloaders in a dataloader dict.
 
@@ -54,25 +52,23 @@ def attach_edge_generator(dataloaders,edge_generator):
     return dataloaders
 
 
-
-def generate_dataloaders(f_train,f_val,f_test,batchsize_train,batchsize_val,use_val,use_test,rscale=1,vscale=1,collate_vars_fnc=None):
+def generate_dataloaders(f_train, f_val, f_test, batchsize_train, batchsize_val, use_val, use_test, rscale=1, vscale=1, collate_vars_fnc=None):
     """
     Returns a dict containing the requested dataloaders (note that a training dataloader is mandatory at this point).
     """
 
     dataloaders = {}
-    dataset_train = DatasetFutureState(rscale=rscale,vscale=vscale,**f_train)
+    dataset_train = DatasetFutureState(rscale=rscale, vscale=vscale, **f_train)
     dataloader_train = Dataloader_ext(dataset_train, batch_size=batchsize_train, shuffle=True, drop_last=True)
     dataloaders['train'] = dataloader_train
 
     if use_val:
-        dataset_val = DatasetFutureState(rscale=rscale,vscale=vscale,**f_val)
+        dataset_val = DatasetFutureState(rscale=rscale, vscale=vscale, **f_val)
         dataloader_val = Dataloader_ext(dataset_val, batch_size=batchsize_val, shuffle=False, drop_last=False)
         dataloaders['val'] = dataloader_val
 
-
     if use_test:
-        dataset_test = DatasetFutureState(rscale=rscale,vscale=vscale,**f_test)
+        dataset_test = DatasetFutureState(rscale=rscale, vscale=vscale, **f_test)
         dataloader_test = Dataloader_ext(dataset_test, batch_size=batchsize_val, shuffle=False, drop_last=False)
         dataloaders['test'] = dataloader_test
 
@@ -82,11 +78,11 @@ def generate_dataloaders(f_train,f_val,f_test,batchsize_train,batchsize_val,use_
     return dataloaders
 
 
-
 class DatasetFutureState(data.Dataset):
     """
     A dataset type for future state predictions.
     """
+
     def __init__(self, Rin, Rout, Vin, Vout, particle_type, particle_mass, data_id=1, rscale=1, vscale=1):
         self.Rin = Rin
         self.Rout = Rout
@@ -119,10 +115,11 @@ class DatasetFutureState(data.Dataset):
     def __str__(self):
         return f"{self.__class__.__name__}(len={len(self.Rin)})"
 
+
 class Dataloader_ext(DataLoader):
 
     @classmethod
-    def collate_vars(cls,Rin, Rout, Vin, Vout, z, m):
+    def collate_vars(cls, Rin, Rout, Vin, Vout, z, m):
         """
         We expect the data to have the following structure:
         [nb,nm,np,nd]
@@ -132,14 +129,12 @@ class Dataloader_ext(DataLoader):
         nd is the number of dimensions for each of those particles (x,y,z,vx,vy,vz) or (x,y,vx,vy) for instance
         """
 
-
         # nb, nm, np, nd = Rin.shape
 
         Rin_vec = Rin.reshape(-1, Rin.shape[-1])
         Rout_vec = Rout.reshape(-1, Rin.shape[-1])
         Vin_vec = Vin.reshape(-1, Rin.shape[-1])
         Vout_vec = Vout.reshape(-1, Rin.shape[-1])
-
 
         # Rin_vec = Rin.reshape(-1, Rin.shape[2]*Rin.shape[3])
         # Rout_vec = Rout.reshape(-1, Rin.shape[2]*Rin.shape[3])
@@ -153,18 +148,17 @@ class Dataloader_ext(DataLoader):
 
         x_vec = torch.cat([Rin_vec, Vin_vec], dim=-1)
         xout_vec = torch.cat([Rout_vec, Vout_vec], dim=-1)
-        weights = (1 / m)#.repeat(1,1,1,x_vec.shape[-1]//m.shape[-1])
+        weights = (1 / m)  # .repeat(1,1,1,x_vec.shape[-1]//m.shape[-1])
         return batch, x_vec, z_vec, m_vec, weights, xout_vec
 
     @classmethod
-    def generate_edges(cls,batch,x,max_radius):
+    def generate_edges(cls, batch, x, max_radius):
         """
         The standard edge generator connects a node to all other nodes within a certain radius (maximum 120 connections).
         """
-        Rin_vec = x[...,...]
+        Rin_vec = x[..., ...]
         edge_index = radius_graph(Rin_vec, max_radius, batch, max_num_neighbors=120)
         edge_src = edge_index[0]
         edge_dst = edge_index[1]
         wstatic = None
         return edge_src, edge_dst, wstatic
-

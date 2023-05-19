@@ -4,7 +4,7 @@ irreps_hidden: "30x0o+30x0e+20x1o+20x1e"
 layers: 8
 max_radius: 15
 number_of_basis: 8
-radial_neurons: [48]
+radial_neurons: [ 48 ]
 num_neighbors: -1
 num_nodes: 32
 embed_dim: 2
