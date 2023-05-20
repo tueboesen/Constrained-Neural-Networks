@@ -7,7 +7,6 @@ from src.main import main
 @hydra.main(version_base=None, config_path="./../config", config_name="water_tables")
 def my_app(cfg: DictConfig) -> None:
     main(cfg)
-    # print(OmegaConf.to_yaml(cfg))
 
 
 if __name__ == "__main__":

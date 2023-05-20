@@ -23,10 +23,23 @@ In that case you should look at the individual packages website and see how they
 
 ## Project structure
 The project uses MLflow for experiment tracking, Hydra for configuration file management and multiruns.
-The core of this project is the constraint class, which can be found in src/constraints.py. In order to create your own constraints you inherit from the ConstraintTemplate class and define the required methods.  
+The core of this project is the constraint class, which can be found in src/constraints.py. 
 
 ## Getting started
 As a starting point I would suggest running the multibody pendulum example "train_pendulum.py" in the examples folder.
+
+### Reproducing paper results
+The results found in the paper can easily be reproduced with train_pendulum.py and train_water.py.
+
+train_paper is currently set to run pendulum predictions with 100 training samples and predictions 100 steps ahead for all constraint types, corresponding to the upper half of the first column of table 1.
+In order to produce any of the other results in table 1, the appropriate settings are changed in configuration file multibodypendulum_tables.yaml.
+
+Similarly, results in table two can be generated with train_water.py, though it should be noted that this takes significantly longer to run.
+
+### Creating custom constraints
+
+In order to create your own constraints create a class that inherits from the ConstraintTemplate class and define the required methods. 
+
 
 ## Contribution
 The code in the project is running and has a few unit tests for the constraint class, which is the hearth of this project. Nevertheless, the project is still in a rather coarse and unpolished stage.
