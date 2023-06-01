@@ -4,7 +4,8 @@ from src.constraints import generate_constraints
 from src.dataloader import load_data_wrapper
 from src.loss import Loss
 from src.networks import generate_neural_network
-from src.optimization import optimize_model
+from src.optimization import generate_constraints_minimizer
+from src.training import optimize_model
 from src.utils import fix_seed, configuration_processor
 
 torch.set_printoptions(precision=10)
@@ -17,11 +18,13 @@ def main(c):
     """
     c = configuration_processor(c)
     torch.set_default_dtype(eval(c.run.precision))
-    fix_seed(c.run.seed)  # Set a seed, so we make reproducible results.
+    fix_seed(c.run.seed)
     dataloaders = load_data_wrapper(c.data)
-    c.constraint.scale = dataloaders['train'].dataset.rscale
+    if 'scale' not in c.constraint:
+        c.constraint.scale = dataloaders['train'].dataset.rscale
     con_fnc = generate_constraints(c.constraint)
-    model = generate_neural_network(c.model, con_fnc=con_fnc)
+    min_con_fnc = generate_constraints_minimizer(c.minimization,con_fnc)
+    model = generate_neural_network(c.model, con_fnc=min_con_fnc)
     model.to(c.run.device)
     optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
                                   {"params": model.params.h.parameters()},

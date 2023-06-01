@@ -14,9 +14,9 @@ def generate_neural_network(c, con_fnc):
     load_state = c_dict.pop("load_state", None)
 
     if name == 'mimetic':
-        model = neural_network_mimetic(con_fnc=con_fnc, **c_dict)
+        model = neural_network_mimetic(min_con_fnc=con_fnc, **c_dict)
     elif name == 'equivariant':
-        model = neural_network_equivariant(con_fnc=con_fnc, **c_dict)
+        model = neural_network_equivariant(min_con_fnc=con_fnc, **c_dict)
     else:
         raise NotImplementedError(f"model name {name} not implemented yet.")
 

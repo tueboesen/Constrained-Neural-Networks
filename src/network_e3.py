@@ -31,7 +31,7 @@ class neural_network_equivariant(torch.nn.Module):
             num_nodes,
             embed_dim,
             max_atom_types,
-            con_fnc=None,
+            min_con_fnc=None,
             con_type=None,
             particles_pr_node=1,
             discretization_method='leapfrog',
@@ -50,7 +50,8 @@ class neural_network_equivariant(torch.nn.Module):
         self.irreps_hidden = o3.Irreps(irreps_hidden)
         self.irreps_out = o3.Irreps(irreps_inout)
         self.irreps_edge_attr = o3.Irreps(irreps_inout)
-        self.con_fnc = con_fnc
+        self.min_con_fnc = min_con_fnc
+        self.con_fnc = min_con_fnc.c
         self.con_type = con_type
         self.PU = ProjectUpliftEQ(irreps_inout, irreps_hidden)
         self.project = self.PU.project
@@ -145,7 +146,7 @@ class neural_network_equivariant(torch.nn.Module):
         y_out = min(self.mix[i] ** 2, 1) * y_new + (1 - min(self.mix[i] ** 2, 1)) * y_new2
         return y_out
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst, wstatic=None, weight=1) -> torch.Tensor:
+    def forward(self, x, batch, node_attr, edge_src, edge_dst, wstatic=None, weight=1):
 
         if self.automatic_neighbors:
             self.num_neighbors = edge_dst.shape[0] / x.shape[0]
@@ -158,8 +159,7 @@ class neural_network_equivariant(torch.nn.Module):
         y_old = y
         reg = torch.tensor(0.0)
 
-        for i, (conv, gate) in enumerate(zip(self.convolutions, self.gates)):
-            # dt = max(min(self.h[i]**2,0.1),1e-10)
+        for i in range(len(self.convolutions)):
             dt = max(min(self.h[i] ** 2, 0.1), 1e-4)
             edge_features, edge_attr = self.get_edge_info(x, edge_src, edge_dst)
 
@@ -171,7 +171,7 @@ class neural_network_equivariant(torch.nn.Module):
                     q4 = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy) + q3 * dt, self.project, self.uplift, weight)
                     dy = (q1 + 2 * q2 + 2 * q3 + q4) / 6
                 else:
-                    dy = self.con_fnc.constrain_stabilization(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+                    dy = self.con_fnc.constraint_penalty(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
                 dy = dy.view(-1, ndimy)
             else:
                 dy = 0
@@ -193,50 +193,19 @@ class neural_network_equivariant(torch.nn.Module):
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
 
-            if self.con_fnc is not None and self.con_type == 'high':
-                y, _, regi = self.con_fnc(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight)
+            if self.min_con_fnc is not None and self.con_type == 'high':
+                cv, _, _ = self.con_fnc.constraint_violation(y.view(batch.max() + 1, -1, ndimy), project_fnc=self.project)
+                y = self.min_con_fnc(y.view(batch.max() + 1, -1, ndimy), project_fnc=self.project, uplift_fnc=self.uplift, weight=weight)
                 y = y.view(-1, ndimy)
-                reg = reg + regi
-
+                reg = reg + (cv * cv).mean()
             x = self.project(y)
-        if self.con_fnc is not None and self.con_type == 'low':
-            x, _, reg = self.con_fnc(x.view(batch.max() + 1, -1, ndimx), weight=weight)
-            x = x.view(-1, ndimx)
-
-        if self.con_fnc is not None:
+        if self.min_con_fnc is not None:
             cv, cv_mean, cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
             if reg == 0:
                 reg = (cv * cv).mean()
-
+            if self.con_type == 'low':
+                x = self.min_con_fnc(x.view(batch.max() + 1, -1, ndimx), weight=weight)
+                x = x.view(-1, ndimx)
         else:
             cv_mean, cv_max = torch.tensor(-1.0), torch.tensor(-1.0)
-
         return x, cv_mean, cv_max, reg * self.regularization_strength
-
-    def get_water_viz(self, y_new, y_old, batch):
-        x_new = self.PU.project(y_new)
-        ndim = x_new.shape[-1] // 2
-        nb = batch.max() + 1
-
-        r_new = x_new[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
-        v_new = x_new[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
-
-        x_old = self.PU.project(y_old)
-        r_old = x_old[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
-        v_old = x_old[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
-        plot_water(r_new, v_new, r_old, v_old)
-
-    def get_water_viz_low(self, x_new, x_old, x_org, batch):
-        ndim = x_new.shape[-1] // 2
-        nb = batch.max() + 1
-
-        r_new = x_new[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
-        v_new = x_new[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
-
-        r_old = x_old[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
-        v_old = x_old[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
-
-        r_org = x_org[:, 0:ndim].view(nb, -1, ndim).detach().cpu().numpy()
-        v_org = x_org[:, ndim:].view(nb, -1, ndim).detach().cpu().numpy()
-
-        plot_water(r_new, v_new, r_old, v_old, r_org, v_org)

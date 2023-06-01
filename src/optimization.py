@@ -1,172 +1,222 @@
-import time
+import numbers
 
-import mlflow.pytorch
+from abc import ABC, abstractmethod
+
 import torch
-import torch.nn.utils.parametrize as P
-from tqdm import tqdm
+import torch.nn as nn
+from omegaconf import OmegaConf
+
+from src.constraints import ConstraintTemplate
 
 
-def log_parameters(c):
+def generate_constraints_minimizer(c,con_fnc):
     """
-    We log all the parameters in the configuration using mlflow.
-    We assume that each parameter is part of a configuration group and does not have any configuration subgroups. #TODO this is something we should make more flexible at some point.
-    Hence a parametere will be logged as {group_key}.{key}
+    This is a wrapper function for generating/loading constraints.
     """
-    for key, val in c.items():
-        for keyi, vali in c[key].items():
-            mlflow.log_param(f"{key}.{keyi}", vali)
+    c_dict = OmegaConf.to_container(c)
+    name = c_dict.pop("name", None)
+    name = name.lower()
 
 
-def optimize_model(c, model, dataloaders, optimizer, loss_fnc):
+    if name == 'gradient_descent':
+        min_con_fnc = GradientDescentFast(constraint=con_fnc,**c_dict)
+    else:
+        raise NotImplementedError(f"The constraint {name} has not been implemented.")
+    return min_con_fnc
+
+
+class ProjectUpliftFromMatrix:
     """
-    Used to optimize and run inference of models.
-    Tracking is done with MLFlow.
-
-    c :: configuration OmegaConf
-    model: pytorch model
-    dataloaders: A dict containing various dataloaders saved with keys such as 'train' 'val' 'test'.
+    If a matrix is given for projection and uplifting, then we convert the matrix multiplication operation (from the right) into a function.
     """
+    def __init__(self,K: torch.Tensor):
+        self.K = K
 
-    loss_best = 1e9
-    names = ['train', 'val']
-    mlflow.set_tracking_uri(c.logging.mlflow_folder)
-    with mlflow.start_run(run_name=c.run.name) as run:
-        artifact_path = "models"
+    def project(self,y):
+        return y @ self.K.T
 
-        log_parameters(c)
-        metrics = Metrics(name='train')
-        # mlflow.pytorch.autolog()
-        for epoch in range(c.run.epochs):
-            for name in names:
-                if name in dataloaders:
-                    loss = run_model(epoch, c, model, dataloaders[name], optimizer, loss_fnc, metrics, type=name)
-                    if name == 'val' and loss < loss_best:
-                        loss_best = loss
-                        mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
-
-        try:
-            state_dict_uri = mlflow.get_artifact_uri(artifact_path)
-            state_dict = mlflow.pytorch.load_state_dict(state_dict_uri)
-            model.load_state_dict(state_dict)
-        except:
-            print("failed to load state dict before running test")
-        if 'test' in dataloaders:
-            loss = run_model(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
-    return loss
-    #
-    #     if loss < lossBest: # Check if model was better than previous
-    #         lossBest = loss
-    #         epochs_since_best = 0
-    #         torch.save(model.state_dict(), f"{model_name_best}")
-    #     else:
-    #         epochs_since_best += 1
-    #
-    #     LOG.info(f'{epoch:2d}  cv_energy={cv_energy_t:.2e} ({cv_energy_v:.2e})  cv={cv_t:.2e} ({cv_v:.2e})  cvm={cv_max_t:.2e} ({cv_max_v:.2e}) reg={reg_t:.2e} ({reg_v:.2e})  reg2={reg2_t:.2e} ({reg2_v:.2e}) MAEv={MAE_v_t:.2e} ({MAE_v_v:.2e})   MAEr={MAE_r_t:.2e} ({MAE_r_v:.2e})  Loss_r={loss_r_t:.2e}({loss_r_v:.2e}) Lr: {lr:2.2e}  Time={t2 - t1:.1f}s ({t3 - t2:.1f}s)  '
-    #              f'Time(total) {(time.time() - t0)/3600:.1f}h')
-    #     epoch += 1
-    #     # if (epoch % c['epochs_for_lr_adjustment']) == 0:
-    #     #     for g in optimizer.param_groups:
-    #     #         g['lr'] *= c['lr_adjustment']
-    #     #         lr = g['lr']
-    #
-    # model.load_state_dict(torch.load(model_name_best))  # We load the best performing model
+    def uplift(self,x):
+        return x @ self.K
 
 
-class Metrics:
+class MinimizationTemplate(ABC, nn.Module):
     """
-    The metrics which we want to save to mlflow.
+    This is a template for minimizing constraint violations.
+    Essentially you can think of this as a standard nonlinear optimization methods, with the exception that they include a projection and uplifting function or matrix.
+
+    If you supply high dimensional data y, the data needs to be supplied with a torch tensor K, such that:
+        the projection is given as: x = y @ K
+        the uplifting is given as:  y = x @ K.T
+    Alternatively you can supply a projection / uplifting function.
+    If both as supplied, the matrix will be used and converted into appropriate projection and uplifting functions.
+    If neither is supplied, the projection and uplifting functions will be identity functions.
+
+    Input:
+        constraint: Is the constraint function we wish to minimize our data across.
+        max_iter: Is the maximum number of minimization iteration we apply
+        rel_tol: Is the relative tolerance needed before stopping early.
+        abs_tol: Is the absolute tolerance needed before stopping early.
+        max_iter_linesearch: Is the max number of linesearch iteration applied during each iteration.
     """
+    def __init__(self,constraint: ConstraintTemplate, max_iter: int,rel_tol: float,abs_tol: float,max_iter_linesearch=20):
+        super(MinimizationTemplate, self).__init__()
+        self.c = constraint
+        self.max_iter = max_iter
+        self.rel_tol = rel_tol
+        self.abs_tol = abs_tol
+        self.max_iter_linesearch = max_iter_linesearch
+        return
+    def __call__(self, y, K=None, project_fnc=None, uplift_fnc=None, weight=1):
+        project_fnc, uplift_fnc = self.determine_proj_uplift_method(K,project_fnc,uplift_fnc)
+        if isinstance(weight, numbers.Number):
+            # weight = weight * torch.ones(y.shape[:-1], device=y.device)
+            weight = weight * torch.ones_like(y)
+        y = self._minimize(y,project_fnc,uplift_fnc,weight)
+        return y
 
-    def __init__(self, name, report_every_n_step=0):
-        self.report_every_n_step = report_every_n_step
-        self.reset(name)
-
-    def reset(self, name):
-        self.name = name
-        self.cv_mean = 0.0
-        self.cv_max = 0.0
-        self.reg = 0.0
-        self.loss_predict = 0.0
-        self.loss = 0.0
-        self.mae_r = 0.0
-        self.mae_v = 0.0
-        self.counter = 0
-        self.epoch = 0
-
-    def update(self, epoch, cv_mean, cv_max, reg, loss_predict, loss, mae_r, mae_v):
-        self.epoch = epoch
-        self.cv_mean += cv_mean.item()
-        self.cv_max += cv_max.item()
-        self.reg += reg.item()
-        self.loss_predict += loss_predict.item()
-        self.loss += loss.item()
-        self.mae_r += mae_r.item()
-        self.mae_v += mae_v.item()
-        self.counter += 1
-        self.report()
-
-    def report(self, end_of_epoch=False):
-        if end_of_epoch or ((self.report_every_n_step > 0) and ((self.counter % self.report_every_n_step) == 0)):
-            # mlflow.log_metric("epoch",self.epoch)
-            mlflow.log_metric(f"{self.name}_cv_mean", self.cv_mean / self.counter, step=self.epoch)
-            mlflow.log_metric(f"{self.name}_cv_max", self.cv_max / self.counter, step=self.epoch)
-            mlflow.log_metric(f"{self.name}_reg", self.reg / self.counter, step=self.epoch)
-            mlflow.log_metric(f"{self.name}_loss_predict", self.loss_predict / self.counter, step=self.epoch)
-            mlflow.log_metric(f"{self.name}_loss", self.loss / self.counter, step=self.epoch)
-            mlflow.log_metric(f"{self.name}_mae_r", self.mae_r / self.counter, step=self.epoch)
-            mlflow.log_metric(f"{self.name}_mae_v", self.mae_v / self.counter, step=self.epoch)
-
-
-def compute_mae(c, x_pred, x_target, rscale, vscale):
-    """
-    Computes the Mean absolute error for both positions and velocities.
-    rscale,vscale are used to scale the data back to original units
-    """
-    for key, idx in c.data.data_id.items():
-        if key == 'r':
-            pred = x_pred[..., idx]
-            target = x_target[..., idx]
-            mae_r = torch.mean(torch.norm((pred - target) * rscale, dim=1))
-        elif key == 'v':
-            pred = x_pred[..., idx]
-            target = x_target[..., idx]
-            mae_v = torch.mean(torch.norm((pred - target) * vscale, dim=1))
+    def determine_proj_uplift_method(self,K,project_fnc,uplift_fnc):
+        if K is not None:
+            PU = ProjectUpliftFromMatrix(K)
+            project_fnc = PU.project
+            uplift_fnc = PU.uplift
         else:
-            raise (f"{key} data type not implemented for MAE calculation.")
-    return mae_r, mae_v
+            if (project_fnc is None) or (uplift_fnc is None):
+                assert (project_fnc is None) and (uplift_fnc is None)
+                project_fnc = nn.Identity()
+                uplift_fnc = nn.Identity()
+        return project_fnc, uplift_fnc
 
+    @abstractmethod
+    def _minimize(self,y,project_fnc,uplift_fnc,weight):
+        raise NotImplementedError(
+            "minimization function has not been implemented for {:}".format(self._get_name()))
 
-def run_model(epoch, c, model, dataloader, optimizer, loss_fnc, metrics, type):
+class GradientDescentFast(MinimizationTemplate):
     """
-    Runs the models for a single epoch.
-    Supports both training and evaluation mode.
+    A batched gradient descent algorithm which enables minimization of high dimensional data constrained in low dimensions.
+    If project_fnc and uplift_fnc are identity functions, this gradient descent algorithm will work as a standard gradient descent algorithm.
     """
-    train = type == 'train'
-    model.train(train)
-    torch.set_grad_enabled(train)
-    metrics.reset(name=type)
-    for i, (Rin, Rout, Vin, Vout, z, m) in enumerate((pbar := tqdm(dataloader, desc=f"{type} Epoch: {epoch}"))):
-        optimizer.zero_grad()
+    def _minimize(self,y,project_fnc,uplift_fnc,weight):
+        nb = y.shape[0]
+        alpha = torch.ones(nb, device=y.device)
+        j = 0
+        while True:
+            idx_all = torch.arange(nb, device=y.device)
+            x = project_fnc(y)
+            c, c_error_mean, c_error_max = self.c.constraint_violation(x)
+            cm_norm = c.abs().amax(dim=(1, 2))
+            M = cm_norm > self.rel_tol
+            idx = idx_all[M]
+            if len(idx) == 0:
+                break
+            else:
+                c = self.c._constraint(x)
+                cm = c.abs().mean(dim=(1, 2))
+            dx = self.c._jacobian_transpose_times_constraint(x[idx], c[idx])
+            # dx = weight[idx][:,:,None] * dx
+            dx = weight[idx].view(dx.shape) * dx
+            dy = uplift_fnc(dx)
+            lsiter = torch.zeros(len(idx), device=y.device)
+            while True:
+                y_try = y[idx] - alpha[idx, None, None] * dy
+                x_try = project_fnc(y_try)
+                c_try = self.c._constraint(x_try)
+                cm_try = c_try.abs().mean(dim=(1, 2))
+                M_try = cm_try <= cm[idx]
+                if M_try.all():
+                    break
+                idx_sel = idx[~M_try]
+                alpha[idx_sel] = alpha[idx_sel] / 2
+                lsiter[~M_try] = lsiter[~M_try] + 1
+                if lsiter.max() > self.max_iter_linesearch:
+                    break
+            M_increase = lsiter == 0
+            idx_sel = idx[M_increase]
+            ysel = y[idx] - alpha[idx, None, None] * dy
+            alpha[idx_sel] = alpha[idx_sel] * 1.5
+            yall = []
+            count = 0
+            for i in range(nb):
+                if M[i]:
+                    yall.append(ysel[count])
+                    count = count + 1
+                else:
+                    yall.append(y[i])
+            y = torch.stack(yall, dim=0)
+            j += 1
+            if alpha.min() < self.rel_tol:
+                break
+            if j > self.max_iter:
+                break
+        return y
 
-        t1 = time.time()
-        batch, x, z_vec, m_vec, weights, x_target = dataloader.collate_vars(Rin, Rout, Vin, Vout, z, m)
-        t2 = time.time()
-        edge_src, edge_dst, wstatic = dataloader.generate_edges(batch, x, model.max_radius)
-        t3 = time.time()
-        with P.cached():
-            x_pred, cv_mean, cv_max, reg, = model(x, batch, z_vec, edge_src, edge_dst, wstatic=wstatic, weight=weights)
-        t4 = time.time()
-        loss_pred = loss_fnc(x_pred, x_target, x, edge_src, edge_dst)
-        loss = loss_pred + reg
-        mae_r, mae_v = compute_mae(c, x_pred, x_target, dataloader.dataset.rscale, dataloader.dataset.vscale)
-        metrics.update(epoch, cv_mean, cv_max, reg, loss_pred, loss, mae_r, mae_v)
-        t5 = time.time()
-        if train:
-            loss.backward()
-            torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
-            optimizer.step()
-        pbar.set_postfix(loss=metrics.loss / metrics.counter)
-        t6 = time.time()
-        # print(f"{t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f},{t5-t4:2.2f},{t6-t5:2.2f}")
-    metrics.report(end_of_epoch=True)
-    return metrics.loss
+
+class ConjugateGradient(MinimizationTemplate):
+    """
+    based on non-linear CG found in
+    https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf
+    on page 52
+    Note that this version is lacking and running 1 sample at a time making it extremely slow.
+    """
+    def _minimize(self,y,project_fnc,uplift_fnc,weight):
+        def f(x):
+            c = self._constraint(x)
+            return c.abs().mean()
+
+        raise Warning("This function is not fully implemented and should not be used.")
+
+        tol = 1e-5
+        jmax = 100
+        n_restart = 10
+        epsilon = 1e-4
+        i = 0
+        k = 0
+
+        if K is None:
+            x = y
+        else:
+            x = y @ K.T
+
+        # x_org = x.clone()
+
+        df = torch.autograd.functional.jacobian(f, x, strict=True, create_graph=True).view(-1, 1)
+        r = - df
+        d = r.clone()
+        delta_new = r.T @ r
+        delta0 = delta_new.clone()
+        while i < self.max_iter and delta_new > epsilon ** 2 * delta0:
+            j = 0
+            deltad = d.T @ d
+            c = f(x)
+            alpha = torch.min(torch.tensor(1), c.abs().mean())
+            while True:
+                # ddf = torch.autograd.functional.hessian(f, x, create_graph=True, strict=False).view(r.shape[0],r.shape[0])
+                # alpha = - (df.T @ d) / (d.T @ ddf @ d)
+                x_try = x + alpha * d.view(x.shape)
+                c_try = f(x_try)
+                if c.abs().mean() > c_try.abs().mean() or j > jmax:
+                    # print(f"{j}  {alpha.item():2.2e}  {c.abs().mean():2.2e} -> {c_try.abs().mean():2.2e}")
+                    x = x_try
+                    break
+                else:
+                    alpha *= 0.5
+                    j += 1
+            if c_try.abs().mean() < tol:
+                break
+            df = torch.autograd.functional.jacobian(f, x, strict=True, create_graph=True).view(-1, 1)
+            r = - df
+            delta_old = delta_new
+            delta_new = r.T @ r
+            beta = delta_new / delta_old
+            beta = max(beta, 0)
+            d = r + beta * d
+            k += 1
+            if k == n_restart or r.T @ d <= 0:
+                d = r
+                k = 0
+            i += 1
+        c = f(x)
+        # print(f"{i},  {c.abs().mean():2.2e}")
+        if c.abs().mean() > tol:
+            print("here")
+        return x

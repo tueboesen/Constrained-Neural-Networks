@@ -1,5 +1,6 @@
 defaults:
   - constraint: multibodypendulum
+  - minimization: multibodypendulum
   - data: multibodypendulum
   - model: mimetic
   - logging: standard
@@ -10,8 +11,8 @@ hydra:
     dir: ${logging.hydra_folder}
   sweeper:
     params:
-      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 3, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 3},{con_type : 'low', penalty_strength : 3, regularization_strength : 3},{con_type : 'high', penalty_strength : 3, regularization_strength : 3}"
       ++run.seed: 1234,1235,1236
+      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 3, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 3},{con_type : 'low', penalty_strength : 3, regularization_strength : 3},{con_type : 'high', penalty_strength : 3, regularization_strength : 3}"
 
 
 data:
@@ -20,7 +21,7 @@ data:
   nskip: 100
 
 run:
-  experiment_name: 'mbp - tables n_train=100, nskip=100 pos_only '
+  experiment_name: 'mbp - tables'
   name: ???
   epochs: 50
   debug: false

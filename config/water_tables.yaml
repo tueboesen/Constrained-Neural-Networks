@@ -1,5 +1,6 @@
 defaults:
   - constraint: water
+  - minimization: water
   - data: water
   - model: equivariant
   - logging: standard
@@ -10,8 +11,8 @@ hydra:
     dir: ${logging.hydra_folder}
   sweeper:
     params:
-      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 1},{con_type : 'low', penalty_strength : 1, regularization_strength : 1},{con_type : 'high', penalty_strength : 1, regularization_strength : 1},{con_type : '', penalty_strength : 1, regularization_strength : 0}"
       ++run.seed: 1234,1235,1236
+      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 1},{con_type : '', penalty_strength : 1, regularization_strength : 0},{con_type : 'low', penalty_strength : 1, regularization_strength : 1},{con_type : 'high', penalty_strength : 1, regularization_strength : 1}"
 
 
 data:
@@ -20,7 +21,7 @@ data:
   nskip: 50
 
 run:
-  experiment_name: 'water - tables ntrain=10000'
+  experiment_name: 'water - tables'
   name: ???
   epochs: 30
   debug: false

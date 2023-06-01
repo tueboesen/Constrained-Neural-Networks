@@ -1,7 +1,4 @@
 name: 'multibodypendulum'
-max_iter: 200
-tolerance: 1e-4
-minimizer: 'gradient_descent'
 include_second_order_constraints: False
 position_idx: [ 0,1 ]
 velocity_idx: [ 2,3 ]

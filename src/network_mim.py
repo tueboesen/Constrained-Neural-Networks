@@ -166,7 +166,7 @@ class neural_network_mimetic(nn.Module):
     This network is designed to predict the 2D/3D coordinates of a set of particles.
     """
 
-    def __init__(self, dim_in, dim_latent, layers, nmax_atom_types=20, atom_type_embed_dim=8, max_radius=50, con_fnc=None, con_type=None, position_indices=(0, 1), embed_node_attr=True,
+    def __init__(self, dim_in, dim_latent, layers, nmax_atom_types=20, atom_type_embed_dim=8, max_radius=50, min_con_fnc=None, con_type=None, position_indices=(0, 1), embed_node_attr=True,
                  discretization_method='leapfrog', penalty_strength=0, regularization_strength=0, orthogonal_projection=True):
         super().__init__()
         """
@@ -191,13 +191,12 @@ class neural_network_mimetic(nn.Module):
         self.max_radius = max_radius
         self.h = torch.nn.Parameter(torch.ones(layers) * 1e-2)
         if self.orthogonal_K:
-            # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-2)
             self.ortho = torch.nn.utils.parametrizations.orthogonal(self.lin)
         else:
-            # self.h = torch.nn.Parameter(torch.ones(nlayers) * 1e-3)
             pass
 
-        self.con_fnc = con_fnc
+        self.min_con_fnc = min_con_fnc
+        self.con_fnc = min_con_fnc.c
         self.con_type = con_type
         self.embed_node_attr = embed_node_attr
         self.discretization_method = discretization_method
@@ -214,14 +213,8 @@ class neural_network_mimetic(nn.Module):
         })
         return
 
-    # def inverse(self,x):
-    #     y = x @ self.K.T @ torch.inverse(self.K @ self.K.T) #This is for the right side
-    # y = x @ torch.inverse(self.K.T @ self.K) @ self.K.T
-    # return y
-
     def uplift(self, x):
         y = x @ self.lin.weight.T
-        # y = x @ self.K.T
         return y
 
     @property
@@ -230,10 +223,9 @@ class neural_network_mimetic(nn.Module):
 
     def project(self, y):
         x = y @ self.lin.weight
-        # x = y @ self.K
         return x
 
-    def forward(self, x, batch, node_attr, edge_src, edge_dst, wstatic=None, ignore_con=False, weight=1):
+    def forward(self, x, batch, node_attr, edge_src, edge_dst, wstatic=None, weight=1):
         if x.isnan().any():
             raise ValueError("NaN detected")
         if self.embed_node_attr:
@@ -241,24 +233,19 @@ class neural_network_mimetic(nn.Module):
         else:
             node_attr_embedded = node_attr
         y = self.uplift(x)
-        # y2 = x @ self.K().T
         ndimx = x.shape[-1]
         ndimy = y.shape[-1]
         y_old = y
         reg = torch.tensor(0.0)
 
         for i in range(self.nlayers):
-            t1 = time.time()
             dt = max(min(self.h[i] ** 2, 0.1), 1e-4)
-            if x.isnan().any():
-                raise ValueError("NaN detected")
             if wstatic is None:
                 edge_vec = x[:, self.position_indices][edge_src] - x[:, self.position_indices][edge_dst]
                 edge_len = edge_vec.norm(dim=1)
                 w = smooth_cutoff(edge_len / self.max_radius) / edge_len
             else:
                 w = wstatic
-            t2 = time.time()
             edge_attr = torch.cat([node_attr_embedded[edge_src], node_attr_embedded[edge_dst], w[:, None]], dim=-1)
 
             y_new = self.PropagationBlocks[i](y.clone(), edge_attr, edge_src, edge_dst)
@@ -290,35 +277,20 @@ class neural_network_mimetic(nn.Module):
                 y = y + dt * (y_new - self.penalty_strength * dy)
             else:
                 raise NotImplementedError(f"Discretization method {self.discretization_method} not implemented.")
-
-            t3 = time.time()
-            if self.con_fnc is not None and self.con_type == 'high' and ignore_con is False:
-                if y.isnan().any():
-                    raise ValueError("NaN detected")
-                # y, regi, regi2 = self.con_fnc(y.view(batch.max() + 1,-1,ndimy),self.K(),self.K().T,weight)
-                y, _, regi = self.con_fnc(y.view(batch.max() + 1, -1, ndimy), self.project, self.uplift, weight, K=self.K)
+            if self.min_con_fnc is not None and self.con_type == 'high':
+                cv, _, _ = self.con_fnc.constraint_violation(y.view(batch.max() + 1, -1, ndimy), project_fnc=self.project)
+                y = self.min_con_fnc(y.view(batch.max() + 1, -1, ndimy), project_fnc=self.project, uplift_fnc=self.uplift, weight=weight)
                 y = y.view(-1, ndimy)
-                reg = reg + regi
-                if y.isnan().any():
-                    raise ValueError("NaN detected")
-
+                reg = reg + (cv * cv).mean()
             x = self.project(y)
-            t4 = time.time()
-            # print(f"Inner {t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f}")
-
-        if self.con_fnc is not None and self.con_type == 'low' and ignore_con is False:
-            x, _, reg = self.con_fnc(x.view(batch.max() + 1, -1, ndimx), weight=weight)
-            x = x.view(-1, ndimx)
-        if x.isnan().any():
-            raise ValueError("NaN detected")
-
-        t1 = time.time()
-        if self.con_fnc is not None:
+        if self.min_con_fnc is not None:
             cv, cv_mean, cv_max = self.con_fnc.constraint_violation(x.view(batch.max() + 1, -1, ndimx))
             if reg == 0:
                 reg = (cv * cv).mean()
+            if self.con_type == 'low':
+                x = self.min_con_fnc(x.view(batch.max() + 1, -1, ndimx), weight=weight)
+                x = x.view(-1, ndimx)
         else:
             cv_mean, cv_max = torch.tensor(-1.0), torch.tensor(-1.0)
-        t2 = time.time()
-        # print(f"Con time = {t2-t1:2.2f}")
+
         return x, cv_mean, cv_max, reg * self.regularization_strength

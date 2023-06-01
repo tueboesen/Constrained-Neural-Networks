@@ -1,0 +1,4 @@
+name: 'gradient_descent'
+max_iter: 200
+rel_tol: 1e-4
+abs_tol: 1e-6

@@ -31,9 +31,10 @@ The core of this project is the constraint class, which can be found in src/cons
 As a starting point I would suggest running the multibody pendulum example "train_pendulum.py" in the examples folder.
 
 ### Reproducing paper results
+The tagged release v.1.0, is the code that produced the paper results, but any version 1 code should be able to reproduce them and will continue to be improved.  
 The results found in the paper can easily be reproduced with `./examples/train_pendulum.py` and `./examples/train_water.py`.
 
-train_paper is currently set to run pendulum predictions with 100 training samples and predictions 100 steps ahead for all constraint types, corresponding to the upper half of the first column of table 1.
+`./examples/train_pendulum.py` is currently set to run pendulum predictions with 100 training samples and predictions 100 steps ahead for all constraint types, corresponding to the upper half of the first column of table 1.
 In order to produce any of the other results in table 1, the below settings are changed in configuration file `./config/multibodypendulum_tables.yaml` to the appropriate values given in the table.
 
 ```
@@ -42,7 +43,7 @@ In order to produce any of the other results in table 1, the below settings are 
   nskip: 
 ```
 
-Similarly, results in table two can be generated with train_water.py, though it should be noted that this takes significantly longer to run. The dataset required for `train_water.py` is too large for github, but can be found using DOI:
+Similarly, results in table two can be generated with train_water.py, though it should be noted that this takes significantly longer to run. The dataset required for `train_water.py` is too large for Github, but can be found using DOI:
 10.5281/zenodo.7981759, and needs to be downloaded and unpacked to ./data
 In order to produce any of the other results in table 2, the appropriate settings are changed in configuration file `./config/water_tables.yaml`.
 
