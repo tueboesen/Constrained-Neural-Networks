@@ -21,7 +21,8 @@ The requirements for running this code can be found in requirements.txt and can 
 pip install -r requirements.txt
 ```
 Note that it might not always work to install the packages through the requirements.txt, since for instance Pytorch have special install requirements if you want gpu support.
-In that case you should look at the individual packages website and see how they each should be installed.
+In that case you should look at the individual packages website and see how they each should be installed. Furthermore, it should be noted that I have only tested this on Ubuntu. 
+
 
 ## Project structure
 The project uses MLflow for experiment tracking, Hydra for configuration file management and multiruns.
