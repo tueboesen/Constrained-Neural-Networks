@@ -25,7 +25,7 @@ run:
   epochs: 50
   debug: false
   seed: 1234
-  loss_type: 'eq'
+  loss_type: 'mse'
   precision: torch.float64
   device: ???
   #  loss_indices: ${data.data_id}
