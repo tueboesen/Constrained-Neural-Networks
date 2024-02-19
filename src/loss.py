@@ -4,6 +4,18 @@ import torch.nn.functional as F
 from src.utils import LJ_potential
 
 
+def loss_wrapper(var_ids, loss_type):
+    if loss_type == 'eq' or loss_type == 'mim':
+        loss_fnc = Loss(var_ids, loss_type=loss_type)
+    elif loss_type == 'mse':
+        loss_fnc = F.mse_loss
+    else:
+        raise NotImplementedError(f"The loss {loss_type} has not been implemented yet.")
+    return loss_fnc
+
+
+
+
 class Loss:
     """
     A loss class that can handle both equivariant loss (where we do a coordinate loss using MSE), and mimetic loss (where we compute inter-particle distances).
@@ -19,6 +31,8 @@ class Loss:
             loss_fnc = loss_eq
         elif loss_type == 'mim':
             loss_fnc = loss_mim
+        elif loss_type == 'mse':
+            loss_fnc = loss_mse
         else:
             raise NotImplementedError(f"The loss {loss_type} has not been implemented yet.")
         self.loss_fnc = loss_fnc
@@ -33,6 +47,8 @@ class Loss:
             loss = loss + loss_rel
         n = len(self.var_ids)
         return loss / n
+
+
 
 
 def loss_eq(x_pred, x_out, x_in, edge_src=None, edge_dst=None, reduce=True):

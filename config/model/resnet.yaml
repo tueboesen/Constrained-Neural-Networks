@@ -1,0 +1,10 @@
+name: "resnet"
+dim_in: ???
+dim_latent: 32
+layers: 8
+discretization_method: 'euler'
+orthogonal_projection: True
+penalty_strength: 0
+regularization_strength: 0
+con_type: 'high'
+load_state: ''

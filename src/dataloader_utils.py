@@ -5,7 +5,10 @@ import numpy as np
 import torch
 import torch.utils.data as data
 from torch.utils.data import DataLoader
-from torch_cluster import radius_graph
+from torch_geometric.nn import radius_graph
+
+
+# from torch_cluster import radius_graph
 
 
 def data_split(features, metafile, n_train, n_val, n_test):

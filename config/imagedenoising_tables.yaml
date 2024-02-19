@@ -1,0 +1,42 @@
+defaults:
+  - constraint: imagedenoising
+  - minimization: multibodypendulum
+  - data: imagedenoising
+  - model: resnet
+  - logging: standard
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: ${logging.hydra_folder}
+  sweeper:
+    params:
+      ++run.seed: 1234,1235,1236
+      +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 3, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 3},{con_type : 'low', penalty_strength : 3, regularization_strength : 3},{con_type : 'high', penalty_strength : 3, regularization_strength : 3}"
+
+
+data:
+  n_train: 100
+  n_val: 100
+
+run:
+  experiment_name: 'imagedenoising - tables'
+  name: ???
+  epochs: 50
+  debug: false
+  seed: 1234
+  loss_type: 'eq'
+  precision: torch.float64
+  device: ???
+  #  loss_indices: ${data.data_id}
+  loss_indices: { 'r': [ 0, 1 ] }
+
+optimizer:
+  lr: 0.001
+
+model:
+  con_type: ''
+  penalty_strength: 0
+  regularization_strength: 1
+
+#To see the results use: mlflow ui --backend-store-uri /home/tue/PycharmProjects/results/mlflow (where path can be found in the logging yaml)

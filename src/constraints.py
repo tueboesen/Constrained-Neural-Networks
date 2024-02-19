@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
 from omegaconf import OmegaConf
+import torch.nn.functional as F
 
 
 def generate_constraints(c):
@@ -18,6 +19,8 @@ def generate_constraints(c):
         con_fnc = MultiBodyPendulum(**c_dict)
     elif name == 'water':
         con_fnc = Water(**c_dict)
+    elif name == 'imagedenoising':
+        con_fnc = ImageDenoising(**c_dict)
     elif name == None:
         con_fnc = None
     else:
@@ -89,7 +92,10 @@ class ConstraintTemplate(ABC, nn.Module):
         x = project_fnc(y)
         c = self._constraint(x)
         dx = self._jacobian_transpose_times_constraint(x, c)
-        dx = weight.view(dx.shape) * dx
+        if weight == 1:
+            pass
+        else:
+            dx = weight.view(dx.shape) * dx
         clampval = x.abs() * self.max_penalty_change
         dx = torch.clamp(dx, min=-clampval, max=clampval)
         dy = uplift_fnc(dx)
@@ -303,6 +309,35 @@ class Water(ConstraintTemplate):
             l = self.l
         drnorm = torch.norm(dr, dim=-1)
         c = drnorm - l
+        return c
+
+
+
+
+class ImageDenoising(ConstraintTemplate):
+    """
+    This constraint function applies constraints that ensure that a pair of images are divergence free.
+    Expected input is x of shape [batch_size,2,npixels,npixels].
+    """
+
+    def __init__(self, scale=1, **kwargs):
+        super(ImageDenoising, self).__init__(**kwargs)
+        self.scale = scale
+        Dx = torch.tensor([[-1.0, 1.0], [-1, 1]]).reshape(1, 1, 2, 2)
+        Dy = torch.tensor([[-1.0, -1.0], [1, 1]]).reshape(1, 1, 2, 2)
+        D = torch.cat((Dx, Dy), dim=0)
+        # self.D = D
+        self.register_buffer('D', D)
+
+        return
+
+    def _constraint(self, x, rescale=False):
+        """
+        Computes the constraints.
+
+        """
+        c = F.conv2d(x, self.D, groups=2)
+        c = c.sum(dim=(1))
         return c
 
 

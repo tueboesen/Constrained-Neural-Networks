@@ -4,7 +4,9 @@ import time
 import e3nn.o3
 import torch
 import torch.nn as nn
-from torch_scatter import scatter
+from torch_geometric.utils import scatter
+
+# from torch_scatter import scatter
 
 from src.utils import smooth_cutoff
 

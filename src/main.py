@@ -2,7 +2,7 @@ import torch
 
 from src.constraints import generate_constraints
 from src.dataloader import load_data_wrapper
-from src.loss import Loss
+from src.loss import Loss, loss_wrapper
 from src.networks import generate_neural_network
 from src.optimization import generate_constraints_minimizer
 from src.training import optimize_model
@@ -17,7 +17,10 @@ def main(c):
     c is the input configuration, which dictates the run.
     """
     c = configuration_processor(c)
+    # c.run.device = 'cpu'
+    # c.data.device = 'cpu'
     torch.set_default_dtype(eval(c.run.precision))
+    print(f"Default dtype = {torch.get_default_dtype()}")
     fix_seed(c.run.seed)
     dataloaders = load_data_wrapper(c.data)
     if 'scale' not in c.constraint:
@@ -26,9 +29,12 @@ def main(c):
     min_con_fnc = generate_constraints_minimizer(c.minimization,con_fnc)
     model = generate_neural_network(c.model, con_fnc=min_con_fnc)
     model.to(c.run.device)
-    optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
-                                  {"params": model.params.h.parameters()},
-                                  {'params': model.params.close.parameters(), 'lr': c.optimizer.lr * 0.1}], lr=c.optimizer.lr)
-    loss_fnc = Loss(c.run.loss_indices, c.run.loss_type)
+    try:
+        optimizer = torch.optim.Adam([{"params": model.params.base.parameters()},
+                                      {"params": model.params.h.parameters()},
+                                      {'params': model.params.close.parameters(), 'lr': c.optimizer.lr * 0.1}], lr=c.optimizer.lr)
+    except:
+        optimizer = torch.optim.Adam(model.parameters(), lr=c.optimizer.lr)
+    loss_fnc = loss_wrapper(c.run.loss_indices, c.run.loss_type)
     loss = optimize_model(c, model, dataloaders, optimizer, loss_fnc)
     return loss

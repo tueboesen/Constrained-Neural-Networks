@@ -1,0 +1,3 @@
+name: 'imagedenoising'
+include_second_order_constraints: False
+scale: 1

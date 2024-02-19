@@ -3,7 +3,10 @@ from e3nn import o3
 from e3nn.nn import FullyConnectedNet
 from e3nn.o3 import FullyConnectedTensorProduct, TensorProduct
 from e3nn.util.jit import compile_mode
-from torch_scatter import scatter
+from torch_geometric.utils import scatter
+
+
+# from torch_scatter import scatter
 
 
 def tp_path_exists(irreps_in1, irreps_in2, ir_out):

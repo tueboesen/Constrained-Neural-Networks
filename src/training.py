@@ -39,7 +39,10 @@ def optimize_model(c, model, dataloaders, optimizer, loss_fnc):
         for epoch in range(c.run.epochs):
             for name in names:
                 if name in dataloaders:
-                    loss = run_model(epoch, c, model, dataloaders[name], optimizer, loss_fnc, metrics, type=name)
+                    if c.constraint.name == 'imagedenoising':
+                        loss = run_model_image(epoch, c, model, dataloaders[name], optimizer, loss_fnc, metrics, type=name)
+                    else:
+                        loss = run_model(epoch, c, model, dataloaders[name], optimizer, loss_fnc, metrics, type=name)
                     if name == 'val' and loss < loss_best:
                         loss_best = loss
                         mlflow.pytorch.log_state_dict(model.state_dict(), artifact_path)
@@ -51,7 +54,10 @@ def optimize_model(c, model, dataloaders, optimizer, loss_fnc):
         except:
             print("failed to load state dict before running test")
         if 'test' in dataloaders:
-            loss = run_model(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
+            if c.constraint.name == 'imagedenoising':
+                loss = run_model_image(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
+            else:
+                loss = run_model(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
     return loss
     #
     #     if loss < lossBest: # Check if model was better than previous
@@ -168,5 +174,33 @@ def run_model(epoch, c, model, dataloader, optimizer, loss_fnc, metrics, type):
         pbar.set_postfix(loss=metrics.loss / metrics.counter)
         t6 = time.time()
         # print(f"{t2-t1:2.2f},{t3-t2:2.2f},{t4-t3:2.2f},{t5-t4:2.2f},{t6-t5:2.2f}")
+    metrics.report(end_of_epoch=True)
+    return metrics.loss
+
+
+
+def run_model_image(epoch, c, model, dataloader, optimizer, loss_fnc, metrics, type):
+    """
+    Runs the models for a single epoch.
+    Supports both training and evaluation mode.
+    """
+    train = type == 'train'
+    model.train(train)
+    torch.set_grad_enabled(train)
+    metrics.reset(name=type)
+    nul = torch.tensor(0.0)
+    for i, x in enumerate((pbar := tqdm(dataloader, desc=f"{type} Epoch: {epoch}"))):
+        optimizer.zero_grad()
+        x_noise = x + 0.1 * torch.randn_like(x)
+        with P.cached():
+            x_pred, cv_mean, cv_max, reg, = model(x_noise)
+        loss_pred = loss_fnc(x_pred, x)
+        loss = loss_pred + reg
+        metrics.update(epoch, cv_mean, cv_max, reg, loss_pred, loss, nul, nul)
+        if train:
+            loss.backward()
+            torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
+            optimizer.step()
+        pbar.set_postfix(loss=metrics.loss / metrics.counter, cv=metrics.cv_mean / metrics.counter, reg=metrics.reg / metrics.counter)
     metrics.report(end_of_epoch=True)
     return metrics.loss

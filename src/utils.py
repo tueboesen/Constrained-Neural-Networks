@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from torch_cluster import radius_graph
+# from torch_cluster import radius_graph
 
 
 def configuration_processor(c):

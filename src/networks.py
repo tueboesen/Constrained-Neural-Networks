@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 
 from src.network_e3 import neural_network_equivariant
 from src.network_mim import neural_network_mimetic
+from src.network_resnet import neural_network_resnet
 
 
 def generate_neural_network(c, con_fnc):
@@ -17,6 +18,8 @@ def generate_neural_network(c, con_fnc):
         model = neural_network_mimetic(min_con_fnc=con_fnc, **c_dict)
     elif name == 'equivariant':
         model = neural_network_equivariant(min_con_fnc=con_fnc, **c_dict)
+    elif name == 'resnet':
+        model = neural_network_resnet(min_con_fnc=con_fnc, **c_dict)
     else:
         raise NotImplementedError(f"model name {name} not implemented yet.")
 

@@ -66,11 +66,8 @@ class MinimizationTemplate(ABC, nn.Module):
         self.abs_tol = abs_tol
         self.max_iter_linesearch = max_iter_linesearch
         return
-    def __call__(self, y, K=None, project_fnc=None, uplift_fnc=None, weight=1):
+    def __call__(self, y, K=None, project_fnc=None, uplift_fnc=None, weight=None):
         project_fnc, uplift_fnc = self.determine_proj_uplift_method(K,project_fnc,uplift_fnc)
-        if isinstance(weight, numbers.Number):
-            # weight = weight * torch.ones(y.shape[:-1], device=y.device)
-            weight = weight * torch.ones_like(y)
         y = self._minimize(y,project_fnc,uplift_fnc,weight)
         return y
 
@@ -96,15 +93,21 @@ class GradientDescentFast(MinimizationTemplate):
     A batched gradient descent algorithm which enables minimization of high dimensional data constrained in low dimensions.
     If project_fnc and uplift_fnc are identity functions, this gradient descent algorithm will work as a standard gradient descent algorithm.
     """
-    def _minimize(self,y,project_fnc,uplift_fnc,weight):
+    def _minimize(self,y,project_fnc,uplift_fnc,weight=None):
         nb = y.shape[0]
+        ndim = y.ndim
         alpha = torch.ones(nb, device=y.device)
+        if ndim == 3:
+            alpha = alpha[:, None, None]
+        elif ndim == 4:
+            alpha = alpha[:, None, None, None]
         j = 0
         while True:
             idx_all = torch.arange(nb, device=y.device)
             x = project_fnc(y)
             c, c_error_mean, c_error_max = self.c.constraint_violation(x)
             cm_norm = c.abs().amax(dim=(1, 2))
+            # print(f"{j}, cm_max {cm_norm}")
             M = cm_norm > self.rel_tol
             idx = idx_all[M]
             if len(idx) == 0:
@@ -113,12 +116,12 @@ class GradientDescentFast(MinimizationTemplate):
                 c = self.c._constraint(x)
                 cm = c.abs().mean(dim=(1, 2))
             dx = self.c._jacobian_transpose_times_constraint(x[idx], c[idx])
-            # dx = weight[idx][:,:,None] * dx
-            dx = weight[idx].view(dx.shape) * dx
+            if weight is not None:
+                dx = weight[idx].view(dx.shape) * dx
             dy = uplift_fnc(dx)
             lsiter = torch.zeros(len(idx), device=y.device)
             while True:
-                y_try = y[idx] - alpha[idx, None, None] * dy
+                y_try = y[idx] - alpha[idx] * dy
                 x_try = project_fnc(y_try)
                 c_try = self.c._constraint(x_try)
                 cm_try = c_try.abs().mean(dim=(1, 2))
@@ -131,8 +134,9 @@ class GradientDescentFast(MinimizationTemplate):
                 if lsiter.max() > self.max_iter_linesearch:
                     break
             M_increase = lsiter == 0
+            # print(f"{j}, cm_mean {cm_try}")
             idx_sel = idx[M_increase]
-            ysel = y[idx] - alpha[idx, None, None] * dy
+            ysel = y[idx] - alpha[idx] * dy
             alpha[idx_sel] = alpha[idx_sel] * 1.5
             yall = []
             count = 0
