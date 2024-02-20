@@ -92,7 +92,7 @@ class ConstraintTemplate(ABC, nn.Module):
         x = project_fnc(y)
         c = self._constraint(x)
         dx = self._jacobian_transpose_times_constraint(x, c)
-        if weight == 1:
+        if isinstance(weight, numbers.Number) and weight == 1:
             pass
         else:
             dx = weight.view(dx.shape) * dx

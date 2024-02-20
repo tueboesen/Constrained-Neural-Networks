@@ -24,7 +24,7 @@ def tp_path_exists(irreps_in1, irreps_in2, ir_out):
     return False
 
 
-@compile_mode('script')
+@compile_mode('trace')
 class Convolution(torch.nn.Module):
     r"""equivariant convolution
     Parameters

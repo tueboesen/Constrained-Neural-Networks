@@ -2473,6 +2473,36 @@ opt-einsum = ["opt-einsum (>=3.3)"]
 optree = ["optree (>=0.9.1)"]
 
 [[package]]
+name = "torch-cluster"
+version = "1.6.3+pt22cu121"
+description = "PyTorch Extension Library of Optimized Graph Cluster Algorithms"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "torch_cluster-1.6.3+pt22cu121-cp310-cp310-linux_x86_64.whl", hash = "sha256:055c78d49a34fd82219a29d24f55ee628487b6fe603ea4ea3c72d802fe8654da"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp310-cp310-win_amd64.whl", hash = "sha256:ed2d5ad136139974c6a80fcdde0309916c4eb7bde78e9ec0801b2a1633494335"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp311-cp311-linux_x86_64.whl", hash = "sha256:b4d6285fe7f5bba486592ce4d383687a3294da04896e5fe6f386f1dfc122bec4"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp311-cp311-win_amd64.whl", hash = "sha256:ced45716b153d572897a6375c5e9e022dd90ebc4fcf9ca67a194e696cc1cac47"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp312-cp312-linux_x86_64.whl", hash = "sha256:29b3993b5834fb1c8473102fbc992773fd679cc115b5899148286f09d41649ce"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp312-cp312-win_amd64.whl", hash = "sha256:7c7790b432b1776c844d63708c42c660b4c7ce38759d6b44a4140cf55e9888fb"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp38-cp38-linux_x86_64.whl", hash = "sha256:70676c125106caffa4cc705515f141515721682e4506319d1dbe166eb978b1e5"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp38-cp38-win_amd64.whl", hash = "sha256:64048b45ecd4238aa44a6f8b606ea142b78670ceb085af63807e1d3a4c279896"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp39-cp39-linux_x86_64.whl", hash = "sha256:93fe2302eb3e45dfce599b7385b247b6eec92823edf9d9eaacfd23e9af455ce6"},
+    {file = "torch_cluster-1.6.3+pt22cu121-cp39-cp39-win_amd64.whl", hash = "sha256:e1788df421778d88bf864088cc7729d7966fece70178304887d65cf78a626941"},
+]
+
+[package.dependencies]
+scipy = "*"
+
+[package.extras]
+test = ["pytest", "pytest-cov"]
+
+[package.source]
+type = "legacy"
+url = "https://data.pyg.org/whl/torch-2.2.0+cu121.html"
+reference = "pytorch-geometric"
+
+[[package]]
 name = "torch-geometric"
 version = "2.5.0"
 description = "Graph Neural Network Library for PyTorch"
@@ -2758,4 +2788,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10"
-content-hash = "5ec8405a3334097de825d5e668c8b72b5737930a3c402d79cd89b592be47f01d"
+content-hash = "3bc8999bd02debce97cc94a30dc0aa97aed3301ae7c7c2e9287a233378e3f5ce"
