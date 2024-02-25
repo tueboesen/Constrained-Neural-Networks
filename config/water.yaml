@@ -1,0 +1,34 @@
+defaults:
+  - constraint: water
+  - minimization: water
+  - data: water
+  - model: equivariant
+  - logging: standard
+
+
+data:
+  n_train: 100
+  n_val: 100
+  nskip: 100
+
+run:
+  experiment_name: 'tmp'
+  name: ???
+  epochs: 50
+  debug: false
+  seed: 1234
+  loss_type: 'eq'
+  precision: torch.float64
+  device: ???
+  #  loss_indices: ${data.data_id}
+  loss_indices: { 'r': [ 0, 1, 2, 3, 4, 5, 6, 7, 8 ] }
+
+optimizer:
+  lr: 0.001
+
+model:
+  con_type: 'high'
+  penalty_strength: 1
+  regularization_strength: 1
+
+#To see the results use: mlflow ui --backend-store-uri /home/tue/PycharmProjects/results/mlflow (where path can be found in the logging yaml)

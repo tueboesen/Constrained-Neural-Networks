@@ -16,6 +16,7 @@ def feature_transform_water(file, nskip, device):
     """
     TODO save this function as an artifact with the models for reproduceability
     """
+    # dat = np.load(file, allow_pickle=True)
     with np.load(file) as data:
         R1 = torch.from_numpy(data['R1']).to(device=device, dtype=torch.get_default_dtype())
         R2 = torch.from_numpy(data['R2']).to(device=device, dtype=torch.get_default_dtype())
