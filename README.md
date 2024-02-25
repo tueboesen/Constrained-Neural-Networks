@@ -21,8 +21,7 @@ The requirements for running this code can be found in requirements.txt and can 
 pip install -r requirements.txt
 ```
 Note that it might not always work to install the packages through the requirements.txt, since for instance Pytorch have special install requirements if you want gpu support.
-In that case you should look at the individual packages website and see how they each should be installed. Furthermore, it should be noted that I have only tested this on Ubuntu. 
-
+In that case you should look at the individual packages website and see how they each should be installed.
 
 ## Project structure
 The project uses MLflow for experiment tracking, Hydra for configuration file management and multiruns.
@@ -32,10 +31,9 @@ The core of this project is the constraint class, which can be found in src/cons
 As a starting point I would suggest running the multibody pendulum example "train_pendulum.py" in the examples folder.
 
 ### Reproducing paper results
-The tagged release v.1.0, is the code that produced the paper results, but any version 1 code should be able to reproduce them and will continue to be improved.  
 The results found in the paper can easily be reproduced with `./examples/train_pendulum.py` and `./examples/train_water.py`.
 
-`./examples/train_pendulum.py` is currently set to run pendulum predictions with 100 training samples and predictions 100 steps ahead for all constraint types, corresponding to the upper half of the first column of table 1.
+train_paper is currently set to run pendulum predictions with 100 training samples and predictions 100 steps ahead for all constraint types, corresponding to the upper half of the first column of table 1.
 In order to produce any of the other results in table 1, the below settings are changed in configuration file `./config/multibodypendulum_tables.yaml` to the appropriate values given in the table.
 
 ```
@@ -44,7 +42,7 @@ In order to produce any of the other results in table 1, the below settings are 
   nskip: 
 ```
 
-Similarly, results in table two can be generated with train_water.py, though it should be noted that this takes significantly longer to run. The dataset required for `train_water.py` is too large for Github, but can be found using DOI:
+Similarly, results in table two can be generated with train_water.py, though it should be noted that this takes significantly longer to run. The dataset required for `train_water.py` is too large for github, but can be found using DOI:
 10.5281/zenodo.7981759, and needs to be downloaded and unpacked to ./data
 In order to produce any of the other results in table 2, the appropriate settings are changed in configuration file `./config/water_tables.yaml`.
 

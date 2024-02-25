@@ -1,7 +1,7 @@
 name: "resnet"
 dim_in: ???
 dim_latent: 32
-layers: 8
+layers: 4
 discretization_method: 'euler'
 orthogonal_projection: True
 penalty_strength: 0

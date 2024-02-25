@@ -20,7 +20,7 @@ data:
   n_val: 100
 
 run:
-  experiment_name: 'imagedenoising - penalty_search'
+  experiment_name: 'imagedenoising - regularization_search'
   name: ???
   epochs: 50
   debug: false

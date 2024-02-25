@@ -13,7 +13,10 @@ def generate_constraints_minimizer(c,con_fnc):
     """
     This is a wrapper function for generating/loading constraints.
     """
-    c_dict = OmegaConf.to_container(c)
+    try:
+        c_dict = OmegaConf.to_container(c)
+    except:
+        c_dict = c
     name = c_dict.pop("name", None)
     name = name.lower()
 

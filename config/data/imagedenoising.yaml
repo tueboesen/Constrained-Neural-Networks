@@ -3,12 +3,12 @@ file: './../data/imagedenoising/images.npz'
 use_val: True
 use_test: True
 metafile: ???
-n_train: 256
-n_val: 16
+n_train: 100
+n_val: 100
 n_test: 100
-batchsize_train: 3
+batchsize_train: 10
 batchsize_val: 100
-nskip: -1
+nskip: 1
 device: ???
 data_id: { 'r': [ 0,1 ]}
 #data_id: {'r':[0,1,2,3,4,5,6,7,8,9], 'v':[10,11,12,13,14,15,16,17,18,19]}
