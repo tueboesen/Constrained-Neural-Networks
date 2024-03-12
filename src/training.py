@@ -56,8 +56,14 @@ def optimize_model(c, model, dataloaders, optimizer, loss_fnc):
         if 'test' in dataloaders:
             if c.constraint.name == 'imagedenoising':
                 loss = run_model_image(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
+                dataloaders['test'].dataset.noise_level *= 10
+                loss = run_model_image(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test10x')
+                dataloaders['test'].dataset.noise_level /= 100
+                loss = run_model_image(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test0.1x')
+                dataloaders['test'].dataset.noise_level *= 10
             else:
                 loss = run_model(0, c, model, dataloaders['test'], optimizer, loss_fnc, metrics, type='test')
+
     return loss
     #
     #     if loss < lossBest: # Check if model was better than previous
@@ -189,18 +195,18 @@ def run_model_image(epoch, c, model, dataloader, optimizer, loss_fnc, metrics, t
     torch.set_grad_enabled(train)
     metrics.reset(name=type)
     nul = torch.tensor(0.0)
-    for i, x in enumerate((pbar := tqdm(dataloader, desc=f"{type} Epoch: {epoch}"))):
+    for i, (x, x_noise) in enumerate((pbar := tqdm(dataloader, desc=f"{type} Epoch: {epoch}"))):
         optimizer.zero_grad()
-        x_noise = x + 0.1 * torch.randn_like(x)
         with P.cached():
             x_pred, cv_mean, cv_max, reg, = model(x_noise)
         loss_pred = loss_fnc(x_pred, x)
         loss = loss_pred + reg
         metrics.update(epoch, cv_mean, cv_max, reg, loss_pred, loss, nul, nul)
+
         if train:
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), 0.1)
             optimizer.step()
-        pbar.set_postfix(loss=metrics.loss / metrics.counter, cv=metrics.cv_mean / metrics.counter, reg=metrics.reg / metrics.counter)
+        pbar.set_postfix(loss=metrics.loss_predict / metrics.counter, cv=metrics.cv_mean / metrics.counter, reg=metrics.reg / metrics.counter)
     metrics.report(end_of_epoch=True)
-    return metrics.loss
+    return metrics.loss_predict / metrics.counter

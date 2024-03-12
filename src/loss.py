@@ -31,8 +31,6 @@ class Loss:
             loss_fnc = loss_eq
         elif loss_type == 'mim':
             loss_fnc = loss_mim
-        elif loss_type == 'mse':
-            loss_fnc = loss_mse
         else:
             raise NotImplementedError(f"The loss {loss_type} has not been implemented yet.")
         self.loss_fnc = loss_fnc

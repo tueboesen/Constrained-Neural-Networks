@@ -1,6 +1,6 @@
 defaults:
   - constraint: imagedenoising
-  - minimization: multibodypendulum
+  - minimization: imagedenoising
   - data: imagedenoising
   - model: resnet
   - logging: standard
@@ -11,13 +11,14 @@ hydra:
     dir: ${logging.hydra_folder}
   sweeper:
     params:
-      ++run.seed: 1234,1235,1236
+      ++run.seed: 1234, 1235, 1236
       +model: "{con_type : '', penalty_strength : 0, regularization_strength : 0},{con_type : '', penalty_strength : 1, regularization_strength : 0},{con_type : '', penalty_strength : 0, regularization_strength : 1},{con_type : 'low', penalty_strength : 0, regularization_strength : 0.1},{con_type : 'high', penalty_strength : 0, regularization_strength : 0.01}"
 
 
 data:
   n_train: 100
   n_val: 100
+  n_test: 100
 
 run:
   experiment_name: 'imagedenoising - tables'

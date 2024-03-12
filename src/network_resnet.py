@@ -66,6 +66,13 @@ class neural_network_resnet(nn.Module):
         #     "h": nn.ParameterList([self.h]),
         #     "close": nn.ModuleList([self.lin])
         # })
+        self.params = nn.ModuleDict({
+            "convs1": self.Convs1,
+            "convs2": self.Convs2,
+            "LN": self.LN,
+            "close": nn.ModuleList([self.lin])
+        })
+
         return
 
     def uplift(self, x):

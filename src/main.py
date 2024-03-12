@@ -32,7 +32,10 @@ def main(c):
                                       {"params": model.params.h.parameters()},
                                       {'params': model.params.close.parameters(), 'lr': c.optimizer.lr * 0.1}], lr=c.optimizer.lr)
     except:
-        optimizer = torch.optim.Adam(model.parameters(), lr=c.optimizer.lr)
+        optimizer = torch.optim.Adam([{"params": model.params.convs1.parameters()},
+                                      {"params": model.params.convs2.parameters()},
+                                      {'params': model.params.close.parameters(), 'lr': c.optimizer.lr * 0.1}], lr=c.optimizer.lr)
+        # optimizer = torch.optim.Adam(model.parameters(), lr=c.optimizer.lr)
     loss_fnc = loss_wrapper(c.run.loss_indices, c.run.loss_type)
     loss = optimize_model(c, model, dataloaders, optimizer, loss_fnc)
     return loss

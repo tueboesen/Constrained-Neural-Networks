@@ -26,7 +26,12 @@ The project uses MLflow for experiment tracking, Hydra for configuration file ma
 The core of this project is the constraint class, which can be found in src/constraints.py. 
 
 ## Getting started
-As a starting point I would suggest running the multibody pendulum example `./examples/train_pendulum.py`.
+
+Before running anything you need to change the folder that the results are saved to. This is done by changing the paths in `/config/logging/standard.yaml`.
+
+Once the mlflow path has been set, I would suggest running the multibody pendulum example `./examples/train_pendulum.py` as a starting point.
+
+In order to see the results, you open the mlflow dashboard, which can be found by entering: `mlflow ui --backend-store-uri {mlflow-path}` (where {mlflow-path} is replaced by the path you have entered in `/config/logging/standard.yaml`)
 
 ## Reproducing paper results
 The code has a tagged release called paper version. This is the code that was used to produce the paper results. Versions after that might not produce the results exactly, but should generally produce similar results. 
@@ -50,10 +55,12 @@ In order to produce any of the other results in table 2, the appropriate setting
 ### Vector field denoising
 `./examples/train_imagedenoising.py` runs the vector field denoising example. 
 The vector field data used in the paper is already in the repository in `/data/imagedenoising/images.npz`, but otherwise new data can also be generated using `/src/imagedenoising/create_imagedenoising_data.py`.
+The penalty search and regularization search can be done by changing the configuration file used. 
+Lines for penalty search and regularization search, already exists in `/examples/train_imagedenoising.py` and you merely have to uncomment the desired line.
 
 ### Creating custom constraints
 
-In order to create your own constraints create a class that inherits from the ConstraintTemplate class and define the required methods. 
+In order to create your own constraints create a class that inherits from the ConstraintTemplate class and define the required methods. See the other examples for inspiration.
 
 
 ## Contribution

@@ -10,7 +10,10 @@ def generate_neural_network(c, con_fnc):
     """
     A wrapper function for various neural networks currently supported.
     """
-    c_dict = OmegaConf.to_container(c)
+    try:
+        c_dict = OmegaConf.to_container(c)
+    except:
+        c_dict = c
     name = c_dict.pop("name", None)
     load_state = c_dict.pop("load_state", None)
 
