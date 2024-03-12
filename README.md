@@ -1,6 +1,6 @@
 # Neural DAEs: Constrained Neural Networks
 
-This project contains the code used in https://arxiv.org/pdf/2211.14302.pdf.
+This project contains the code used to generate the results in the paper: https://arxiv.org/pdf/2211.14302.pdf. A work authored by Tue Boesen, Eldad Haber, and Uri M. Ascher.
 
 The project introduces neural networks with constraints, which can be used to boost model inference significantly, while lowering constraint violations by several orders of magnitudes.
 The project contains penalty constraints, auxiliary information regularization, and constraints through projections. 
