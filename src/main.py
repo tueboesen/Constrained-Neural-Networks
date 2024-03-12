@@ -17,8 +17,6 @@ def main(c):
     c is the input configuration, which dictates the run.
     """
     c = configuration_processor(c)
-    # c.run.device = 'cpu'
-    # c.data.device = 'cpu'
     torch.set_default_dtype(eval(c.run.precision))
     print(f"Default dtype = {torch.get_default_dtype()}")
     fix_seed(c.run.seed)
