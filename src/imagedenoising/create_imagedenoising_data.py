@@ -84,7 +84,7 @@ def create_and_save_imagedenoising_data(nsamples, npixels, file):
 
 
 if __name__ == '__main__':
-    nsamples = 500
+    nsamples = 300
     npixels = 64
     file = '../../data/imagedenoising/images.npz'
     create_and_save_imagedenoising_data(nsamples, npixels, file)

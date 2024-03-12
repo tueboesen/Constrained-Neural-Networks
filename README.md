@@ -17,9 +17,8 @@ Adding constraints to a neural network trained on a 5-body pendulum generally gi
 
 The requirements for the project can be found in pyproject.toml, and is known to work with poetry.
 
-Note that the package torch_cluster is downloaded from source and might cause during install. If this is the case, check the torch_cluster website for additional information on how to install it in the future.
+Note that the package torch_cluster should be downloaded from source and might cause trouble during an automatic poetry install. If this is the case, check the torch_cluster website for additional information on how to install it in the future.
 Furthermore, it should be noted that the code is only tested on Ubuntu. 
-
 
 
 ## Project structure
@@ -27,12 +26,13 @@ The project uses MLflow for experiment tracking, Hydra for configuration file ma
 The core of this project is the constraint class, which can be found in src/constraints.py. 
 
 ## Getting started
-As a starting point I would suggest running the multibody pendulum example "train_pendulum.py" in the examples folder.
+As a starting point I would suggest running the multibody pendulum example `./examples/train_pendulum.py`.
 
-### Reproducing paper results
-The tagged release v.1.0, is the code that produced the paper results, but any version 1 code should be able to reproduce them and will continue to be improved.  
-The results found in the paper can easily be reproduced with `./examples/train_pendulum.py` and `./examples/train_water.py`.
+## Reproducing paper results
+The code has a tagged release called paper version. This is the code that was used to produce the paper results. Versions after that might not produce the results exactly, but should generally produce similar results. 
+The results found in the paper can easily be reproduced with `./examples/train_pendulum.py`, `./examples/train_water.py`, and `./examples/train_imagedenoising.py`. 
 
+### Multibody pendulum
 `./examples/train_pendulum.py` is currently set to run pendulum predictions with 100 training samples and predictions 100 steps ahead for all constraint types, corresponding to the upper half of the first column of table 1.
 In order to produce any of the other results in table 1, the below settings are changed in configuration file `./config/multibodypendulum_tables.yaml` to the appropriate values given in the table.
 
@@ -42,10 +42,14 @@ In order to produce any of the other results in table 1, the below settings are 
   nskip: 
 ```
 
-Similarly, results in table two can be generated with train_water.py, though it should be noted that this takes significantly longer to run. The dataset required for `train_water.py` is too large for Github, but can be found using [DOI:
-10.5281/zenodo.7981759](https://zenodo.org/doi/10.5281/zenodo.7981759), and needs to be downloaded and unpacked to ./data . A script for downloading and unpacking the water dataset is found in `./data/download_water_data.py`
-
+### Water molecules
+The results in the water molecule experiment can be generated using t`./examples/train_water.py`, though it should be noted that this takes significantly longer to run. 
+The dataset required for `train_water.py` is too large for Github, but can be found using [DOI:10.5281/zenodo.7981759](https://zenodo.org/doi/10.5281/zenodo.7981759), and needs to be downloaded and unpacked to ./data . A script for downloading and unpacking the water dataset is found in `./data/download_water_data.py`
 In order to produce any of the other results in table 2, the appropriate settings are changed in configuration file `./config/water_tables.yaml`.
+
+### Vector field denoising
+`./examples/train_imagedenoising.py` runs the vector field denoising example. 
+The vector field data used in the paper is already in the repository in `/data/imagedenoising/images.npz`, but otherwise new data can also be generated using `/src/imagedenoising/create_imagedenoising_data.py`.
 
 ### Creating custom constraints
 
